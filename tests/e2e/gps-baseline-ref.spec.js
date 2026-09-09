@@ -125,6 +125,24 @@ test.describe('GPS · referencia de partido', () => {
     expect(r.count).toBe(3);
   });
 
+  // El corte de comparabilidad del club (gps_valid_from) es de TODO el club: las cards ya lo
+  // aplican, y la referencia tiene que aplicarlo igual o el % de partido saldría contra una
+  // media inflada con las bandas viejas.
+  test('el corte del club recorta la referencia aunque no haya fecha de referencia', async ({ page }) => {
+    await open(page, { ref_from_date: null, gps_valid_from: '2026-03-01' });
+    const r = await ref(page);
+    expect(r.baseline).toBe(7000);          // los mismos 8.000, 7.000 y 6.000
+    expect(r.count).toBe(3);
+  });
+
+  test('entre el corte del club y la fecha de referencia gana la más tardía', async ({ page }) => {
+    // La referencia dice «desde enero», el club dice «desde marzo»: manda marzo.
+    await open(page, { ref_from_date: '2026-01-01', gps_valid_from: '2026-03-01' });
+    const r = await ref(page);
+    expect(r.baseline).toBe(7000);
+    expect(r.count).toBe(3);
+  });
+
   test('sin partidos suficientes no inventa una referencia', async ({ page }) => {
     await open(page, { ref_from_date: '2026-05-01' });   // queda uno solo
     const r = await ref(page);

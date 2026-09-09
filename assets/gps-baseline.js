@@ -39,7 +39,7 @@
 
   // ── Club settings ──────────────────────────────────────────────
   const _SETTINGS_DEF = { baseline_n: DEFAULT_N, baseline_mode: 'personal', active_metrics: null,
-                          ref_min_minutes: 0, ref_from_date: null };
+                          ref_min_minutes: 0, ref_from_date: null, gps_valid_from: null };
   // ref_min_minutes / ref_from_date son la REGLA DEL CLUB sobre qué partidos valen como
   // referencia (un partido de 15' no lo es; antes de la fecha de corte las bandas de velocidad
   // estaban definidas de otra manera). Las escribe Top-Up y hasta ahora sólo las leía él: dos
@@ -51,7 +51,7 @@
     try {
       const { data, error } = await window.sb
         .from('club_gps_settings')
-        .select('baseline_n, baseline_mode, active_metrics, ref_min_minutes, ref_from_date')
+        .select('baseline_n, baseline_mode, active_metrics, ref_min_minutes, ref_from_date, gps_valid_from')
         .eq('club_id', clubId)
         .maybeSingle();
       if (error) throw error;
@@ -151,9 +151,15 @@
   // velocidad estaban definidas de otra manera, el HSR no es comparable) y minutos mínimos (un
   // partido en el que entró 15' no es una referencia). Las filas SIN minutos cargados se
   // aceptan: no hay con qué filtrarlas. Devuelve las fechas recortadas y el predicado.
+  // El corte de comparabilidad del club (gps_valid_from) es un PISO: la fecha del club manda
+  // aunque la referencia esté configurada más atrás. Son las mismas bandas viejas que las cards
+  // ya dejan fuera; si el baseline las siguiera usando, el % de partido saldría contra una
+  // referencia inflada. La más tardía de las dos gana.
   function _refRule(settings, matchDates) {
     const minMin = +settings.ref_min_minutes || 0;
-    const from   = settings.ref_from_date || null;
+    const _rf    = settings.ref_from_date || null;
+    const _vf    = settings.gps_valid_from || null;
+    const from   = (_rf && _vf) ? (_rf > _vf ? _rf : _vf) : (_rf || _vf || null);
     const dates  = from ? [...matchDates].filter(d => d >= from) : [...matchDates];
     return { dates, longEnough: r => !(minMin > 0 && r.time_played != null && +r.time_played < minMin) };
   }

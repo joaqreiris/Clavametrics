@@ -1230,6 +1230,10 @@
     const f = state.refFilters, bits = [];
     if (f.minMinutes > 0) bits.push(tt('topup.rf_hint_min', `solo partidos de ${f.minMinutes}′ o más`, { m: f.minMinutes }));
     if (f.fromDate) bits.push(tt('topup.rf_hint_from', `desde el ${f.fromDate}`, { d: f.fromDate }));
+    // El corte del club manda aunque la referencia esté configurada más atrás: se avisa sólo
+    // cuando es él el que recorta, para no repetir la misma fecha dos veces.
+    if (f.validFrom && (!f.fromDate || f.validFrom > f.fromDate))
+      bits.push(tt('topup.rf_hint_valid', `desde el ${f.validFrom} (corte del club)`, { d: f.validFrom }));
     el.textContent = bits.length
       ? tt('topup.rf_hint_on','Referencia:') + ' ' + bits.join(' · ')
       : tt('topup.rf_hint_off','Referencia: todos los partidos con GPS.');
@@ -1253,17 +1257,25 @@
           <div class="tu-note">${tt('topup.rf_from_help','Si antes de esa fecha las bandas de velocidad estaban definidas de otra manera, esos partidos no son comparables. Vacío = todos.')}</div>
         </div>
       </div>
+      <div class="tu-row">
+        <div class="tu-field">
+          <label data-i18n="topup.rf_valid">Datos comparables desde</label>
+          <input id="tu-rf-valid" class="tu-input" type="date" value="${esc(f.validFrom || '')}">
+          <div class="tu-note">${tt('topup.rf_valid_help','Corte de TODO el club: lo anterior deja de entrar en los gráficos y en las referencias. Es para cuando cambió la forma de medir (por ejemplo, umbrales fijos de velocidad a % de la Vmax). No borra nada: los datos siguen guardados y vuelven si vaciás la fecha.')}</div>
+        </div>
+      </div>
       <div class="tu-genbar" style="margin-top:14px">
         <button class="tu-btn primary" id="tu-rf-save"><i class="ti ti-check"></i>${tt('common.save','Guardar')}</button>
         <span class="tu-note" id="tu-rf-msg"></span>
       </div>`;
     $('tu-rf-save').addEventListener('click', async () => {
-      const f2 = { minMinutes: Math.max(0, +$('tu-rf-min').value || 0), fromDate: $('tu-rf-from').value || null };
+      const f2 = { minMinutes: Math.max(0, +$('tu-rf-min').value || 0), fromDate: $('tu-rf-from').value || null,
+                   validFrom: $('tu-rf-valid').value || null };
       const msg = $('tu-rf-msg');
       msg.textContent = tt('common.saving','Guardando…');
       const ok = await TU.saveRefFilters(clubId, f2);
       if (!ok){ msg.className = 'tu-note warn'; msg.textContent = tt('topup.rf_save_err','No se pudo guardar (falta la migración de club_gps_settings).'); return; }
-      state.refFilters = f2;
+      state.refFilters = await TU.getRefFilters(clubId);   // releído: effFrom sale del guardado
       renderRefFilterHint();
       closeModal();
       await reloadRefs();

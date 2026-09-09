@@ -148,6 +148,10 @@
   };
   /** Con qué filtros arranca la barra: la fecha (siempre tiene rango) y nada más. */
   function _defaultVisible() { return ['date']; }
+  // El default VIEJO, tal cual era: los ocho filtros de entonces. Se compara contra esta lista y
+  // no contra el largo de DROPS porque cada filtro nuevo (orientación fue el noveno) movía ese
+  // largo y dejaba de reconocer el guardado que hay que migrar.
+  const _LEGACY_ALL = ['md_code', 'date', 'player', 'position', 'microcycle', 'rival', 'session_type', 'work_context'];
   // Un filtro CON VALOR se ve siempre, esté o no en la lista: una barra que esconde algo que está
   // filtrando miente sobre lo que se está mirando.
   function isFilterVisible(key) {
@@ -465,7 +469,7 @@
         }
         // Un guardado con TODOS los filtros es el default viejo, no una elección: se le aplica el
         // nuevo (sólo los puestos). Cualquier otra lista sí la eligió el usuario y se respeta.
-        const _savedAll = Array.isArray(s.visibleFilters) && s.visibleFilters.length >= DROPS.length;
+        const _savedAll = Array.isArray(s.visibleFilters) && _LEGACY_ALL.every(k => s.visibleFilters.includes(k));
         state.visibleFilters = (Array.isArray(s.visibleFilters) && s.visibleFilters.length && !_savedAll)
           ? s.visibleFilters.filter(k => DROPS.some(d => d.key === k))
           : _defaultVisible();

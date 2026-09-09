@@ -398,8 +398,12 @@ create table if not exists public.club_gps_settings (
   --   ref_min_minutes → minutos mínimos jugados para que el partido cuente (0 = sin filtro)
   --   ref_from_date   → antes de esa fecha las bandas de velocidad estaban definidas
   --                     de otra forma, así que el HSR viejo no es comparable (NULL = todos)
+  --   gps_valid_from  → corte de comparabilidad de TODO el club: las sesiones anteriores no
+  --                     entran a ninguna card ni a ninguna referencia (no se borran). Es el
+  --                     caso de un club que cambió de metodología de medición. NULL = sin corte.
   ref_min_minutes integer default 0 not null,
   ref_from_date date,
+  gps_valid_from date,
   constraint club_gps_settings_pkey primary key (club_id),
   constraint club_gps_settings_baseline_n_check CHECK (((baseline_n >= 3) AND (baseline_n <= 10))),
   constraint club_gps_settings_baseline_mode_check CHECK ((baseline_mode = ANY (ARRAY['personal'::text, 'position'::text]))),

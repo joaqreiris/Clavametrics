@@ -89,3 +89,52 @@ describe('Top-Up · referencia de partido', () => {
     expect(r.count).toBe(5);
   });
 });
+
+// El corte de comparabilidad del club (gps_valid_from) también manda acá: son las mismas bandas
+// viejas que las cards ya dejan fuera. Vive en la misma fila que ref_from_date pero es otra cosa
+// —el corte es de TODO el club— y el editor no lo tiene que confundir con la fecha de referencia.
+describe('Top-Up · corte de comparabilidad del club', () => {
+  /** sb de mentira que devuelve la fila de ajustes dada y anota lo que se le manda a guardar. */
+  function settingsSb(row, sink) {
+    return { from: () => ({
+      select: function () { return this; },
+      eq: function () { return this; },
+      maybeSingle: async () => ({ data: row, error: null }),
+      upsert: async (r) => { sink.push(r); return { error: null }; },
+    }) };
+  }
+
+  beforeEach(() => window.TopUp.invalidateRefFilters());
+
+  it('sin fecha de referencia, el corte del club es el que filtra', async () => {
+    window.sb = settingsSb({ ref_min_minutes: 0, ref_from_date: null, gps_valid_from: '2025-10-19' }, []);
+    const f = await window.TopUp.getRefFilters(CLUB);
+    expect(f.effFrom).toBe('2025-10-19');
+    expect(f.fromDate).toBeNull();          // el editor sigue viendo su propio campo vacío
+  });
+
+  it('con las dos puestas gana la más tardía', async () => {
+    window.sb = settingsSb({ ref_min_minutes: 0, ref_from_date: '2025-11-01', gps_valid_from: '2025-10-19' }, []);
+    expect((await window.TopUp.getRefFilters(CLUB)).effFrom).toBe('2025-11-01');
+  });
+
+  it('guardar la fecha de referencia no pisa el corte del club', async () => {
+    const sent = [];
+    window.sb = settingsSb({ ref_min_minutes: 0, ref_from_date: null, gps_valid_from: '2025-10-19' }, sent);
+    await window.TopUp.getRefFilters(CLUB);
+    await window.TopUp.saveRefFilters(CLUB, { minMinutes: 30, fromDate: '2026-01-01' });
+    expect(Object.prototype.hasOwnProperty.call(sent[0], 'gps_valid_from')).toBe(false);
+    const f = await window.TopUp.getRefFilters(CLUB);
+    expect(f.validFrom).toBe('2025-10-19');   // sigue vivo
+    expect(f.effFrom).toBe('2026-01-01');
+  });
+
+  it('vaciar el corte devuelve los datos viejos al análisis', async () => {
+    const sent = [];
+    window.sb = settingsSb({ ref_min_minutes: 0, ref_from_date: null, gps_valid_from: '2025-10-19' }, sent);
+    await window.TopUp.getRefFilters(CLUB);
+    await window.TopUp.saveRefFilters(CLUB, { minMinutes: 0, fromDate: null, validFrom: null });
+    expect(sent[0].gps_valid_from).toBeNull();
+    expect((await window.TopUp.getRefFilters(CLUB)).effFrom).toBeNull();
+  });
+});

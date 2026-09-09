@@ -392,10 +392,10 @@
       // de minutos NO se aplica: esto son sesiones de entrenamiento, no partidos.
       let q = window.sb
         .from('gps_reports')
-        .select(core.join(',') + ',is_invalid' + (f.fromDate ? ', training_sessions!inner(session_date)' : ''))
+        .select(core.join(',') + ',is_invalid' + (f.effFrom ? ', training_sessions!inner(session_date)' : ''))
         .eq('player_id', playerId)
         .eq('club_id', clubId);
-      if (f.fromDate) q = q.gte('training_sessions.session_date', f.fromDate);
+      if (f.effFrom) q = q.gte('training_sessions.session_date', f.effFrom);
       const { data } = await q;
       const rows = (data || []).filter(r => !r.is_invalid);
       const n = await _refN(clubId), MIN = 3;
@@ -448,8 +448,14 @@
   //                otra manera (umbrales fijos vs % de Vmax), así que el HSR de
   //                entonces no es comparable con el de hoy.
   // Viven en club_gps_settings para que cualquier pantalla lea la MISMA regla.
+  //   validFrom  → el corte de comparabilidad del club (club_gps_settings.gps_valid_from), el
+  //                mismo que deja fuera a las sesiones viejas en las cards. No es editable acá:
+  //                es del club entero, no de la referencia. Se guarda aparte de fromDate para
+  //                que el editor siga mostrando y escribiendo SOLO lo que el usuario puso.
+  //   effFrom    → el que mandan las consultas: el más tardío de los dos.
   const _refFiltersCache = {};
-  const REF_FILTERS_DEFAULT = { minMinutes: 0, fromDate: null };
+  const REF_FILTERS_DEFAULT = { minMinutes: 0, fromDate: null, validFrom: null, effFrom: null };
+  const _maxDate = (a, b) => (a && b) ? (a > b ? a : b) : (a || b || null);
   async function getRefFilters(clubId) {
     if (!clubId) return Object.assign({}, REF_FILTERS_DEFAULT);
     if (_refFiltersCache[clubId]) return _refFiltersCache[clubId];
@@ -457,22 +463,44 @@
     try {
       const { data, error } = await window.sb
         .from('club_gps_settings')
-        .select('ref_min_minutes, ref_from_date')
+        .select('ref_min_minutes, ref_from_date, gps_valid_from')
         .eq('club_id', clubId)
         .maybeSingle();
       // Sin la migración aplicada, error → se sigue con los defaults (sin filtro).
-      if (!error && data) f = { minMinutes: +data.ref_min_minutes || 0, fromDate: data.ref_from_date || null };
-    } catch { /* defaults */ }
+      if (!error && data) f = { minMinutes: +data.ref_min_minutes || 0, fromDate: data.ref_from_date || null,
+                                validFrom: data.gps_valid_from || null };
+    } catch {
+      // Puede faltar sólo gps_valid_from (migración a medias): se reintenta sin esa columna.
+      try {
+        const { data } = await window.sb
+          .from('club_gps_settings').select('ref_min_minutes, ref_from_date')
+          .eq('club_id', clubId).maybeSingle();
+        if (data) f = { minMinutes: +data.ref_min_minutes || 0, fromDate: data.ref_from_date || null, validFrom: null };
+      } catch { /* defaults */ }
+    }
+    f.effFrom = _maxDate(f.fromDate, f.validFrom);
     _refFiltersCache[clubId] = f;
     return f;
   }
+  // `validFrom` sólo se escribe si viene en `f`: es el corte del club entero (afecta a todas las
+  // cards, no sólo a la referencia) y quien no lo edita no lo tiene que pisar sin querer.
   async function saveRefFilters(clubId, f) {
     if (!clubId) return false;
     const row = { club_id: clubId, ref_min_minutes: Math.max(0, +f.minMinutes || 0), ref_from_date: f.fromDate || null };
+    const _touchVf = Object.prototype.hasOwnProperty.call(f, 'validFrom');
+    if (_touchVf) row.gps_valid_from = f.validFrom || null;
     try {
-      const { error } = await window.sb.from('club_gps_settings').upsert(row, { onConflict: 'club_id' });
+      let { error } = await window.sb.from('club_gps_settings').upsert(row, { onConflict: 'club_id' });
+      if (error && _touchVf) {
+        // Sin la columna, se guarda igual el resto en vez de perder también los minutos mínimos.
+        delete row.gps_valid_from;
+        ({ error } = await window.sb.from('club_gps_settings').upsert(row, { onConflict: 'club_id' }));
+        if (!error) { invalidateRefFilters(clubId); return false; }
+      }
       if (error) return false;
-      _refFiltersCache[clubId] = { minMinutes: row.ref_min_minutes, fromDate: row.ref_from_date };
+      const _vf = _touchVf ? (f.validFrom || null) : (_refFiltersCache[clubId]?.validFrom || null);
+      _refFiltersCache[clubId] = { minMinutes: row.ref_min_minutes, fromDate: row.ref_from_date,
+                                   validFrom: _vf, effFrom: _maxDate(row.ref_from_date, _vf) };
       return true;
     } catch { return false; }
   }
@@ -513,7 +541,7 @@
     try {
       const matchDates = window.gpsGetMatchDates ? await window.gpsGetMatchDates(clubId) : null;
       if (!matchDates || !matchDates.size) return out;   // no tagged matches → let gps/position fallbacks fill in
-      const dates = f.fromDate ? [...matchDates].filter(d => d >= f.fromDate) : [...matchDates];
+      const dates = f.effFrom ? [...matchDates].filter(d => d >= f.effFrom) : [...matchDates];
       if (!dates.length) return out;
       // session_id/player_id van en el select porque el recorte por contexto los necesita.
       const _sel = core.concat(core.includes('time_played') ? [] : ['time_played']).join(',')
