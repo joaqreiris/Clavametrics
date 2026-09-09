@@ -20,6 +20,7 @@ const RESULT = {
 
 /* Los números son los del archivo real de Kompong Dewa; ni uno inventado. */
 const US = {
+  goals: 2, conceded_goals: 1,
   possession_pct: 62.14, xg: 0.54, shots: 12, shots_on_target: 6,
   passes: 361, passes_accurate: 293, passes_pct: 81.16,
   progressive_passes: 70, progressive_passes_accurate: 49, progressive_passes_pct: 70,
@@ -46,6 +47,7 @@ const US = {
   fouls: 9, red_cards: 0, offsides: 1,
 };
 const THEM = {
+  goals: 1, conceded_goals: 2,
   possession_pct: 37.86, xg: 0.81, shots: 14, shots_on_target: 3,
   passes: 194, passes_accurate: 134, passes_pct: 69.07,
   progressive_passes: 57, progressive_passes_accurate: 43, progressive_passes_pct: 75.44,
@@ -82,6 +84,14 @@ const TEAM_ROWS = [
     match_results: { id: 'mres-3', match_date: '2026-09-05', opponent: 'Angkor Tiger', team_id: null, score_for: 0, score_against: 0 } },
 ];
 
+/* Un escudo cualquiera, embebido para que no dependa de la red. El nombre lleva "FC"
+   a propósito: en el partido el rival está escrito sin sufijo, y aun así tiene que
+   encontrarlo. */
+const PNG = 'data:image/svg+xml;base64,' + Buffer.from(
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><rect width="10" height="10" fill="#E11D2E"/></svg>').toString('base64');
+const BRANDING = [{ opponent_name: 'Angkor Tiger FC', crest_url: PNG }];
+const CLUB_LOGO = { ...CLUB, logo_url: PNG };
+
 /* GPS del partido: dos titulares, un cambio, y un suplente que sólo calentó — sin
    minutos y con la distancia de un calentamiento. */
 const GPS = [
@@ -108,7 +118,7 @@ const GPS = [
     players: { first_name: 'GPS', last_name: 'ROTO', position: 'CM' } },
 ];
 
-async function gotoMatch(page, { teamRows = TEAM_ROWS, gps = GPS } = {}) {
+async function gotoMatch(page, { teamRows = TEAM_ROWS, gps = GPS, branding = BRANDING, result = RESULT } = {}) {
   await injectSession(page);
   // Lo que se prueba acá son las cards, no el candado del plan. El getter ignora la
   // asignación que hace supabase-init.js al cargar, así que el módulo abre siempre.
@@ -129,15 +139,16 @@ async function gotoMatch(page, { teamRows = TEAM_ROWS, gps = GPS } = {}) {
       const ok = /session_type=eq\.match(&|$)/.test(url);
       return route.fulfill({ json: ok ? [SESSION_M] : [] });
     }
-    if (url.includes('/match_results'))     return route.fulfill({ json: [RESULT] });
+    if (url.includes('/match_results'))     return route.fulfill({ json: [result] });
     if (url.includes('/gps_reports'))       return route.fulfill({ json: gps });
+    if (url.includes('/opponent_branding')) return route.fulfill({ json: branding });
     // Este handler corre antes que el de mockBase y `continue()` saltaría a la red, así
     // que el perfil y el club se sirven acá: sin club_id el boot corta y no consulta nada.
     // `.single()` pide un objeto, no un array — devolverle una lista deja el club en
     // undefined y la página entera se queda vacía.
     const one = (route.request().headers()['accept'] || '').includes('pgrst.object');
     if (url.includes('/profiles')) return route.fulfill({ json: one ? PROFILE : [PROFILE] });
-    if (url.includes('/clubs'))    return route.fulfill({ json: one ? CLUB : [CLUB] });
+    if (url.includes('/clubs'))    return route.fulfill({ json: one ? CLUB_LOGO : [CLUB_LOGO] });
     return route.fulfill({ json: one ? {} : [] });
   });
   await page.goto('/Match%20Reports.html');
@@ -217,6 +228,34 @@ test.describe('Match Reports · estadísticas de equipo', () => {
     await expect(page.locator('#mrTrendCard')).toBeHidden();
   });
 
+
+  // ── El encabezado ──────────────────────────────────────────────────────────
+  test('muestra los escudos de los dos equipos, no las iniciales', async ({ page }) => {
+    await gotoMatch(page);
+    await expect(page.locator('#mrHomeCrest img')).toHaveCount(1);
+    await expect(page.locator('#mrAwayCrest img')).toHaveCount(1);
+    // El del rival se encontró pese a que el branding lo llama "Angkor Tiger FC".
+    await expect(page.locator('#mrAwayCrest')).toHaveClass(/has-img/);
+  });
+
+  test('si el club no tiene escudo cargado quedan las iniciales', async ({ page }) => {
+    await gotoMatch(page, { branding: [] });
+    await expect(page.locator('#mrAwayCrest img')).toHaveCount(0);
+    await expect(page.locator('#mrAwayCrest')).toHaveText('AT');
+  });
+
+  test('completa el marcador del encabezado con los goles del archivo', async ({ page }) => {
+    // El informe quedó sin marcador — importado antes de que se guardara, o salteado.
+    await gotoMatch(page, { result: { ...RESULT, score_for: null, score_against: null, possession: null } });
+    await expect(page.locator('#mrScoreFor')).toHaveText('2');
+    await expect(page.locator('#mrScoreAgainst')).toHaveText('1');
+    await expect(page.locator('#mrResultBadge')).toBeVisible();
+  });
+
+  test('un marcador cargado a mano no lo pisa el archivo', async ({ page }) => {
+    await gotoMatch(page, { result: { ...RESULT, score_for: 5, score_against: 0 } });
+    await expect(page.locator('#mrScoreFor')).toHaveText('5');
+  });
 
   // ── Los cinco números de arriba ────────────────────────────────────────────
   test('resume el partido en cinco números, cada uno con su contraste', async ({ page }) => {

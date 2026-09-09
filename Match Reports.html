@@ -101,6 +101,8 @@
     flex-shrink:0;
   }
   .mr-team .crest.is-home { background:var(--cm-accent); }
+  .mr-team .crest.has-img { background:rgba(255,255,255,0.92); border-color:rgba(255,255,255,0.5); padding:6px; }
+  .mr-team .crest img { width:100%; height:100%; object-fit:contain; display:block; }
   .mr-team.is-away { flex-direction:row-reverse; text-align:right; }
   .mr-team h2 {
     font:600 22px/1 var(--cm-font-sans);
@@ -702,17 +704,19 @@
             <div id="mrSanctionsBody" style="padding:10px 14px"></div>
           </div>
 
-          <!-- Shot map — no shot-event source in our model yet -->
-          <div class="mr-card">
-            <div class="mr-card-h"><h3 data-i18n="match_reports.shot_map">Shot map</h3></div>
-            <div style="padding:28px 16px;text-align:center;color:var(--cm-fg-faint);font:var(--cm-body-sm)" data-i18n="match_reports.not_available_yet">Not available yet</div>
-          </div>
+          <!-- Mapa de tiros y mapa de calor: ocultos.
 
-          <!-- Team heatmap — no positional source in our model yet -->
-          <div class="mr-card">
-            <div class="mr-card-h"><h3 data-i18n="match_reports.team_heatmap">Team heatmap</h3></div>
-            <div style="padding:28px 16px;text-align:center;color:var(--cm-fg-faint);font:var(--cm-body-sm)" data-i18n="match_reports.not_available_yet">Not available yet</div>
-          </div>
+               Las dos necesitan coordenadas y ninguna de las fuentes que hay las tiene.
+               El Excel de equipo de Wyscout llega agregado por tercios, no por punto; el
+               XML de eventos no trae una sola coordenada (seis campos por instancia:
+               ID, start, end, code, label, text). No es que falte conectarlas: no hay
+               dato con qué dibujarlas, y una card que dice "not available yet" para
+               siempre es ruido.
+
+               El modelo del mapa de tiros SÍ existe — `public.match_shots`, con x_pct,
+               y_pct, minute, outcome y xg — pero nadie la llena. Si algún día entra un
+               proveedor con eventos posicionales, o se cargan a mano, esto se
+               reactiva y la tabla ya está esperando. -->
 
           <!-- Match stats compare — filled from team_match_stats (Wyscout team export).
                Stays hidden until someone imports it; there is nothing to compare
@@ -844,7 +848,16 @@
       document.getElementById('mrPlayerBody').innerHTML =
         `<tr><td colspan="99" style="text-align:center;padding:32px;color:var(--cm-fg-muted)">${tt('match_reports.no_match_sessions', 'No match sessions found')}</td></tr>`;
     }
-    _mrCtx = { match, result: _mrResult, club, stats: _mrStats, clubId };
+    // Los escudos de los rivales que el club fue cargando. Sin esto el hero mostraba
+    // iniciales aunque la imagen estuviera guardada.
+    let crests = {};
+    try {
+      const { data } = await window.sb.from('opponent_branding')
+        .select('opponent_name, crest_url').eq('club_id', clubId);
+      (data || []).forEach(b => { if (b.crest_url) crests[mrNormName(b.opponent_name)] = b.crest_url; });
+    } catch (_e) {}
+
+    _mrCtx = { match, result: _mrResult, club, stats: _mrStats, clubId, crests };
     renderSanctions(clubId);
     renderHero(match, _mrResult, club);
     renderScorers(_mrStats);
@@ -1015,6 +1028,47 @@
   }
 
   // ── Hero / scorers from real data ─────────────────────────────
+  /* Pinta un escudo en el hero: la imagen si el club la tiene cargada, y si no las
+     iniciales de siempre. Si la URL está rota se vuelve a las iniciales en vez de
+     dejar el hueco del ícono partido. */
+  function mrCrest(id, name, url){
+    const el = document.getElementById(id); if (!el) return;
+    const ini = mrInitials(name);
+    // El color de relleno viene en el style del elemento y taparía el escudo, así que
+    // se guarda para poder reponerlo si la imagen no carga.
+    if (el.dataset.bg == null) el.dataset.bg = el.style.background || '';
+    const restore = () => { el.classList.remove('has-img'); el.style.background = el.dataset.bg; el.textContent = ini; };
+    if (!url){ restore(); return; }
+    el.textContent = '';
+    el.classList.add('has-img');
+    el.style.background = '';
+    const img = document.createElement('img');
+    img.alt = name || '';
+    img.onerror = restore;
+    img.src = url;
+    el.appendChild(img);
+  }
+
+  /* El escudo del rival sale de opponent_branding, que ya guarda los que el club fue
+     cargando. El nombre del partido no siempre coincide letra por letra con el del
+     branding ("Angkor Tiger" contra "Angkor Tiger FC"), así que se compara normalizado
+     y se acepta que uno contenga al otro. */
+  function mrOpponentCrest(name){
+    const map = (_mrCtx && _mrCtx.crests) || null;
+    if (!map || !name) return null;
+    const n = mrNormName(name);
+    if (!n) return null;
+    if (map[n]) return map[n];
+    const hit = Object.keys(map).find(k => k.indexOf(n) !== -1 || n.indexOf(k) !== -1);
+    return hit ? map[hit] : null;
+  }
+  function mrNormName(s){
+    return String(s == null ? '' : s).toLowerCase().normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/\b(fc|cf|sc|ac|afc|club|deportivo)\b/g, ' ')
+      .replace(/[^a-z0-9]+/g, ' ').trim();
+  }
+
   function mrInitials(name){
     const w = String(name || '').trim().split(/\s+/).filter(Boolean);
     return ((w[0]?.[0] || '') + (w[1]?.[0] || '')).toUpperCase() || (name ? name.slice(0,2).toUpperCase() : '—');
@@ -1030,7 +1084,7 @@
   function renderHero(match, r, club){
     const ourName = club?.name || tt('match_reports.us', 'Us');
     _set('mrHomeName', ourName);
-    _set('mrHomeCrest', mrInitials(ourName));
+    mrCrest('mrHomeCrest', ourName, club?.logo_url || null);
 
     const badge  = document.getElementById('mrResultBadge');
     const notice = document.getElementById('mrNotice');
@@ -1042,7 +1096,7 @@
       _set('mrComp', '—');
       _set('mrVenue', match?.title || '—');
       _set('mrAwayName', '—');
-      _set('mrAwayCrest', '—');
+      mrCrest('mrAwayCrest', '', null);
       _set('mrScoreFor', '–');
       _set('mrScoreAgainst', '–');
       _set('mrScoreMeta', '');
@@ -1062,7 +1116,8 @@
     _set('mrComp', r.competition || '—');
     _set('mrVenue', r.venue || match?.title || '—');
     _set('mrAwayName', opponent);
-    _set('mrAwayCrest', mrInitials(opponent === '—' ? '' : opponent));
+    mrCrest('mrAwayCrest', opponent === '—' ? '' : opponent,
+            opponent === '—' ? null : mrOpponentCrest(opponent));
     _set('mrScoreFor', r.score_for ?? '–');
     _set('mrScoreAgainst', r.score_against ?? '–');
     _set('mrScoreMeta', '');
@@ -1192,7 +1247,11 @@
     // ── 1. Este partido, contra el rival ──
     const here = rows.filter(r => r.match_id === currentMatchId);
     const us = here.find(r => r.side === 'us'), them = here.find(r => r.side === 'them');
-    if (us) { renderTeamStatsCompare(us, them); renderKpis(us, them, rows); }
+    if (us) {
+      renderTeamStatsCompare(us, them);
+      renderKpis(us, them, rows);
+      hydrateHeroScore(us, them);
+    }
     else if (body) {
       body.innerHTML = `<div class="ts-empty">${tt('match_reports.ts_none_yet',
         'No team stats for this match yet — import a Wyscout team export.')}</div>`;
@@ -1284,6 +1343,26 @@
         <div class="kpi-s">${k.vs ? esc(k.vs) : ''}${delta}</div>
       </div>`;
     }).join('');
+  }
+
+  /* El encabezado se queda con dos guiones cuando el informe no tiene marcador, aunque
+     el archivo importado sí lo traiga. Desde el import se guarda en match_results, pero
+     los partidos cargados antes de eso —y cualquiera donde alguien saltee ese campo—
+     seguirían en blanco. Acá se completa en pantalla, sin escribir nada: el dato ya
+     está en las métricas del equipo. */
+  function hydrateHeroScore(us, them){
+    if (!_mrCtx || !_mrCtx.result) return;
+    const r = _mrCtx.result;
+    const A = us.stats || {}, B = (them && them.stats) || {};
+    const gf = A.goals, ga = (B.goals != null) ? B.goals : A.conceded_goals;
+    const needScore = r.score_for == null && gf != null && ga != null;
+    const needPoss  = r.possession == null && A.possession_pct != null;
+    if (!needScore && !needPoss) return;
+
+    _mrCtx.result = Object.assign({}, r,
+      needScore ? { score_for: Math.round(gf), score_against: Math.round(ga) } : null,
+      needPoss  ? { possession: Math.round(A.possession_pct) } : null);
+    renderHero(_mrCtx.match, _mrCtx.result, _mrCtx.club);
   }
 
   function renderTeamStatsCompare(us, them){
