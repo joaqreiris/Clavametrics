@@ -358,6 +358,7 @@ const initials=n=>(n.split(' ').pop()||'').slice(0,2).toUpperCase();
 
 // ─────────────────────────────────────────────────────────────
 async function init(){
+  if(!(await window.guardModule())) return;   // URL guard: sin sesión → Login; sin plan/permiso → teaser o Hub
   CLUB=await window.getClubId(); PROFILE=await window.getProfile();
   try{ window.applyClubTheme && window.applyClubTheme(); }catch(e){}   // club accent → --cm-accent (sidebar colors)
   if(!CLUB){ document.getElementById('lpBody').innerHTML='<div class="lp-empty">'+tt('load_planner.no_club','No club found.')+'</div>'; return; }

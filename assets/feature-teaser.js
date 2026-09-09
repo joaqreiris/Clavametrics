@@ -102,6 +102,35 @@
     return '<div class="cmft-panel"><div class="cmft-panel-h">Video library</div><div class="cmft-vidgrid">' + thumbs + '</div></div>';
   }
 
+  // Mockup Sessions History: qué se entrenó las últimas semanas (todo de ejemplo).
+  function histMock() {
+    var vol = [['Sessions', '42', 84], ['Minutes', '3.140', 66], ['Avg RPE', '6.4', 58]]
+      .map(function (v) { return '<div class="cmft-stat"><span class="k">' + v[0] + '</span><span class="v">' + v[1] + '</span><div class="tr"><i style="width:' + v[2] + '%"></i></div></div>'; }).join('');
+    var ses = [['MD-1 · Activación', '18 mar · 62 min'], ['MD-3 · Fuerza', '16 mar · 88 min'],
+               ['MD-4 · Posesión', '15 mar · 75 min'], ['MD+1 · Recuperación', '13 mar · 45 min']]
+      .map(function (x) { return '<div class="cmft-meal"><span class="mn">' + x[0] + '</span><span class="md">' + x[1] + '</span></div>'; }).join('');
+    return '<div class="cmft-nutri">'
+      + '<div class="cmft-panel cmft-kcal"><div class="cmft-panel-h">Microciclo 24</div><div class="big">42</div><div class="lbl">sesiones</div></div>'
+      + '<div class="cmft-panel"><div class="cmft-panel-h">Volumen del mes</div>' + vol + '</div>'
+      + '<div class="cmft-panel"><div class="cmft-panel-h">Últimas sesiones</div>' + ses + '</div>'
+      + '</div>';
+  }
+
+  // Mockup Clinical Records: la ficha médica del plantel (todo de ejemplo).
+  function clinicMock() {
+    var estado = [['A. Costa', 'high', 'Baja'], ['M. Silva', 'warn', 'Parcial'],
+                  ['J. Pérez', 'ok', 'Alta'], ['L. Gómez', 'ok', 'Alta']]
+      .map(function (r) { return '<div class="cmft-risk-row"><span class="dot ' + r[1] + '"></span><span class="nm">' + r[0] + '</span><span class="acwr">' + r[2] + '</span></div>'; }).join('');
+    var hist = [['Consulta · rodilla', '18 mar'], ['Estudio · RMN', '11 mar'],
+                ['Parte médico', '04 mar'], ['Antecedente · isquios', '2025']]
+      .map(function (x) { return '<div class="cmft-meal"><span class="mn">' + x[0] + '</span><span class="md">' + x[1] + '</span></div>'; }).join('');
+    return '<div class="cmft-nutri">'
+      + '<div class="cmft-panel cmft-kcal"><div class="cmft-panel-h">Disponibles</div><div class="big">21</div><div class="lbl">de 24</div></div>'
+      + '<div class="cmft-panel"><div class="cmft-panel-h">Estado del plantel</div>' + estado + '</div>'
+      + '<div class="cmft-panel"><div class="cmft-panel-h">Historia clínica</div>' + hist + '</div>'
+      + '</div>';
+  }
+
   var TEASERS = {
     'gps': {
       plan: 'Basic', icon: 'ti-radar-2', accent: '#2da866', mock: gpsMock, tkey: 'gps',
@@ -133,6 +162,28 @@
       fb: { title: 'Analizá el juego con video', sub: 'Subí clips, armá tu biblioteca y compartila con el plantel.',
             b: ['Biblioteca de clips y partidos', 'Compartí video con jugadores y staff', 'Etiquetá momentos clave'] }
     }
+  };
+
+  // Load Planner comparte feature y plan con Load Monitor: sin esto el bloqueo
+  // patea al Plan Picker pelado en vez de mostrar el preview con CTA.
+  TEASERS['load-planner'] = TEASERS['load-monitor'];
+
+  // Tactical Planning se apoya en la misma pizarra que el Drill Designer, pero
+  // se vende en Full: mock compartido, texto y plan propios.
+  TEASERS['tactical-planning'] = {
+    plan: 'Full', icon: 'ti-target', accent: '#e0863a', mock: drillMock, tkey: 'tactical',
+    fb: { title: 'Planificá el juego, no sólo la sesión', sub: 'Estructura táctica del microciclo, por fase y por línea.',
+          b: ['Contenidos tácticos por día y por fase', 'Principios y sub-principios del modelo', 'La semana táctica, de un vistazo'] }
+  };
+  TEASERS['sessions-history'] = {
+    plan: 'Professional', icon: 'ti-history', accent: '#d4a14a', mock: histMock, tkey: 'history',
+    fb: { title: 'Todo lo que entrenaste, buscable', sub: 'El historial completo de sesiones del plantel, sesión por sesión.',
+          b: ['Cada sesión con su carga y su RPE', 'Filtrá por microciclo, día o contenido', 'Repetí lo que funcionó'] }
+  };
+  TEASERS['clinical'] = {
+    plan: 'Full', icon: 'ti-clipboard-heart', accent: '#e0863a', mock: clinicMock, tkey: 'clinic',
+    fb: { title: 'La historia clínica de tu plantel', sub: 'Consultas, estudios y antecedentes de cada jugador, en un solo lugar.',
+          b: ['Ficha médica por jugador', 'Consultas, estudios y partes médicos', 'Antecedentes que explican la lesión de hoy'] }
   };
 
   function ensureStyle() {
