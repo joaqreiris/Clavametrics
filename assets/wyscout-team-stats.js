@@ -244,6 +244,16 @@
     return base + ' ' + tt(SUFFIX[p.sfx][0], SUFFIX[p.sfx][1]);
   }
 
+  /**
+   * Nombre corto, para encabezados de tabla donde el largo no entra: "Pases progresivos
+   * acertados" ocupa media pantalla y empuja las columnas siguientes fuera de la vista.
+   * Cae a la etiqueta completa cuando no hay una versión corta.
+   */
+  function shortLabel(key) {
+    const v = tt('team_stat.short_' + key, '');
+    return v || label(key);
+  }
+
   /** Sólo el grupo, sin sufijo — para agrupar en la tabla completa. */
   function groupLabel(key) {
     const p = split(key);
@@ -293,7 +303,7 @@
   }
 
   window.cmWyscoutTeamStats = {
-    looks, parse, label, groupLabel, originalLabel, format, allKeys,
+    looks, parse, label, shortLabel, groupLabel, originalLabel, format, allKeys,
     split, CATALOG, HIGHLIGHT, TREND, LOWER_IS_BETTER,
     lowerIsBetter: k => LOWER_IS_BETTER.indexOf(k) !== -1,
   };

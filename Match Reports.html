@@ -169,6 +169,7 @@
   .mr-card-h .right { margin-left:auto; display:flex; align-items:center; gap:8px; }
 
   /* Player table */
+  .tscroll-x { overflow-x:auto; }
   .mr-table { width:100%; border-collapse:collapse; }
   .mr-table thead th { text-align:left; padding:9px 12px; font:500 11px/1 var(--cm-font-sans); letter-spacing:0.08em; text-transform:uppercase; color:var(--cm-fg-muted); background:var(--cm-bg-soft); border-bottom:1px solid var(--cm-border); white-space:nowrap; }
   .mr-table th.num { text-align:right; }
@@ -374,6 +375,30 @@
   .tr-chart { overflow-x:auto; }
   .tr-chart svg { display:block; }
   .tr-note { padding:9px 16px 13px; font:400 11.5px/1.5 var(--cm-font-sans); color:var(--cm-fg-faint); }
+
+  /* Partido a partido: la temporada entera en una grilla. */
+  .tt-wrap { border-top:1px solid var(--cm-border-soft); }
+  .tt-h { padding:13px 16px 9px; font:600 11px/1 var(--cm-font-sans); letter-spacing:.07em; text-transform:uppercase; color:var(--cm-fg-muted); }
+  .mr-table.tt tbody td, .mr-table.tt thead th { white-space:nowrap; }
+  .mr-table.tt tbody tr.is-now td { background:var(--cm-bg-soft); }
+  .mr-table.tt tbody tr.is-now .tt-opp { font-weight:600; color:var(--cm-fg-strong); }
+  .tt-opp { font:500 12.5px/1.3 var(--cm-font-sans); color:var(--cm-fg); }
+  .tt-opp small { display:block; margin-top:2px; font:500 10.5px/1 var(--cm-font-mono); color:var(--cm-fg-faint); }
+  .tt-res { display:inline-flex; align-items:center; justify-content:center; width:19px; height:19px; border-radius:var(--cm-r-1); font:600 10.5px/1 var(--cm-font-sans); }
+  .tt-res.w { background:var(--cm-success-bg); color:var(--cm-success); border:1px solid var(--cm-success-bd); }
+  .tt-res.d { background:var(--cm-bg-sunk); color:var(--cm-fg-muted); border:1px solid var(--cm-border); }
+  .tt-res.l { background:var(--cm-danger-bg); color:var(--cm-danger); border:1px solid var(--cm-danger-bd); }
+  .tt-ha { font:500 10.5px/1 var(--cm-font-mono); color:var(--cm-fg-faint); }
+  .tt-v { display:inline-flex; align-items:baseline; gap:3px; font-variant-numeric:tabular-nums; }
+  .tt-v i { font-style:normal; font-size:10px; width:7px; display:inline-block; color:transparent; }
+  .tt-v.up   { color:var(--cm-success); } .tt-v.up i   { color:var(--cm-success); }
+  .tt-v.down { color:var(--cm-danger); }  .tt-v.down i { color:var(--cm-danger); }
+  .mr-table.tt tfoot td { padding:9px 12px; border-top:1px solid var(--cm-border); background:var(--cm-bg-soft); font:600 12px/1 var(--cm-font-mono); color:var(--cm-fg-muted); font-variant-numeric:tabular-nums; }
+  .mr-table.tt tfoot td:first-child { font:500 11px/1 var(--cm-font-sans); letter-spacing:.05em; text-transform:uppercase; }
+  .tt-legend { display:flex; flex-wrap:wrap; gap:6px 16px; padding:10px 16px 14px; font:400 11.5px/1.4 var(--cm-font-sans); color:var(--cm-fg-faint); }
+  .tt-legend span { display:inline-flex; align-items:center; gap:5px; }
+  .tt-legend i { font-style:normal; font-weight:600; }
+  .tt-legend i.up { color:var(--cm-success); } .tt-legend i.down { color:var(--cm-danger); }
 
   .mr-tab:hover { color:var(--cm-fg); }
   .mr-tab.is-on { color:var(--cm-fg-strong); border-bottom-color:var(--cm-accent); font-weight:600; }
@@ -621,23 +646,15 @@
             <button class="mr-tab"><i class="ti ti-arrows-exchange"></i><span data-i18n="match_reports.subs">Subs</span></button>
           </div>
 
-          <table class="mr-table">
-            <thead>
-              <tr>
-                <th data-i18n="common.player">Player</th>
-                <th data-i18n="match_reports.pos">Pos</th>
-                <th data-i18n="match_reports.min">Min</th>
-                <th><span data-i18n="match_reports.rating">Rating</span> <i class="ti ti-arrow-down" style="font-size:12px;opacity:0.6"></i></th>
-                <th class="num" data-i18n="match_reports.goals">Goals</th>
-                <th class="num" data-i18n="match_reports.pass">Pass</th>
-                <th class="num" data-i18n="match_reports.dist">Dist</th>
-                <th class="num" data-i18n="match_reports.sprint">Sprint</th>
-                <th class="num" data-i18n="match_reports.top_spd">Top spd</th>
-                <th data-i18n="match_reports.cards">Cards</th>
-              </tr>
-            </thead>
-            <tbody id="mrPlayerBody"></tbody>
-          </table>
+          <!-- Las columnas se arman en loadGPS(): sólo aparecen las que tienen algún
+               dato en este partido. Un informe sin estadísticas por jugador cargadas
+               mostraba media tabla en guiones. -->
+          <div class="tscroll-x">
+            <table class="mr-table">
+              <thead><tr id="mrPlayerHead"></tr></thead>
+              <tbody id="mrPlayerBody"></tbody>
+            </table>
+          </div>
         </div>
 
         <!-- RIGHT: shot map + heatmap + stat compare -->
@@ -791,8 +808,9 @@
       }
       await loadGPS(match.id, clubId);
     } else {
+      { const h = document.getElementById('mrPlayerHead'); if (h) h.innerHTML = ''; }
       document.getElementById('mrPlayerBody').innerHTML =
-        `<tr><td colspan="10" style="text-align:center;padding:32px;color:var(--cm-fg-muted)">${tt('match_reports.no_match_sessions', 'No match sessions found')}</td></tr>`;
+        `<tr><td colspan="99" style="text-align:center;padding:32px;color:var(--cm-fg-muted)">${tt('match_reports.no_match_sessions', 'No match sessions found')}</td></tr>`;
     }
     _mrCtx = { match, result: _mrResult, club, stats: _mrStats, clubId };
     renderSanctions(clubId);
@@ -813,14 +831,28 @@
     if (_mrCtx.clubId) loadTeamStats(_mrCtx.clubId, _mrCtx.result ? _mrCtx.result.id : null);
     if (_mrCtx.match && _mrCtx.clubId) loadGPS(_mrCtx.match.id, _mrCtx.clubId);
     else if (!_mrCtx.match) document.getElementById('mrPlayerBody').innerHTML =
-      `<tr><td colspan="10" style="text-align:center;padding:32px;color:var(--cm-fg-muted)">${tt('match_reports.no_match_sessions', 'No match sessions found')}</td></tr>`;
+      `<tr><td colspan="99" style="text-align:center;padding:32px;color:var(--cm-fg-muted)">${tt('match_reports.no_match_sessions', 'No match sessions found')}</td></tr>`;
   });
 
+  /* La línea de cada jugador en el partido.
+
+     Dos fuentes que no siempre están las dos: `player_match_stats`, que se carga a mano
+     o importando, y `gps_reports`, que llega del GPS. Antes la tabla dibujaba las diez
+     columnas pasara lo que pasara, así que un informe con GPS y sin estadísticas —el
+     caso normal— mostraba media tabla en guiones. Ahora las columnas se arman según lo
+     que este partido tenga.
+
+     Los minutos salen del GPS (`time_played`) cuando nadie los cargó a mano: el dato ya
+     estaba y la tabla lo ignoraba. Y quien no jugó no aparece: los suplentes traen fila
+     de GPS igual (calentamiento), con lo que la lista mezclaba once titulares con media
+     docena de registros de 400 metros. */
   async function loadGPS(sessionId, clubId) {
     const tbody = document.getElementById('mrPlayerBody');
+    const thead = document.getElementById('mrPlayerHead');
     const subEl = document.getElementById('mrPlayerSub');
+    if (!tbody) return;
 
-    // 1) Resolve the match + per-player stats
+    // 1) El partido y sus estadísticas por jugador
     let result = null, statsByPlayer = {};
     try {
       const { data: mr } = await window.sb.from('match_results').select('id')
@@ -834,82 +866,118 @@
       }
     } catch (_) {}
 
-    // 2) GPS rows keyed by player_id
+    // 2) El GPS. `is_invalid` marca registros descartados en la revisión: no son datos.
     const gpsByPlayer = {};
     try {
       const { data } = await window.sb.from('gps_reports')
-        .select('player_id, total_distance, sprint_distance, max_speed, player_load, players(first_name, last_name, position)')
+        .select('player_id, time_played, total_distance, high_speed_distance, very_high_speed_distance, sprint_distance, sprint_count, accelerations, decelerations, max_speed, player_load, distance_per_minute, is_invalid, players(first_name, last_name, position)')
         .eq('session_id', sessionId)
         .eq('club_id', clubId);
-      (data || []).forEach(g => { gpsByPlayer[g.player_id] = g; });
+      (data || []).forEach(g => { if (!g.is_invalid) gpsByPlayer[g.player_id] = g; });
     } catch (_) {}
 
-    // 3) union of player ids
     const ids = Array.from(new Set([...Object.keys(gpsByPlayer), ...Object.keys(statsByPlayer)]));
     if (!ids.length) {
       if (subEl) subEl.textContent = '';
-      tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;padding:32px;color:var(--cm-fg-muted)">${tt('match_reports.no_match_data', 'No match data for this match')}</td></tr>`;
+      if (thead) thead.innerHTML = '';
+      tbody.innerHTML = `<tr><td style="text-align:center;padding:32px;color:var(--cm-fg-muted)">${tt('match_reports.no_match_data', 'No match data for this match')}</td></tr>`;
       return;
     }
 
-    // 4) build + sort (rating desc, then total_distance desc)
-    const rows = ids.map(id => {
+    const num = v => (v == null || v === '' || isNaN(Number(v))) ? null : Number(v);
+    let all = ids.map(id => {
       const g = gpsByPlayer[id] || null;
       const s = statsByPlayer[id] || null;
       const p = (s && s.players) || (g && g.players) || {};
-      return { id, g, s, p };
-    }).sort((a, b) => {
-      const ra = a.s && a.s.rating != null ? Number(a.s.rating) : -Infinity;
-      const rb = b.s && b.s.rating != null ? Number(b.s.rating) : -Infinity;
-      if (rb !== ra) return rb - ra;
-      const da = a.g && a.g.total_distance != null ? Number(a.g.total_distance) : -Infinity;
-      const db = b.g && b.g.total_distance != null ? Number(b.g.total_distance) : -Infinity;
-      return db - da;
+      // Los minutos cargados a mano mandan; si no hay, los del GPS.
+      const min = num(s && s.minutes) != null ? num(s.minutes) : num(g && g.time_played);
+      return { id, g, s, p, min };
     });
 
-    if (subEl) subEl.textContent = tt('match_reports.player_count', `${rows.length} player${rows.length === 1 ? '' : 's'}`, { count: rows.length });
+    // 3) Fuera quien no jugó. Con la salvedad de que si NADIE tiene minutos —un club que
+    //    no carga ese dato— filtrar dejaría la tabla vacía: entonces se muestran todos.
+    const anyMinutes = all.some(r => r.min != null && r.min > 0);
+    const shown = anyMinutes ? all.filter(r => r.min != null && r.min > 0) : all;
+    const hidden = all.length - shown.length;
 
-    // 5) render
-    tbody.innerHTML = rows.map(({ g, s, p }) => {
+    // 4) Orden: valoración si la hay, si no los minutos y después la distancia.
+    const rows = shown.sort((a, b) => {
+      const ra = num(a.s && a.s.rating), rb = num(b.s && b.s.rating);
+      if (ra != null || rb != null) return (rb == null ? -Infinity : rb) - (ra == null ? -Infinity : ra);
+      if ((b.min || 0) !== (a.min || 0)) return (b.min || 0) - (a.min || 0);
+      return num(b.g && b.g.total_distance) - num(a.g && a.g.total_distance);
+    });
+
+    if (subEl) {
+      subEl.textContent = tt('match_reports.player_count', `${rows.length} player${rows.length === 1 ? '' : 's'}`, { count: rows.length })
+        + (hidden ? ' · ' + tt('match_reports.n_did_not_play', `${hidden} did not play`, { count: hidden }) : '');
+    }
+
+    // 5) Las columnas candidatas. Cada una dice cómo sacar su valor y sólo entra en la
+    //    tabla si algún jugador de este partido lo tiene.
+    const cards = r => {
+      let h = '';
+      for (let i = 0; i < ((r.s && r.s.yellow_cards) || 0); i++) h += '<span class="c y"></span>';
+      for (let i = 0; i < ((r.s && r.s.red_cards) || 0); i++) h += '<span class="c r"></span>';
+      return h;
+    };
+    const gv = (r, k) => num(r.g && r.g[k]);
+    const accdec = r => { const a = gv(r, 'accelerations'), d = gv(r, 'decelerations');
+                          return (a == null && d == null) ? null : (a || 0) + (d || 0); };
+
+    const CANDIDATES = [
+      { key: 'min',    label: tt('match_reports.min', 'Min'), num: false,
+        val: r => r.min, cell: r => `<span class="mr-min">${r.min}</span>` },
+      { key: 'rating', label: tt('match_reports.rating', 'Rating'), num: false,
+        val: r => num(r.s && r.s.rating),
+        cell: r => { const v = num(r.s && r.s.rating);
+          const cls = v >= 7.5 ? 'high' : (v >= 6 ? 'neu' : 'low');
+          return `<span class="mr-rating ${cls}">${v.toFixed(1)}</span>`; } },
+      { key: 'goals',  label: tt('match_reports.goals', 'Goals'), num: true,
+        val: r => (r.s && (r.s.goals || r.s.assists)) ? ((r.s.goals || 0) + (r.s.assists || 0)) : null,
+        cell: r => `${(r.s && r.s.goals) || 0}${(r.s && r.s.assists) ? ` <span style="color:var(--cm-fg-faint)">+${r.s.assists}A</span>` : ''}` },
+      { key: 'dist',   label: tt('match_reports.dist', 'Dist'), num: true, unit: 'km',
+        val: r => gv(r, 'total_distance'),
+        cell: r => (gv(r, 'total_distance') / 1000).toFixed(1) },
+      { key: 'mmin',   label: tt('match_reports.m_min', 'm/min'), num: true,
+        val: r => gv(r, 'distance_per_minute'),
+        cell: r => Math.round(gv(r, 'distance_per_minute')) },
+      { key: 'hsr',    label: tt('match_reports.hsr', 'HSR'), num: true, unit: 'm',
+        val: r => gv(r, 'high_speed_distance'),
+        cell: r => Math.round(gv(r, 'high_speed_distance')) },
+      { key: 'sprint', label: tt('match_reports.sprint', 'Sprint'), num: true, unit: 'm',
+        val: r => gv(r, 'sprint_distance'),
+        cell: r => Math.round(gv(r, 'sprint_distance')) },
+      { key: 'spd',    label: tt('match_reports.top_spd', 'Top spd'), num: true, unit: 'km/h',
+        val: r => gv(r, 'max_speed'),
+        cell: r => gv(r, 'max_speed').toFixed(1) },
+      { key: 'accdec', label: tt('match_reports.acc_dec', 'Acc+Dec'), num: true,
+        val: accdec, cell: r => Math.round(accdec(r)) },
+      { key: 'load',   label: tt('match_reports.player_load', 'Load'), num: true,
+        val: r => gv(r, 'player_load'),
+        cell: r => Math.round(gv(r, 'player_load')) },
+      { key: 'cards',  label: tt('match_reports.cards', 'Cards'), num: false,
+        val: r => ((r.s && r.s.yellow_cards) || 0) + ((r.s && r.s.red_cards) || 0) || null,
+        cell: r => `<div class="mr-cards">${cards(r)}</div>` },
+    ];
+    const cols = CANDIDATES.filter(c => rows.some(r => c.val(r) != null));
+
+    if (thead) {
+      thead.innerHTML = `<th>${esc(tt('common.player', 'Player'))}</th><th>${esc(tt('match_reports.pos', 'Pos'))}</th>`
+        + cols.map(c => `<th class="${c.num ? 'num' : ''}">${esc(c.label)}${
+            c.unit ? ` <span style="font-weight:400;color:var(--cm-fg-faint);text-transform:none">${esc(c.unit)}</span>` : ''}</th>`).join('');
+    }
+
+    tbody.innerHTML = rows.map(r => {
+      const p = r.p;
       const name = `${p.first_name || ''} ${p.last_name || ''}`.trim() || tt('match_reports.unknown', 'Unknown');
       const init = `${p.first_name?.[0]||''}${p.last_name?.[0]||''}`.toUpperCase();
-      const pos = p.position || (s && s.position) || '—';
+      const pos = p.position || (r.s && r.s.position) || '—';
       const posCls = POS_MAP[pos] || 'mf';
-
-      const min = (s && s.minutes != null) ? s.minutes : '—';
-
-      let ratingCell = '<span class="mr-rating neu">—</span>';
-      if (s && s.rating != null) {
-        const rv = Number(s.rating);
-        const cls = rv >= 7.5 ? 'high' : (rv >= 6 ? 'neu' : 'low');
-        ratingCell = `<span class="mr-rating ${cls}">${rv.toFixed(1)}</span>`;
-      }
-
-      const goalsCell = s
-        ? `${s.goals || 0}${s.assists ? ` <span style="color:var(--cm-fg-faint)">+${s.assists}A</span>` : ''}`
-        : '—';
-
-      const dist = (g && g.total_distance != null) ? +(g.total_distance / 1000).toFixed(1) : '—';
-      const sprint = (g && g.sprint_distance != null) ? Math.round(g.sprint_distance) : '—';
-      const spd = (g && g.max_speed != null) ? +g.max_speed.toFixed(1) : '—';
-
-      let cards = '';
-      if (s) {
-        for (let i = 0; i < (s.yellow_cards || 0); i++) cards += '<span class="c y"></span>';
-        for (let i = 0; i < (s.red_cards || 0); i++) cards += '<span class="c r"></span>';
-      }
-
       return `<tr>
         <td><div class="mr-player"><div class="mr-av">${esc(init)}</div><div><div class="mr-pname">${esc(name)}</div><div class="mr-pdorsal">${esc(pos)}</div></div></div></td>
         <td><span class="mr-pos ${posCls}">${esc(pos)}</span></td>
-        <td><span class="mr-min">${min}</span></td>
-        <td>${ratingCell}</td>
-        <td class="num">${goalsCell}</td>
-        <td class="num">—</td>
-        <td class="num">${dist}</td>
-        <td class="num">${sprint}</td>
-        <td class="num">${spd}</td>
-        <td><div class="mr-cards">${cards}</div></td>
+        ${cols.map(c => `<td class="${c.num ? 'num' : ''}">${c.val(r) != null ? c.cell(r) : '<span style="color:var(--cm-fg-faint)">—</span>'}</td>`).join('')}
       </tr>`;
     }).join('');
   }
@@ -1079,7 +1147,7 @@
     let rows = [];
     try {
       const { data } = await window.sb.from('team_match_stats')
-        .select('side, team_name, formation, stats, match_id, match_results!inner(id, match_date, opponent, team_id, score_for, score_against)')
+        .select('side, team_name, formation, stats, match_id, match_results!inner(id, match_date, opponent, team_id, score_for, score_against, home_away, competition)')
         .eq('club_id', clubId);
       rows = data || [];
     } catch (_e) { rows = []; }
@@ -1106,6 +1174,11 @@
         opponent: r.match_results.opponent || '—',
         score: (r.match_results.score_for != null && r.match_results.score_against != null)
           ? r.match_results.score_for + ':' + r.match_results.score_against : null,
+        // Ganado / empatado / perdido, para leer cada número con su resultado al lado.
+        res: (r.match_results.score_for == null || r.match_results.score_against == null) ? null
+          : (r.match_results.score_for > r.match_results.score_against ? 'w'
+            : (r.match_results.score_for < r.match_results.score_against ? 'l' : 'd')),
+        ha: r.match_results.home_away || null,
         stats: r.stats || {},
       }))
       .sort((a, b) => String(a.date).localeCompare(String(b.date)));
@@ -1325,7 +1398,87 @@
         </svg>
       </div>
       <div class="tr-note">${tt('match_reports.trend_note',
-        'Dashed line: season average. Filled dot: the match open above. Hover a point for the opponent.')}</div>`;
+        'Dashed line: season average. Filled dot: the match open above. Hover a point for the opponent.')}</div>`
+      + renderTrendTable();
+  }
+
+  /* La temporada entera de un vistazo: una fila por partido, las métricas clave en
+     columnas, cada celda marcada según esté por encima o por debajo del promedio.
+     El gráfico de arriba profundiza UNA métrica; esto sirve para lo contrario —
+     encontrar el patrón sin saber de antemano qué se busca. */
+  function renderTrendTable(){
+    const W = window.cmWyscoutTeamStats;
+    if (!_mrTrend || _mrTrend.series.length < 2) return '';
+
+    // Pocas columnas y elegidas: una por idea (tener, progresar, generar, presionar,
+    // arriesgar). Con veinte no se lee ningún patrón.
+    const KEYS = ['possession_pct', 'xg', 'progressive_passes_accurate',
+                  'passes_to_final_third_accurate', 'penalty_area_entries',
+                  'ppda', 'recoveries_high', 'losses_low'];
+    const cols = KEYS.filter(k => _mrTrend.series.some(s => s.stats[k] != null));
+    if (!cols.length) return '';
+
+    // El promedio es la vara: se calcula sobre los partidos que tienen el dato.
+    const avg = {};
+    cols.forEach(k => {
+      const v = _mrTrend.series.map(s => s.stats[k]).filter(x => x != null).map(Number);
+      avg[k] = v.length ? v.reduce((a, b) => a + b, 0) / v.length : null;
+    });
+
+    const RES = { w: ['w', tt('match_reports.res_w', 'W')], d: ['d', tt('match_reports.res_d', 'D')],
+                  l: ['l', tt('match_reports.res_l', 'L')] };
+
+    // Más reciente arriba: es el partido que a uno le importa.
+    const rows = _mrTrend.series.slice().reverse().map(s => {
+      const cells = cols.map(k => {
+        const v = s.stats[k];
+        if (v == null) return `<td class="num"><span style="color:var(--cm-fg-faint)">—</span></td>`;
+        const d = avg[k] == null ? 0 : Number(v) - avg[k];
+        // Sobre el promedio no siempre es bueno: en PPDA y pérdidas es al revés.
+        const better = W.lowerIsBetter(k) ? d < 0 : d > 0;
+        const mark = Math.abs(d) < 1e-9 ? '' : (better ? 'up' : 'down');
+        const arrow = Math.abs(d) < 1e-9 ? '' : (d > 0 ? '↑' : '↓');
+        return `<td class="num"><span class="tt-v ${mark}">${esc(W.format(k, v))}<i>${arrow}</i></span></td>`;
+      }).join('');
+      const r = s.res ? RES[s.res] : null;
+      return `<tr class="${s.id === _mrTrend.matchId ? 'is-now' : ''}">
+        <td class="tt-opp">${esc(s.opponent)}${s.score ? `<small>${esc(s.score)}</small>` : ''}</td>
+        <td>${r ? `<span class="tt-res ${r[0]}">${esc(r[1])}</span>` : ''}</td>
+        <td>${s.ha ? `<span class="tt-ha">${esc(s.ha === 'home'
+          ? tt('match_reports.ha_h', 'H') : tt('match_reports.ha_a', 'A'))}</span>` : ''}</td>
+        ${cells}</tr>`;
+    }).join('');
+
+    // El promedio de un conteo lleva un decimal, no dos: "28,2 entradas al área" se lee,
+    // "28,20" parece una precisión que el dato no tiene. xG y PPDA sí son decimales de
+    // origen y conservan su formato.
+    const avgRow = cols.map(k => {
+      if (avg[k] == null) return '<td class="num">—</td>';
+      const counts = _mrTrend.series.map(s => s.stats[k]).filter(x => x != null).every(x => Number.isInteger(Number(x)));
+      const txt = counts ? String(Math.round(avg[k] * 10) / 10).replace('.', ',') : W.format(k, avg[k]);
+      return `<td class="num">${esc(txt)}</td>`;
+    }).join('');
+
+    return `
+      <div class="tt-wrap">
+        <div class="tt-h">${esc(tt('match_reports.trend_table', 'Match by match'))}</div>
+        <div class="tscroll-x">
+          <table class="mr-table tt">
+            <thead><tr>
+              <th>${esc(tt('match_reports.opponent', 'Opponent'))}</th><th></th><th></th>
+              ${cols.map(k => `<th class="num" title="${esc(W.label(k))} · ${esc(W.originalLabel(k))}">${esc(W.shortLabel(k))}</th>`).join('')}
+            </tr></thead>
+            <tbody>${rows}</tbody>
+            <tfoot><tr>
+              <td colspan="3">${esc(tt('match_reports.trend_avg', 'Season average'))}</td>${avgRow}
+            </tr></tfoot>
+          </table>
+        </div>
+        <div class="tt-legend">
+          <span><i class="up">↑</i>${esc(tt('match_reports.tt_better', 'better than your average'))}</span>
+          <span><i class="down">↓</i>${esc(tt('match_reports.tt_worse', 'worse'))}</span>
+        </div>
+      </div>`;
   }
 
   function mrEsc(s){

@@ -62,7 +62,33 @@ const TEAM_ROWS = [
     match_results: { id: 'mres-3', match_date: '2026-09-05', opponent: 'Angkor Tiger', team_id: null, score_for: 0, score_against: 0 } },
 ];
 
-async function gotoMatch(page, { teamRows = TEAM_ROWS } = {}) {
+/* GPS del partido: dos titulares, un cambio, y un suplente que sólo calentó — sin
+   minutos y con la distancia de un calentamiento. */
+const GPS = [
+  { player_id: 'p1', time_played: 97, total_distance: 9392, high_speed_distance: 612,
+    sprint_distance: 0, max_speed: 28.52, distance_per_minute: 880, accelerations: 29,
+    decelerations: 29, player_load: 96, is_invalid: false,
+    players: { first_name: 'IN KHIN', last_name: 'DARO', position: 'RB' } },
+  { player_id: 'p2', time_played: 83, total_distance: 8333, high_speed_distance: 610,
+    sprint_distance: 47, max_speed: 31.33, distance_per_minute: 822, accelerations: 28,
+    decelerations: 28, player_load: 88, is_invalid: false,
+    players: { first_name: 'KIM', last_name: 'HYEONSU', position: 'ST' } },
+  { player_id: 'p3', time_played: 14, total_distance: 2004, high_speed_distance: 90,
+    sprint_distance: 16, max_speed: 27.65, distance_per_minute: 580, accelerations: 6,
+    decelerations: 6, player_load: 22, is_invalid: false,
+    players: { first_name: 'Pedro', last_name: 'NUNES', position: 'CB' } },
+  { player_id: 'p4', time_played: null, total_distance: 473, high_speed_distance: 5,
+    sprint_distance: 0, max_speed: 28.42, distance_per_minute: null, accelerations: 1,
+    decelerations: 0, player_load: 5, is_invalid: false,
+    players: { first_name: 'SAN', last_name: 'BORA', position: 'GK' } },
+  // Descartado en la revisión del GPS: no es un dato, no debe contarse ni mostrarse.
+  { player_id: 'p5', time_played: 90, total_distance: 99999, high_speed_distance: 0,
+    sprint_distance: 0, max_speed: 99, distance_per_minute: 0, accelerations: 0,
+    decelerations: 0, player_load: 0, is_invalid: true,
+    players: { first_name: 'GPS', last_name: 'ROTO', position: 'CM' } },
+];
+
+async function gotoMatch(page, { teamRows = TEAM_ROWS, gps = GPS } = {}) {
   await injectSession(page);
   // Lo que se prueba acá son las cards, no el candado del plan. El getter ignora la
   // asignación que hace supabase-init.js al cargar, así que el módulo abre siempre.
@@ -84,6 +110,7 @@ async function gotoMatch(page, { teamRows = TEAM_ROWS } = {}) {
       return route.fulfill({ json: ok ? [SESSION_M] : [] });
     }
     if (url.includes('/match_results'))     return route.fulfill({ json: [RESULT] });
+    if (url.includes('/gps_reports'))       return route.fulfill({ json: gps });
     // Este handler corre antes que el de mockBase y `continue()` saltaría a la red, así
     // que el perfil y el club se sirven acá: sin club_id el boot corta y no consulta nada.
     // `.single()` pide un objeto, no un array — devolverle una lista deja el club en
@@ -168,5 +195,64 @@ test.describe('Match Reports · estadísticas de equipo', () => {
     await gotoMatch(page, { teamRows: TEAM_ROWS.slice(2) });
     await expect(page.locator('#mrTeamStatsCard')).toContainText('62,1 %');
     await expect(page.locator('#mrTrendCard')).toBeHidden();
+  });
+
+
+  // ── Tabla partido a partido ────────────────────────────────────────────────
+  test('lista cada partido con su resultado y marca lo que está sobre el promedio', async ({ page }) => {
+    await gotoMatch(page);
+    const tt = page.locator('.mr-table.tt');
+    await expect(tt).toBeVisible();
+    await expect(tt.locator('tbody tr')).toHaveCount(3);
+    // El partido abierto va primero y queda destacado.
+    const first = tt.locator('tbody tr').first();
+    await expect(first).toHaveClass(/is-now/);
+    await expect(first).toContainText('Angkor Tiger');
+    await expect(tt.locator('tfoot')).toContainText('55');   // promedio de posesión
+  });
+
+  test('en PPDA bajar cuenta como mejorar, y subir como empeorar', async ({ page }) => {
+    await gotoMatch(page);
+    const tt = page.locator('.mr-table.tt');
+    const head = await tt.locator('thead th').allTextContents();
+    const i = head.findIndex(h => h.trim() === 'PPDA');
+    expect(i).toBeGreaterThan(-1);
+    // Angkor Tiger: 5,88 contra un promedio más alto → mejor, en verde.
+    await expect(tt.locator('tbody tr').first().locator('td').nth(i).locator('.tt-v')).toHaveClass(/up/);
+    // Boeung Ket: 8,94, el peor de la serie → en rojo.
+    await expect(tt.locator('tbody tr').last().locator('td').nth(i).locator('.tt-v')).toHaveClass(/down/);
+  });
+
+  // ── Tabla de jugadores ─────────────────────────────────────────────────────
+  test('deja fuera a quien no jugó y lo dice, en vez de mezclarlo con los titulares', async ({ page }) => {
+    await gotoMatch(page);
+    await expect(page.locator('#mrPlayerBody tr')).toHaveCount(3);   // 4 con GPS, 1 sin minutos
+    await expect(page.locator('#mrPlayerBody')).not.toContainText('BORA');
+    await expect(page.locator('#mrPlayerSub')).toContainText('1');
+  });
+
+  test('ignora los registros de GPS marcados como inválidos', async ({ page }) => {
+    await gotoMatch(page);
+    await expect(page.locator('#mrPlayerBody')).not.toContainText('ROTO');
+  });
+
+  test('toma los minutos del GPS cuando nadie los cargó a mano', async ({ page }) => {
+    await gotoMatch(page);
+    const head = await page.locator('#mrPlayerHead th').allTextContents();
+    expect(head.some(h => h.trim() === 'Min')).toBe(true);
+    await expect(page.locator('#mrPlayerBody tr').first()).toContainText('97');
+  });
+
+  test('no dibuja las columnas que este partido no tiene', async ({ page }) => {
+    await gotoMatch(page);
+    const head = (await page.locator('#mrPlayerHead th').allTextContents()).map(h => h.trim());
+    // Sin player_match_stats no hay valoración, goles ni tarjetas: esas columnas no van.
+    expect(head).not.toContain('Rating');
+    expect(head).not.toContain('Goals');
+    expect(head).not.toContain('Cards');
+    // Las de GPS sí, porque tienen datos. El encabezado lleva la unidad al lado.
+    expect(head.some(h => h.startsWith('Dist'))).toBe(true);
+    expect(head.some(h => h.startsWith('Top spd'))).toBe(true);
+    expect(head.some(h => h.includes('km/h'))).toBe(true);
   });
 });
