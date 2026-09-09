@@ -118,7 +118,7 @@ const GPS = [
     players: { first_name: 'GPS', last_name: 'ROTO', position: 'CM' } },
 ];
 
-async function gotoMatch(page, { teamRows = TEAM_ROWS, gps = GPS, branding = BRANDING, result = RESULT } = {}) {
+async function gotoMatch(page, { teamRows = TEAM_ROWS, gps = GPS, branding = BRANDING, result = RESULT, captured = {} } = {}) {
   await injectSession(page);
   // Lo que se prueba acá son las cards, no el candado del plan. El getter ignora la
   // asignación que hace supabase-init.js al cargar, así que el módulo abre siempre.
@@ -142,6 +142,14 @@ async function gotoMatch(page, { teamRows = TEAM_ROWS, gps = GPS, branding = BRA
     if (url.includes('/match_results'))     return route.fulfill({ json: [result] });
     if (url.includes('/gps_reports'))       return route.fulfill({ json: gps });
     if (url.includes('/opponent_branding')) return route.fulfill({ json: branding });
+    if (url.includes('/player_match_stats')) {
+      // Lo que se escribe al editar a mano queda acá para poder revisarlo.
+      if (route.request().method() === 'POST') {
+        captured.players = JSON.parse(route.request().postData() || '[]');
+        return route.fulfill({ json: [] });
+      }
+      return route.fulfill({ json: [] });
+    }
     // Este handler corre antes que el de mockBase y `continue()` saltaría a la red, así
     // que el perfil y el club se sirven acá: sin club_id el boot corta y no consulta nada.
     // `.single()` pide un objeto, no un array — devolverle una lista deja el club en
@@ -228,6 +236,60 @@ test.describe('Match Reports · estadísticas de equipo', () => {
     await expect(page.locator('#mrTrendCard')).toBeHidden();
   });
 
+
+  // ── Cargar estadísticas a mano ─────────────────────────────────────────────
+  test('al editar aparecen las columnas del deporte, aunque estén vacías', async ({ page }) => {
+    await gotoMatch(page);
+    await page.click('#mrEditOn');
+    await page.waitForSelector('.mr-edit');
+    const head = (await page.locator('#mrPlayerHead th').allTextContents()).map(h => h.trim());
+    // Justo las que no se muestran cuando no hay datos: son las que se vienen a llenar.
+    expect(head).toContain('Yellow cards');
+    expect(head).toContain('Red cards');
+    expect(head).toContain('Goals');
+    // Y desaparecen las de GPS, que no se editan acá.
+    expect(head.some(h => h.startsWith('Dist'))).toBe(false);
+  });
+
+  test('guarda la tarjeta contra el jugador, que es lo que el archivo no dice', async ({ page }) => {
+    const captured = {};
+    await gotoMatch(page, { captured });
+    await page.click('#mrEditOn');
+    await page.waitForSelector('.mr-edit');
+    const head = (await page.locator('#mrPlayerHead th').allTextContents());
+    const yi = head.findIndex(h => /Yellow/i.test(h));
+    await page.locator('#mrPlayerBody tr').first().locator('td').nth(yi).locator('input').fill('1');
+
+    const post = page.waitForRequest(r =>
+      r.url().includes('/player_match_stats') && r.method() === 'POST', { timeout: 15_000 });
+    await page.click('#mrEditSave');
+    await post;
+    await expect.poll(() => captured.players, { timeout: 10_000 }).toBeTruthy();
+
+    expect(captured.players).toHaveLength(1);
+    expect(captured.players[0].yellow_cards).toBe(1);
+    expect(captured.players[0].match_id).toBe('mres-3');
+    expect(captured.players[0].player_id).toBeTruthy();
+  });
+
+  test('al editar también se ve quien no jugó: puede haber entrado y visto una tarjeta', async ({ page }) => {
+    await gotoMatch(page);
+    const antes = await page.locator('#mrPlayerBody tr').count();
+    await page.click('#mrEditOn');
+    await page.waitForSelector('.mr-edit');
+    expect(await page.locator('#mrPlayerBody tr').count()).toBeGreaterThan(antes);
+  });
+
+  test('cancelar no guarda nada', async ({ page }) => {
+    const captured = {};
+    await gotoMatch(page, { captured });
+    await page.click('#mrEditOn');
+    await page.waitForSelector('.mr-edit');
+    await page.locator('.mr-edit').first().fill('90');
+    await page.click('#mrEditOff');
+    await expect(page.locator('#mrEditOn')).toBeVisible();
+    expect(captured.players).toBeUndefined();
+  });
 
   // ── El encabezado ──────────────────────────────────────────────────────────
   test('muestra los escudos de los dos equipos, no las iniciales', async ({ page }) => {

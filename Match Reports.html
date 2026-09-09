@@ -331,6 +331,13 @@
     border-bottom:2px solid transparent;
     margin-bottom:-1px;
   }
+  /* Edición de estadísticas por jugador. */
+  .mr-edit { width:62px; height:28px; padding:0 7px; text-align:right; background:var(--cm-surface); color:var(--cm-fg-strong); border:1px solid var(--cm-border); border-radius:var(--cm-r-2); font:500 12.5px/1 var(--cm-font-mono); font-variant-numeric:tabular-nums; }
+  .mr-edit:focus { outline:none; border-color:var(--cm-accent); box-shadow:0 0 0 2px color-mix(in srgb, var(--cm-accent) 20%, transparent); }
+  .mr-edit::-webkit-outer-spin-button, .mr-edit::-webkit-inner-spin-button { -webkit-appearance:none; margin:0; }
+  .mr-edit-msg { font:500 12px/1.3 var(--cm-font-sans); color:var(--cm-fg-muted); }
+  #mrPlayerTools { display:flex; align-items:center; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
+
   /* Los cinco números del partido, arriba de todo. */
   .kpi-strip { display:grid; grid-template-columns:repeat(5,1fr); }
   @media (max-width:900px){ .kpi-strip { grid-template-columns:repeat(2,1fr); } }
@@ -667,11 +674,11 @@
           <div class="mr-card-h">
             <h3 data-i18n="match_reports.player_report">Player report</h3>
             <span class="sub" id="mrPlayerSub"></span>
-            <div class="right">
-              <button class="cm-icon-btn"><i class="ti ti-arrows-sort"></i></button>
-              <button class="cm-icon-btn"><i class="ti ti-columns-3"></i></button>
-              <button class="cm-icon-btn"><i class="ti ti-file-export"></i></button>
-            </div>
+            <!-- Los tres botones que había acá (ordenar, columnas, exportar) no estaban
+                 conectados a nada. En su lugar va la edición de estadísticas, que es lo
+                 único que la tabla necesita poder hacer: sin cargar las tarjetas por
+                 jugador, el contador de sanciones acumuladas no tiene con qué contar. -->
+            <div class="right" id="mrPlayerTools"></div>
           </div>
 
           <div class="mr-tabs">
@@ -890,11 +897,18 @@
      Los minutos salen del GPS (`time_played`) cuando nadie los cargó a mano: el dato ya
      estaba y la tabla lo ignoraba. Y quien no jugó no aparece: los suplentes traen fila
      de GPS igual (calentamiento), con lo que la lista mezclaba once titulares con media
-     docena de registros de 400 metros. */
+     docena de registros de 400 metros.
+
+     En modo edición las columnas del deporte se muestran SIEMPRE, aunque estén vacías:
+     es justamente cuando se van a llenar. Ahí es donde se cargan las tarjetas, que
+     ningún export de Wyscout dice a quién corresponden — y sin jugador el contador de
+     sanciones acumuladas no puede hacer su trabajo. */
+  let _mrPlayers = null;      // filas ya combinadas (GPS + stats), para redibujar sin reconsultar
+  let _mrEditing = false;
+  let _mrEdits = {};          // player_id -> { campo: valor } mientras se edita
+
   async function loadGPS(sessionId, clubId) {
     const tbody = document.getElementById('mrPlayerBody');
-    const thead = document.getElementById('mrPlayerHead');
-    const subEl = document.getElementById('mrPlayerSub');
     if (!tbody) return;
 
     // 1) El partido y sus estadísticas por jugador
@@ -905,7 +919,7 @@
       result = mr?.[0] || null;
       if (result) {
         const { data: ps } = await window.sb.from('player_match_stats')
-          .select('player_id, minutes, goals, assists, yellow_cards, red_cards, rating, position, players(first_name,last_name,position)')
+          .select('player_id, minutes, goals, assists, yellow_cards, red_cards, rating, position, extra, players(first_name,last_name,position)')
           .eq('club_id', clubId).eq('match_id', result.id);
         (ps || []).forEach(s => { statsByPlayer[s.player_id] = s; });
       }
@@ -921,8 +935,28 @@
       (data || []).forEach(g => { if (!g.is_invalid) gpsByPlayer[g.player_id] = g; });
     } catch (_) {}
 
+    const num = v => (v == null || v === '' || isNaN(Number(v))) ? null : Number(v);
     const ids = Array.from(new Set([...Object.keys(gpsByPlayer), ...Object.keys(statsByPlayer)]));
-    if (!ids.length) {
+    _mrPlayers = ids.map(id => {
+      const g = gpsByPlayer[id] || null;
+      const s = statsByPlayer[id] || null;
+      const p = (s && s.players) || (g && g.players) || {};
+      const min = num(s && s.minutes) != null ? num(s.minutes) : num(g && g.time_played);
+      return { id, g, s, p, min };
+    });
+    _mrMatchId = result ? result.id : null;
+    renderPlayerTable();
+  }
+  let _mrMatchId = null;
+
+  function renderPlayerTable(){
+    const tbody = document.getElementById('mrPlayerBody');
+    const thead = document.getElementById('mrPlayerHead');
+    const subEl = document.getElementById('mrPlayerSub');
+    if (!tbody) return;
+    const all = _mrPlayers || [];
+
+    if (!all.length) {
       if (subEl) subEl.textContent = '';
       if (thead) thead.innerHTML = '';
       tbody.innerHTML = `<tr><td style="text-align:center;padding:32px;color:var(--cm-fg-muted)">${tt('match_reports.no_match_data', 'No match data for this match')}</td></tr>`;
@@ -930,23 +964,17 @@
     }
 
     const num = v => (v == null || v === '' || isNaN(Number(v))) ? null : Number(v);
-    let all = ids.map(id => {
-      const g = gpsByPlayer[id] || null;
-      const s = statsByPlayer[id] || null;
-      const p = (s && s.players) || (g && g.players) || {};
-      // Los minutos cargados a mano mandan; si no hay, los del GPS.
-      const min = num(s && s.minutes) != null ? num(s.minutes) : num(g && g.time_played);
-      return { id, g, s, p, min };
-    });
 
     // 3) Fuera quien no jugó. Con la salvedad de que si NADIE tiene minutos —un club que
     //    no carga ese dato— filtrar dejaría la tabla vacía: entonces se muestran todos.
+    //    Al editar tampoco se filtra: puede haber que cargarle una tarjeta al que entró
+    //    y no tiene GPS.
     const anyMinutes = all.some(r => r.min != null && r.min > 0);
-    const shown = anyMinutes ? all.filter(r => r.min != null && r.min > 0) : all;
+    const shown = (anyMinutes && !_mrEditing) ? all.filter(r => r.min != null && r.min > 0) : all;
     const hidden = all.length - shown.length;
 
     // 4) Orden: valoración si la hay, si no los minutos y después la distancia.
-    const rows = shown.sort((a, b) => {
+    const rows = shown.slice().sort((a, b) => {
       const ra = num(a.s && a.s.rating), rb = num(b.s && b.s.rating);
       if (ra != null || rb != null) return (rb == null ? -Infinity : rb) - (ra == null ? -Infinity : ra);
       if ((b.min || 0) !== (a.min || 0)) return (b.min || 0) - (a.min || 0);
@@ -959,7 +987,8 @@
     }
 
     // 5) Las columnas candidatas. Cada una dice cómo sacar su valor y sólo entra en la
-    //    tabla si algún jugador de este partido lo tiene.
+    //    tabla si algún jugador de este partido lo tiene — salvo en edición, donde las
+    //    del deporte entran siempre porque son las que se van a llenar.
     const cards = r => {
       let h = '';
       for (let i = 0; i < ((r.s && r.s.yellow_cards) || 0); i++) h += '<span class="c y"></span>';
@@ -971,16 +1000,22 @@
                           return (a == null && d == null) ? null : (a || 0) + (d || 0); };
 
     const CANDIDATES = [
-      { key: 'min',    label: tt('match_reports.min', 'Min'), num: false,
+      { key: 'min',    label: tt('match_reports.min', 'Min'), num: false, edit: 'minutes',
         val: r => r.min, cell: r => `<span class="mr-min">${r.min}</span>` },
-      { key: 'rating', label: tt('match_reports.rating', 'Rating'), num: false,
+      { key: 'rating', label: tt('match_reports.rating', 'Rating'), num: false, edit: 'rating', step: '0.1',
         val: r => num(r.s && r.s.rating),
         cell: r => { const v = num(r.s && r.s.rating);
           const cls = v >= 7.5 ? 'high' : (v >= 6 ? 'neu' : 'low');
           return `<span class="mr-rating ${cls}">${v.toFixed(1)}</span>`; } },
-      { key: 'goals',  label: tt('match_reports.goals', 'Goals'), num: true,
+      { key: 'goals',  label: tt('match_reports.goals', 'Goals'), num: true, edit: 'goals',
         val: r => (r.s && (r.s.goals || r.s.assists)) ? ((r.s.goals || 0) + (r.s.assists || 0)) : null,
         cell: r => `${(r.s && r.s.goals) || 0}${(r.s && r.s.assists) ? ` <span style="color:var(--cm-fg-faint)">+${r.s.assists}A</span>` : ''}` },
+      { key: 'assists', label: tt('match_reports.stat_assists', 'Assists'), num: true, edit: 'assists',
+        editOnly: true, val: r => num(r.s && r.s.assists), cell: r => (r.s && r.s.assists) || 0 },
+      { key: 'yellow', label: tt('match_reports.stat_yellow_cards', 'Yellow'), num: true, edit: 'yellow_cards', max: '2',
+        editOnly: true, val: r => num(r.s && r.s.yellow_cards), cell: r => (r.s && r.s.yellow_cards) || 0 },
+      { key: 'red',    label: tt('match_reports.stat_red_cards', 'Red'), num: true, edit: 'red_cards', max: '1',
+        editOnly: true, val: r => num(r.s && r.s.red_cards), cell: r => (r.s && r.s.red_cards) || 0 },
       { key: 'dist',   label: tt('match_reports.dist', 'Dist'), num: true, unit: 'km',
         val: r => gv(r, 'total_distance'),
         cell: r => (gv(r, 'total_distance') / 1000).toFixed(1) },
@@ -1005,7 +1040,11 @@
         val: r => ((r.s && r.s.yellow_cards) || 0) + ((r.s && r.s.red_cards) || 0) || null,
         cell: r => `<div class="mr-cards">${cards(r)}</div>` },
     ];
-    const cols = CANDIDATES.filter(c => rows.some(r => c.val(r) != null));
+    const cols = CANDIDATES.filter(c => {
+      if (_mrEditing) return !!c.edit;            // editar = sólo lo que se puede escribir
+      if (c.editOnly) return false;               // amarillas/rojas sueltas viven en "Cards"
+      return rows.some(r => c.val(r) != null);
+    });
 
     if (thead) {
       thead.innerHTML = `<th>${esc(tt('common.player', 'Player'))}</th><th>${esc(tt('match_reports.pos', 'Pos'))}</th>`
@@ -1019,12 +1058,109 @@
       const init = `${p.first_name?.[0]||''}${p.last_name?.[0]||''}`.toUpperCase();
       const pos = p.position || (r.s && r.s.position) || '—';
       const posCls = POS_MAP[pos] || 'mf';
+      const cells = cols.map(c => {
+        if (_mrEditing){
+          const edited = _mrEdits[r.id] || {};
+          const cur = edited[c.edit] != null ? edited[c.edit]
+                    : (c.edit === 'minutes' ? (r.min != null ? r.min : '')
+                                            : ((r.s && r.s[c.edit] != null) ? r.s[c.edit] : ''));
+          return `<td class="num"><input class="mr-edit" type="number" min="0"${
+            c.max ? ` max="${c.max}"` : ''}${c.step ? ` step="${c.step}"` : ' step="1"'
+            } data-p="${esc(r.id)}" data-f="${esc(c.edit)}" value="${esc(cur)}"></td>`;
+        }
+        return `<td class="${c.num ? 'num' : ''}">${c.val(r) != null ? c.cell(r) : '<span style="color:var(--cm-fg-faint)">—</span>'}</td>`;
+      }).join('');
       return `<tr>
         <td><div class="mr-player"><div class="mr-av">${esc(init)}</div><div><div class="mr-pname">${esc(name)}</div><div class="mr-pdorsal">${esc(pos)}</div></div></div></td>
         <td><span class="mr-pos ${posCls}">${esc(pos)}</span></td>
-        ${cols.map(c => `<td class="${c.num ? 'num' : ''}">${c.val(r) != null ? c.cell(r) : '<span style="color:var(--cm-fg-faint)">—</span>'}</td>`).join('')}
+        ${cells}
       </tr>`;
     }).join('');
+
+    if (_mrEditing){
+      tbody.querySelectorAll('.mr-edit').forEach(inp => {
+        inp.addEventListener('input', ev => {
+          const t = ev.target, v = t.value.trim();
+          _mrEdits[t.dataset.p] = _mrEdits[t.dataset.p] || {};
+          _mrEdits[t.dataset.p][t.dataset.f] = v === '' ? null : Number(v);
+        });
+      });
+    }
+    renderEditBar();
+  }
+
+  /* La barra de edición. Vive en la cabecera de la card: entrar, guardar, cancelar. */
+  function renderEditBar(){
+    const host = document.getElementById('mrPlayerTools');
+    if (!host) return;
+    if (!_mrEditing){
+      host.innerHTML = `<button class="cm-btn is-outline is-sm" id="mrEditOn" type="button"${
+        _mrMatchId ? '' : ' disabled title="' + esc(tt('match_reports.save_match_first', 'Save the match first.')) + '"'
+      }><i class="ti ti-pencil" style="font-size:14px"></i>${esc(tt('match_reports.edit_stats', 'Edit stats'))}</button>`;
+      const b = document.getElementById('mrEditOn');
+      if (b && _mrMatchId) b.onclick = () => { _mrEditing = true; _mrEdits = {}; renderPlayerTable(); };
+      return;
+    }
+    host.innerHTML = `<span class="mr-edit-msg" id="mrEditMsg"></span>
+      <button class="cm-btn is-outline is-sm" id="mrEditOff" type="button">${esc(tt('common.cancel', 'Cancel'))}</button>
+      <button class="cm-btn is-primary is-sm" id="mrEditSave" type="button"><i class="ti ti-device-floppy" style="font-size:14px"></i>${esc(tt('common.save', 'Save'))}</button>`;
+    document.getElementById('mrEditOff').onclick = () => { _mrEditing = false; _mrEdits = {}; renderPlayerTable(); };
+    document.getElementById('mrEditSave').onclick = savePlayerStats;
+  }
+
+  /* Guardar lo editado y recontar las sanciones.
+
+     El recuento no se incrementa: `afterMatchSaved` recalcula desde todos los partidos
+     de la competición, así que corregir una tarjeta mal cargada arregla el acumulado en
+     vez de sumarle otra. */
+  async function savePlayerStats(){
+    const msg = document.getElementById('mrEditMsg');
+    const ids = Object.keys(_mrEdits);
+    if (!ids.length){ _mrEditing = false; renderPlayerTable(); return; }
+    if (!_mrMatchId || !_mrCtx || !_mrCtx.clubId) return;
+    const btn = document.getElementById('mrEditSave'); if (btn) btn.disabled = true;
+    if (msg){ msg.style.color = 'var(--cm-fg-muted)'; msg.textContent = tt('common.saving', 'Saving…'); }
+
+    try {
+      const payloads = ids.map(pid => {
+        const row = (_mrPlayers || []).find(r => r.id === pid) || {};
+        const prev = row.s || {};
+        const values = {};
+        // Lo ya guardado se conserva; sólo se pisa lo que se tocó en pantalla.
+        (window.cmMatchStats ? window.cmMatchStats.fields() : []).forEach(f => {
+          const v = _mrEdits[pid][f.key] !== undefined ? _mrEdits[pid][f.key] : prev[f.key];
+          if (v != null && v !== '') values[f.key] = v;
+        });
+        const base = { club_id: _mrCtx.clubId, match_id: _mrMatchId, player_id: pid,
+                       position: prev.position || null, extra: prev.extra || {} };
+        return window.cmMatchStats ? window.cmMatchStats.toRow(values, base)
+                                   : Object.assign(base, values);
+      });
+      const { error } = await window.sb.from('player_match_stats')
+        .upsert(payloads, { onConflict: 'match_id,player_id' });
+      if (error) throw error;
+
+      let alerts = [];
+      try {
+        const names = {};
+        (_mrPlayers || []).forEach(r => {
+          names[r.id] = `${r.p.first_name || ''} ${r.p.last_name || ''}`.trim();
+        });
+        alerts = await window.cmSanctionsSync?.afterMatchSaved({ clubId: _mrCtx.clubId, playerNames: names }) || [];
+      } catch (_e) {}
+
+      _mrEditing = false; _mrEdits = {};
+      await loadGPS(_mrCtx.match.id, _mrCtx.clubId);
+      renderSanctions(_mrCtx.clubId);
+      const m2 = document.getElementById('mrEditMsg');
+      if (m2 && alerts.length){
+        m2.style.color = 'var(--cm-warning)';
+        m2.textContent = tt('sanctions.n_alerts', `${alerts.length} sanction alert(s)`, { count: alerts.length });
+      }
+    } catch (e){
+      if (btn) btn.disabled = false;
+      if (msg){ msg.style.color = 'var(--cm-danger)'; msg.textContent = tt('match_reports.import_error', 'Import error: {msg}', { msg: (e.message || e) }); }
+    }
   }
 
   // ── Hero / scorers from real data ─────────────────────────────
