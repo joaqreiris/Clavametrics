@@ -32,7 +32,7 @@ const TASKS = [];
         team_id: null, exercise_id: `ex${i}`, exercise_name: drill, field_size: size, players_format: fmt,
         field_width: 30, field_height: 20, players_count: 8, m2_per_player: 75,
         player_id: p.id, player_name: `${p.first_name} ${p.last_name}`, position: p.position, number: p.number,
-        duration_seconds: 600, work_min: 10,
+        duration_seconds: i === 0 ? 300 : 1200, work_min: i === 0 ? 5 : 20,
         total_distance: 1000 + i * 100 + pi * 10, high_speed_distance: 100 + i * 10,
         very_high_speed_distance: 40, sprint_distance: 20, sprint_count: 2,
         accelerations: 12, decelerations: 10, player_load: 90, hmld: 150,
@@ -321,5 +321,35 @@ test.describe('GPS · card en borrador del chart builder', () => {
     expect(d.pisa).toBe(false);
     // Y la card guardada sigue donde estaba: abrir el builder no puede reacomodar el dashboard.
     expect(d.guardada).toEqual({ x: 0, y: 0, w: 12, h: 11 });
+  });
+});
+
+test.describe('GPS · comparar ejercicios de distinta duración', () => {
+  test.describe.configure({ timeout: 60_000 });
+
+  // Comparar drills por un ACUMULADO cuando uno dura 5 minutos y otro 20 mide sobre todo cuánto
+  // duró cada uno. La card lo avisa con los minutos reales en vez de dejar que se descubra.
+  const cardCon = (metrics) => ([{ id: 'card-dur', position: 0, source: 'builder', size: 'lg', config: {
+    schema: 'gp.card/v1', title: 'Demanda por ejercicio', viz: 'bars', source: 'task',
+    scope: { level: 'squad' }, range: { type: 'last30' }, comparison: null,
+    metrics, dimensions: [{ id: 'drill' }], style: { color: '#15803D' } } }]);
+
+  const aviso = (page) => page.locator('.gp-view.is-on .gp-c[data-card-id="card-dur"] .gp-task-dur-note');
+
+  test('avisa cuando las tareas duran cosas muy distintas', async ({ page }) => {
+    await openTask(page, cardCon([{ id: 'very_high_speed_distance', agg: 'total', kind: 'accum', unit: 'm' }]));
+    await page.locator('.gp-sec[data-custom]').click();
+    await expect(page.locator('.gp-view.is-on .gp-c[data-card-id="card-dur"] canvas')).toHaveCount(1, { timeout: 20_000 });
+    await expect(aviso(page)).toHaveCount(1, { timeout: 10_000 });
+    await expect(aviso(page)).toContainText(/5/);
+    await expect(aviso(page)).toContainText(/20/);
+  });
+
+  test('con métricas POR MINUTO no molesta: ya están normalizadas', async ({ page }) => {
+    await openTask(page, cardCon([{ id: 'very_high_speed_distance_per_min', agg: 'avg', kind: 'avg', unit: 'm/min' }]));
+    await page.locator('.gp-sec[data-custom]').click();
+    await expect(page.locator('.gp-view.is-on .gp-c[data-card-id="card-dur"] canvas')).toHaveCount(1, { timeout: 20_000 });
+    await page.waitForTimeout(800);
+    await expect(aviso(page)).toHaveCount(0);
   });
 });

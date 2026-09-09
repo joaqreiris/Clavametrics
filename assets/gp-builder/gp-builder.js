@@ -3557,6 +3557,7 @@
 
       if (stale()) return;
       _renderCardInto(body, config, series, drawOpts);
+      _taskDurationNote(body, config, rows);
       cardEl.classList.remove('is-draft');
       clearTimeout(cardEl.__loadWatchdog);   // render completo: guardián de baja
 
@@ -3565,6 +3566,52 @@
       console.warn('gpb resolveAndRenderCard:', e);
       _showCardState(cardEl, body, 'err', 'GPS query failed. Your config is saved — try refreshing.', config);
     }
+  }
+
+  /**
+   * Aviso: comparar ejercicios por un ACUMULADO cuando duran cosas muy distintas mide sobre todo
+   * cuánto duró cada uno. Un rondo de 4' con 20 m de VHSR exige mucho más que un juego de 27'
+   * con 17 m, y en la card acumulada caen casi en el mismo punto. Se avisa con los minutos
+   * reales y se recuerda que existen las métricas por minuto; no se bloquea nada, porque el
+   * acumulado también es una lectura válida (cuánto trabajo dio la tarea en total).
+   */
+  const _TASK_DUR_RATIO = 1.6;   // 60% de diferencia entre la tarea más corta y la más larga
+  function _taskDurationNote(body, config, rows) {
+    try {
+      if (!body || config.source !== 'task' || !Array.isArray(rows) || rows.length < 2) return;
+      // Sólo si la card agrupa por algo de la TAREA: comparar ejercicios entre sí es el caso.
+      const TASK_DIMS = new Set(['drill', 'field_size', 'players_format']);
+      const dims = (config.dimensions || []).map(d => d.id);
+      if (!dims.some(d => TASK_DIMS.has(d))) return;
+      // …y sólo si alguna métrica es ACUMULADA. Las /min y las de pico ya son comparables.
+      const acum = (config.metrics || []).some(m => {
+        if (TASK_METRIC_IDS.has(m.id)) return false;               // las /min ya están normalizadas
+        const c = catalogMap.get(m.id);
+        return (c?.kind || 'accum') === 'accum';
+      });
+      if (!acum) return;
+      // Duración media de cada grupo (la tarea), en minutos.
+      const byGroup = new Map();
+      for (const r of rows) {
+        const k = dims.map(d => r[d === 'drill' ? 'exercise_name' : d] ?? '').join(' ¦ ');
+        const sec = Number(r.duration_seconds);
+        if (!Number.isFinite(sec) || sec <= 0) continue;
+        const e = byGroup.get(k) || { s: 0, n: 0 };
+        e.s += sec; e.n++; byGroup.set(k, e);
+      }
+      const mins = [...byGroup.values()].map(e => e.s / e.n / 60).filter(v => v > 0);
+      if (mins.length < 2) return;
+      const lo = Math.min(...mins), hi = Math.max(...mins);
+      if (!(hi / lo >= _TASK_DUR_RATIO)) return;
+      const note = document.createElement('div');
+      note.className = 'gp-task-dur-note';
+      note.style.cssText = 'text-align:center;margin-top:2px;font:500 10.5px/1.3 var(--cm-font-sans);color:var(--cm-warning,#b45309)';
+      note.innerHTML = `<i class="ti ti-clock-exclamation" style="font-size:11px;vertical-align:-1px"></i> ${
+        _tt('gps_analysis.task_duration_spread',
+            'The drills last between {lo} and {hi} min — compare per minute to weigh the demand',
+            { lo: lo.toFixed(0), hi: hi.toFixed(0) })}`;
+      body.appendChild(note);
+    } catch (e) { /* un aviso nunca puede romper una card */ }
   }
 
   // ── "vs microciclo" diff helpers ──────────────────────────────────────────
