@@ -31,6 +31,19 @@ const US = {
   duels: 194, duels_won: 100, duels_pct: 51.55,
   positional_attacks: 27, positional_attacks_with_shots: 9,
   ppda: 5.88, match_tempo: 14.78, yellow_cards: 2,
+  shots_pct: 50, average_shot_distance: 24,
+  shots_from_outside_penalty_area: 8, shots_from_outside_penalty_area_on_target: 5,
+  deep_completed_passes: 6, deep_completed_crosses: 1,
+  forward_passes: 136, back_passes: 55, lateral_passes: 115, long_passes: 54,
+  long_pass_pct: 14.96, average_pass_length: 20.61,
+  set_pieces: 27, set_pieces_with_shots: 3, set_pieces_pct: 11.11,
+  corners: 7, corners_with_shots: 0, free_kicks: 3, free_kicks_with_shots: 0,
+  crosses: 9, crosses_accurate: 2,
+  offensive_duels_pct: 42.19, defensive_duels_pct: 70.69,
+  aerial_duels_pct: 39.58, aerial_duels_won: 19, sliding_tackles_pct: 100,
+  interceptions: 45, clearances: 26,
+  shots_against: 14, shots_against_on_target: 3, shots_against_pct: 21.43,
+  fouls: 9, red_cards: 0, offsides: 1,
 };
 const THEM = {
   possession_pct: 37.86, xg: 0.81, shots: 14, shots_on_target: 3,
@@ -44,6 +57,11 @@ const THEM = {
   duels: 194, duels_won: 84, duels_pct: 43.3,
   positional_attacks: 24, positional_attacks_with_shots: 9,
   ppda: 10.07, match_tempo: 13.04, yellow_cards: 2,
+  shots_pct: 21.43, average_shot_distance: 23.19,
+  aerial_duels_pct: 50, defensive_duels_pct: 57.81, offensive_duels_pct: 29.31,
+  corners: 6, corners_with_shots: 1, set_pieces: 21, set_pieces_with_shots: 4,
+  interceptions: 38, long_pass_pct: 24.74, forward_passes: 91,
+  shots_against: 12, shots_against_on_target: 7,
 };
 
 /** Dos jornadas anteriores, para que haya evolución que mirar. */
@@ -248,6 +266,44 @@ test.describe('Match Reports · estadísticas de equipo', () => {
     await expect(tt.locator('tbody tr').first().locator('td').nth(i).locator('.tt-v')).toHaveClass(/up/);
     // Boeung Ket: 8,94, el peor de la serie → en rojo.
     await expect(tt.locator('tbody tr').last().locator('td').nth(i).locator('.tt-v')).toHaveClass(/down/);
+  });
+
+  // ── Los bloques de métricas ────────────────────────────────────────────────
+  test('la tabla deja elegir el bloque y cambia de columnas', async ({ page }) => {
+    await gotoMatch(page);
+    const sel = page.locator('#mrTtBlock');
+    await expect(sel).toBeVisible();
+    // Arranca en el resumen; hay un bloque por idea además de ese.
+    const opts = await sel.locator('option').allTextContents();
+    expect(opts.length).toBeGreaterThanOrEqual(4);
+
+    const before = await page.locator('.mr-table.tt thead th').allTextContents();
+    await sel.selectOption('duels');
+    await expect.poll(async () =>
+      (await page.locator('.mr-table.tt thead th').allTextContents()).join('|')
+    ).not.toBe(before.join('|'));
+    // El bloque de duelos trae lo que promete.
+    const after = (await page.locator('.mr-table.tt thead th').allTextContents()).join(' ');
+    expect(after).toMatch(/Aerial|Aéreos/);
+  });
+
+  test('los encabezados de la tabla van en versión corta para que entren', async ({ page }) => {
+    await gotoMatch(page);
+    await page.locator('#mrTtBlock').selectOption('shooting');
+    const head = (await page.locator('.mr-table.tt thead th').allTextContents()).map(h => h.trim());
+    // "Average shot distance" no entra; "Shot dist." sí.
+    expect(head).toContain('Shot dist.');
+    expect(head).not.toContain('Average shot distance');
+  });
+
+  test('la comparación agrupa el resto de las métricas por idea, plegadas', async ({ page }) => {
+    await gotoMatch(page);
+    const secs = page.locator('#mrTeamStatsCard .ts-sec');
+    expect(await secs.count()).toBeGreaterThanOrEqual(4);
+    // La primera abierta, para que se vea que hay más abajo.
+    await expect(secs.first()).toHaveAttribute('open', '');
+    // Y adentro, métricas que antes no se mostraban en ningún lado.
+    await expect(page.locator('#mrTeamStatsCard')).toContainText('Average shot distance');
   });
 
   // ── Tabla de jugadores ─────────────────────────────────────────────────────

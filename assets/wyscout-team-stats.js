@@ -290,10 +290,54 @@
     'passes_to_final_third', 'penalty_area_entries', 'recoveries', 'losses',
     'duels_pct', 'positional_attacks', 'ppda'];
 
+  /**
+   * Las 103 métricas por idea. Sirven para dos cosas: la comparación del partido las
+   * muestra como secciones, y la tabla de la temporada deja elegir un bloque por vez.
+   *
+   * Sin esto sólo se veían 24: el resto quedaba guardado y sin manera de mirarlo. Y
+   * volcarlas todas juntas tampoco alcanza — veinte columnas seguidas no dejan leer
+   * ningún patrón. Un bloque responde una pregunta.
+   */
+  const GROUPS = [
+    { key: 'shooting',    i18n: 'team_group.shooting',
+      keys: ['shots', 'shots_on_target', 'shots_pct', 'xg', 'average_shot_distance',
+             'shots_from_outside_penalty_area', 'shots_from_outside_penalty_area_on_target'] },
+    { key: 'progression', i18n: 'team_group.progression',
+      keys: ['progressive_passes_accurate', 'passes_to_final_third_accurate',
+             'penalty_area_entries', 'penalty_area_entries_runs', 'penalty_area_entries_crosses',
+             'deep_completed_passes', 'deep_completed_crosses', 'touches_in_penalty_area'] },
+    { key: 'buildup',     i18n: 'team_group.buildup',
+      keys: ['forward_passes', 'back_passes', 'lateral_passes', 'long_passes',
+             'long_pass_pct', 'average_passes_per_possession', 'average_pass_length',
+             'match_tempo', 'passes_pct'] },
+    { key: 'setpieces',   i18n: 'team_group.setpieces',
+      keys: ['set_pieces', 'set_pieces_with_shots', 'set_pieces_pct', 'corners',
+             'corners_with_shots', 'free_kicks', 'free_kicks_with_shots',
+             'crosses', 'crosses_accurate'] },
+    { key: 'duels',       i18n: 'team_group.duels',
+      keys: ['duels_pct', 'offensive_duels_pct', 'defensive_duels_pct',
+             'aerial_duels_pct', 'aerial_duels_won', 'sliding_tackles_pct'] },
+    { key: 'defending',   i18n: 'team_group.defending',
+      keys: ['ppda', 'recoveries_high', 'losses_low', 'interceptions', 'clearances',
+             'shots_against', 'shots_against_on_target', 'shots_against_pct'] },
+    { key: 'discipline',  i18n: 'team_group.discipline',
+      keys: ['fouls', 'yellow_cards', 'red_cards', 'offsides'] },
+  ];
+  function groups() {
+    return GROUPS.map(g => ({ key: g.key, label: tt(g.i18n, g.key), keys: g.keys.slice() }));
+  }
+
   /** Las que ofrece la card de evolución. La primera es la que se abre por defecto. */
   const TREND = ['possession_pct', 'xg', 'ppda', 'progressive_passes_accurate',
     'recoveries_high', 'losses_low', 'passes_to_final_third_accurate',
-    'penalty_area_entries', 'shots', 'shots_against', 'duels_pct', 'match_tempo'];
+    'penalty_area_entries', 'shots', 'shots_against', 'duels_pct', 'match_tempo',
+    // Las que explican CÓMO se generó, no sólo cuánto: a qué distancia se remata, si la
+    // pelota parada termina en remate, si se gana por arriba, cuánto se juega directo.
+    'shots_on_target', 'average_shot_distance', 'touches_in_penalty_area',
+    'deep_completed_passes', 'set_pieces_with_shots', 'corners',
+    'aerial_duels_pct', 'defensive_duels_pct', 'offensive_duels_pct',
+    'long_pass_pct', 'average_passes_per_possession', 'forward_passes',
+    'interceptions', 'shots_against_on_target'];
 
   /** Todas las claves conocidas, en el orden del catálogo. */
   function allKeys() {
@@ -304,7 +348,7 @@
 
   window.cmWyscoutTeamStats = {
     looks, parse, label, shortLabel, groupLabel, originalLabel, format, allKeys,
-    split, CATALOG, HIGHLIGHT, TREND, LOWER_IS_BETTER,
+    split, groups, CATALOG, GROUPS, HIGHLIGHT, TREND, LOWER_IS_BETTER,
     lowerIsBetter: k => LOWER_IS_BETTER.indexOf(k) !== -1,
   };
 })();

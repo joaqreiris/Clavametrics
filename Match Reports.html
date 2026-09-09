@@ -392,7 +392,24 @@
 
   /* Partido a partido: la temporada entera en una grilla. */
   .tt-wrap { border-top:1px solid var(--cm-border-soft); }
-  .tt-h { padding:13px 16px 9px; font:600 11px/1 var(--cm-font-sans); letter-spacing:.07em; text-transform:uppercase; color:var(--cm-fg-muted); }
+  .tt-h { display:flex; align-items:center; gap:10px; padding:13px 16px 9px; font:600 11px/1 var(--cm-font-sans); letter-spacing:.07em; text-transform:uppercase; color:var(--cm-fg-muted); }
+  .tt-h > span { white-space:nowrap; }
+  .tt-h select { margin-left:auto; flex:0 1 auto; max-width:230px; height:28px; padding:0 8px; background:var(--cm-surface); color:var(--cm-fg); border:1px solid var(--cm-border); border-radius:var(--cm-r-2); font:500 12px/1 var(--cm-font-sans); letter-spacing:0; text-transform:none; cursor:pointer; }
+
+  /* Las métricas que no entran en el resumen, por idea y plegadas. */
+  .ts-sec { border-top:1px solid var(--cm-border-soft); }
+  .ts-sec > summary { padding:10px 14px; cursor:pointer; font:600 11px/1 var(--cm-font-sans); letter-spacing:.06em; text-transform:uppercase; color:var(--cm-fg-muted); display:flex; align-items:center; gap:8px; list-style:none; }
+  .ts-sec > summary::-webkit-details-marker { display:none; }
+  .ts-sec > summary::before { content:'▸'; font-size:10px; color:var(--cm-fg-faint); transition:transform .15s; }
+  .ts-sec[open] > summary::before { transform:rotate(90deg); }
+  .ts-sec > summary:hover { color:var(--cm-fg); }
+  .ts-sec > summary .n { margin-left:auto; font:500 10.5px/1 var(--cm-font-mono); color:var(--cm-fg-faint); }
+  .ts-grid { padding:2px 14px 12px; }
+  .ts-gr { display:grid; grid-template-columns:auto 1fr auto; gap:8px; align-items:baseline; padding:5px 0; border-bottom:1px solid var(--cm-border-soft); }
+  .ts-gr:last-child { border-bottom:0; }
+  .ts-gr .v { font:600 12.5px/1 var(--cm-font-mono); color:var(--cm-fg-strong); font-variant-numeric:tabular-nums; }
+  .ts-gr .v.r { color:var(--cm-fg-muted); }
+  .ts-gr .k { text-align:center; font:400 11.5px/1.35 var(--cm-font-sans); color:var(--cm-fg-muted); }
   .mr-table.tt tbody td, .mr-table.tt thead th { white-space:nowrap; }
   .mr-table.tt tbody tr.is-now td { background:var(--cm-bg-soft); }
   .mr-table.tt tbody tr.is-now .tt-opp { font-weight:600; color:var(--cm-fg-strong); }
@@ -1154,6 +1171,7 @@
      Wyscout.
      ═══════════════════════════════════════════════════════════════════════════ */
   let _mrTrend = null;   // { series: [...], matchId } para redibujar al cambiar métrica
+  let _mrTrendBlock = '_summary';   // qué bloque de métricas muestra la tabla de la temporada
 
   async function loadTeamStats(clubId, currentMatchId){
     const body = document.getElementById('mrTeamStatsBody');
@@ -1330,7 +1348,24 @@
         </div>`;
     }
 
-    body.innerHTML = head + `<div class="ts-rows">${rows}</div>` + zones;
+    // El resto de las métricas, por idea y plegadas: la card no puede medir dos metros,
+    // pero tampoco tiene sentido guardar 79 datos y no dar manera de mirarlos. El
+    // primer bloque abre para que se vea que hay más abajo.
+    const sections = W.groups().map((g, i) => {
+      const ks = g.keys.filter(k => A[k] != null || B[k] != null);
+      if (!ks.length) return '';
+      const lines = ks.map(k => `<div class="ts-gr">
+          <span class="v">${A[k] != null ? esc(W.format(k, A[k])) : '—'}</span>
+          <span class="k" title="${esc(W.originalLabel(k))}">${esc(W.label(k))}</span>
+          <span class="v r">${B[k] != null ? esc(W.format(k, B[k])) : '—'}</span>
+        </div>`).join('');
+      return `<details class="ts-sec"${i === 0 ? ' open' : ''}>
+          <summary>${esc(g.label)}<span class="n">${ks.length}</span></summary>
+          <div class="ts-grid">${lines}</div>
+        </details>`;
+    }).join('');
+
+    body.innerHTML = head + `<div class="ts-rows">${rows}</div>` + zones + sections;
   }
 
   function buildTrendPicker(){
@@ -1481,6 +1516,10 @@
       <div class="tr-note">${tt('match_reports.trend_note',
         'Dashed line: season average. Filled dot: the match open above. Hover a point for the opponent.')}</div>`
       + renderTrendTable();
+
+    // El selector de bloque se redibuja con la tabla, así que se re-engancha acá.
+    const bs = document.getElementById('mrTtBlock');
+    if (bs) bs.onchange = () => { _mrTrendBlock = bs.value; renderTrend(key); };
   }
 
   /* La temporada entera de un vistazo: una fila por partido, las métricas clave en
@@ -1491,13 +1530,21 @@
     const W = window.cmWyscoutTeamStats;
     if (!_mrTrend || _mrTrend.series.length < 2) return '';
 
-    // Pocas columnas y elegidas: una por idea (tener, progresar, generar, presionar,
-    // arriesgar). Con veinte no se lee ningún patrón.
-    const KEYS = ['possession_pct', 'xg', 'progressive_passes_accurate',
-                  'passes_to_final_third_accurate', 'penalty_area_entries',
-                  'ppda', 'recoveries_high', 'losses_low'];
-    const cols = KEYS.filter(k => _mrTrend.series.some(s => s.stats[k] != null));
-    if (!cols.length) return '';
+    // El bloque por defecto es el resumen: una métrica por idea (tener, progresar,
+    // generar, presionar, arriesgar). Los demás se eligen en el selector — veinte
+    // columnas a la vez no dejan leer ningún patrón, pero esconderlas tampoco sirve.
+    const SUMMARY = ['possession_pct', 'xg', 'progressive_passes_accurate',
+                     'passes_to_final_third_accurate', 'penalty_area_entries',
+                     'ppda', 'recoveries_high', 'losses_low'];
+    const blocks = [{ key: '_summary', label: tt('match_reports.tt_summary', 'Overview'), keys: SUMMARY }]
+      .concat(W.groups())
+      .map(g => ({ ...g, keys: g.keys.filter(k => _mrTrend.series.some(s => s.stats[k] != null)) }))
+      .filter(g => g.keys.length);
+    if (!blocks.length) return '';
+
+    const pick = blocks.some(b => b.key === _mrTrendBlock) ? _mrTrendBlock : blocks[0].key;
+    _mrTrendBlock = pick;
+    const cols = blocks.find(b => b.key === pick).keys;
 
     // El promedio es la vara: se calcula sobre los partidos que tienen el dato.
     const avg = {};
@@ -1542,7 +1589,11 @@
 
     return `
       <div class="tt-wrap">
-        <div class="tt-h">${esc(tt('match_reports.trend_table', 'Match by match'))}</div>
+        <div class="tt-h">
+          <span>${esc(tt('match_reports.trend_table', 'Match by match'))}</span>
+          <select id="mrTtBlock" class="cm-select">${
+            blocks.map(b => `<option value="${esc(b.key)}" ${b.key === pick ? 'selected' : ''}>${esc(b.label)}</option>`).join('')}</select>
+        </div>
         <div class="tscroll-x">
           <table class="mr-table tt">
             <thead><tr>
