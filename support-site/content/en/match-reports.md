@@ -23,6 +23,8 @@ After a match, to record the result and enter (or import) the players' stats, an
 
 **Add the player stats.** Per player you record minutes, rating, goals, assists, yellow/red cards and position — by hand or by **importing** a CSV/Excel file (e.g. a Wyscout or generic export), mapping its columns and matching rows to your players by name or number. GPS output (distance, sprint, top speed) is shown alongside from the session's GPS data. Ratings are color-coded by band.
 
+**Add the team stats.** Wyscout's **Team Stats** export (an Excel file with one row per team) carries 53 metrics for both sides: possession, xG, PPDA, progressive passes, and recoveries and losses split by third of the pitch. Importing it fills two cards: the comparison against the opponent, and **Team trend**, which puts every match on one line so you can see how the team is developing across the season. No column mapping needed — the importer recognises the file by its headers and only asks you to confirm which of the two teams is yours.
+
 ## Key concepts
 
 **What a match report captures.** Two layers: the **match result** (score, opponent, competition, venue, home/away, formation, possession, notes) and the **per-player stats** (minutes, rating, goals, assists, cards, position), with GPS metrics overlaid from the session.

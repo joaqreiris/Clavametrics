@@ -21,6 +21,8 @@
   let _sessions = [], _clubId = null, _teamId = null;
   // player-stats import state
   let _matchId = null, _players = null, _parsed = null, _provider = 'generic', _mapping = {};
+  // El export de equipo de Wyscout, ya parseado y esperando confirmación.
+  let _teamStats = null;
 
   function esc(s){
     return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
@@ -47,6 +49,24 @@
       .mi-msg { font:600 12px/1.3 var(--cm-font-sans); }
       .mi-stats { margin-top:18px; padding-top:18px; border-top:1px solid var(--cm-border-soft); }
       .mi-stats-h { font:600 12px/1 var(--cm-font-sans); letter-spacing:.04em; text-transform:uppercase; color:var(--cm-fg-strong); margin-bottom:10px; }
+
+      /* Export de equipo de Wyscout: se confirma lo detectado, no se mapea columna a columna. */
+      .mi-ts { margin-top:12px; padding:12px 13px; border:1px solid var(--cm-info-bd); background:var(--cm-info-bg); border-radius:var(--cm-r-3); display:flex; flex-direction:column; gap:8px; }
+      .mi-ts-h { display:flex; align-items:center; gap:7px; font:600 12.5px/1 var(--cm-font-sans); color:var(--cm-fg-strong); }
+      .mi-ts-h .ti { font-size:15px; color:var(--cm-info); }
+      .mi-ts-p { margin:0; font:400 12px/1.55 var(--cm-font-sans); color:var(--cm-fg-muted); }
+      .mi-ts-side { display:flex; align-items:center; gap:8px; padding:7px 9px; background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-2); }
+      .mi-ts-side b { font:600 13px/1 var(--cm-font-sans); color:var(--cm-fg-strong); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+      .mi-ts-tag { flex:0 0 auto; padding:2px 7px; border-radius:var(--cm-r-1); background:var(--cm-bg-sunk); border:1px solid var(--cm-border); font:600 10px/1.5 var(--cm-font-sans); letter-spacing:.04em; text-transform:uppercase; color:var(--cm-fg-muted); }
+      .mi-ts-tag.is-us { background:var(--cm-accent); border-color:var(--cm-accent); color:var(--cm-fg-on-accent); }
+      .mi-ts-form { font:500 11.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); }
+      .mi-ts-n { margin-left:auto; flex:0 0 auto; font:500 11.5px/1 var(--cm-font-mono); color:var(--cm-fg-faint); }
+      .mi-ts-peeks { display:flex; flex-wrap:wrap; gap:6px; }
+      .mi-ts-peek { display:inline-flex; align-items:baseline; gap:6px; padding:4px 8px; background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-2); }
+      .mi-ts-peek i { font-style:normal; font:400 11px/1 var(--cm-font-sans); color:var(--cm-fg-muted); }
+      .mi-ts-peek b { font:600 12px/1 var(--cm-font-mono); color:var(--cm-fg-strong); }
+      .mi-ts-peek u { text-decoration:none; color:var(--cm-fg-faint); }
+      .mi-ts-warn { margin:0; font:500 12px/1.5 var(--cm-font-sans); color:var(--cm-warning); }
     `;
     const el = document.createElement('style'); el.id = 'mi-styles'; el.textContent = css;
     document.head.appendChild(el);
@@ -303,16 +323,88 @@
     s.onload = () => res(); s.onerror = rej; document.head.appendChild(s);
   }); }
 
+  /* Wyscout escribe su XML de eventos en UTF-16 y sin BOM, así que `file.text()` lo
+     devuelve como caracteres chinos. Se mira el primer par de bytes: en UTF-16LE los
+     impares de un texto ASCII son 0x00. */
+  function decodeText(buf){
+    const b = new Uint8Array(buf);
+    if (b.length > 1){
+      if (b[0] === 0xFF && b[1] === 0xFE) return new TextDecoder('utf-16le').decode(buf);
+      if (b[0] === 0xFE && b[1] === 0xFF) return new TextDecoder('utf-16be').decode(buf);
+      if (b[1] === 0x00) return new TextDecoder('utf-16le').decode(buf);
+      if (b[0] === 0x00) return new TextDecoder('utf-16be').decode(buf);
+    }
+    return new TextDecoder('utf-8').decode(buf);
+  }
+
+  /* El XML de eventos de Wyscout es una playlist de vídeo: una <instance> por clip, con
+     el jugador en <code> ("(9) Nombre") y el tipo de jugada en <label><text>. No es una
+     tabla, así que acá se cuenta cuántas veces hizo cada jugador cada cosa y se arma una
+     fila por jugador — la forma que el resto del importador ya sabe mapear.
+     Las cuatro instancias sin <code> son las marcas de inicio y fin de cada tiempo:
+     no son jugadores, pero sirven para pasar los segundos de vídeo a minuto de partido. */
+  function parseWyscoutEvents(text){
+    let doc;
+    try { doc = new DOMParser().parseFromString(text, 'application/xml'); } catch (_e){ return null; }
+    if (!doc || doc.getElementsByTagName('parsererror').length) return null;
+    const inst = doc.getElementsByTagName('instance');
+    if (!inst.length || !doc.getElementsByTagName('ALL_INSTANCES').length) return null;
+
+    const txt = (el, tag) => { const n = el.getElementsByTagName(tag)[0]; return n ? (n.textContent || '').trim() : ''; };
+    const counts = {}, order = [], labels = {}, marks = {}, events = [];
+
+    for (let i = 0; i < inst.length; i++){
+      const el = inst[i];
+      const code = txt(el, 'code');
+      const lab = txt(el, 'text');
+      const start = parseFloat(txt(el, 'start'));
+      if (!lab) continue;
+      if (!code){ marks[lab.toLowerCase()] = start; continue; }   // marca de período
+      if (!counts[code]){ counts[code] = {}; order.push(code); }
+      counts[code][lab] = (counts[code][lab] || 0) + 1;
+      labels[lab] = (labels[lab] || 0) + 1;
+      events.push({ code: code, label: lab, start: start });
+    }
+    if (!order.length) return null;
+
+    // Columnas: identidad primero, después los tipos de evento por frecuencia.
+    const byFreq = Object.keys(labels).sort((a, b) => labels[b] - labels[a]);
+    const headers = ['Number', 'Player'].concat(byFreq);
+    const rows = order
+      .sort((a, b) => {
+        const s = c => Object.keys(counts[c]).reduce((t, k) => t + counts[c][k], 0);
+        return s(b) - s(a);
+      })
+      .map(code => {
+        const m = code.match(/^\((\d+)\)\s*(.+)$/);       // "(9) Nombre" → dorsal + nombre
+        const o = { Number: m ? m[1] : '', Player: m ? m[2] : code };
+        byFreq.forEach(l => { o[l] = counts[code][l] || 0; });
+        return o;
+      });
+
+    return { headers: headers, rows: rows, events: events, marks: marks, labels: byFreq };
+  }
+
   async function parseFile(file){
     const name = (file.name || '').toLowerCase();
+
+    if (name.endsWith('.xml')){
+      const parsed = parseWyscoutEvents(decodeText(await file.arrayBuffer()));
+      if (!parsed) throw new Error(tt('match_reports.xml_not_wyscout',
+        'This XML is not a Wyscout event export.'));
+      return Object.assign({ kind: 'events' }, parsed);
+    }
+
     if (name.endsWith('.csv') || name.endsWith('.tsv') || file.type === 'text/csv'){
       await loadPapa();
       return new Promise((res, rej) => {
         window.Papa.parse(file, { header: true, skipEmptyLines: true,
-          complete: r => res({ headers: (r.meta && r.meta.fields) || [], rows: r.data || [] }),
+          complete: r => res({ kind: 'table', headers: (r.meta && r.meta.fields) || [], rows: r.data || [],
+                               grid: [(r.meta && r.meta.fields) || []].concat((r.data || []).map(o => Object.values(o))) }),
           error: rej });
       });
     }
+
     await loadXLSX();
     const buf = await file.arrayBuffer();
     const wb = window.XLSX.read(buf, { type: 'array' });
@@ -320,7 +412,9 @@
     const arr = window.XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
     const rawHeaders = (arr[0] || []).map(h => String(h).trim());
     const rows = arr.slice(1).map(r => { const o = {}; rawHeaders.forEach((h, i) => { if (h !== '') o[h] = r[i]; }); return o; });
-    return { headers: rawHeaders.filter(h => h !== ''), rows };
+    // `grid` va aparte: el export de equipo de Wyscout tiene encabezados que abarcan
+    // varias columnas, y esa forma se pierde al pasarla a objetos por nombre de columna.
+    return { kind: 'table', headers: rawHeaders.filter(h => h !== ''), rows, grid: arr };
   }
 
   async function fetchPlayers(){
@@ -375,8 +469,8 @@
       <div class="mi-row" style="align-items:flex-end">
         <label class="mi-field" style="flex:0 0 150px"><span class="mi-l">${esc(tt('match_reports.provider', 'Provider'))}</span>
           <select id="miProvider" class="cm-select"><option value="generic">${esc(tt('match_reports.provider_generic', 'Generic'))}</option><option value="wyscout">Wyscout</option></select></label>
-        <label class="mi-field"><span class="mi-l">${esc(tt('match_reports.file_csv_xlsx', 'File (.csv / .xlsx)'))}</span>
-          <input id="miFile" type="file" accept=".csv,.xlsx,.xls" class="cm-input"></label>
+        <label class="mi-field"><span class="mi-l">${esc(tt('match_reports.file_csv_xlsx_xml', 'File (.csv / .xlsx / .xml)'))}</span>
+          <input id="miFile" type="file" accept=".csv,.tsv,.xlsx,.xls,.xml" class="cm-input"></label>
       </div>
       <div id="miMapWrap" style="display:none"></div>
       <div id="miStatsMsg" class="mi-msg" style="margin-top:8px"></div>`;
@@ -388,14 +482,111 @@
   async function onFile(e){
     const file = e.target.files && e.target.files[0]; if (!file) return;
     const msg = $('miStatsMsg'); if (msg){ msg.style.color = 'var(--cm-fg-muted)'; msg.textContent = tt('match_reports.parsing', 'Parsing…'); }
+    _teamStats = null;
     try {
       await fetchPlayers();
       _parsed = await parseFile(file);
+
+      // Wyscout tiene dos exports por partido y hacen cosas distintas. El de equipo no
+      // se mapea columna por columna: sus 103 métricas ya se conocen por nombre, así que
+      // en vez del diálogo de asignación se muestra lo que se encontró y se confirma.
+      const W = window.cmWyscoutTeamStats;
+      if (W && _parsed.grid && W.looks(_parsed.grid[0] || [])){
+        const ts = W.parse(_parsed.grid, currentOpponentName());
+        if (ts && ts.sides.length){
+          _teamStats = ts;
+          renderTeamStats();
+          if (msg) msg.textContent = '';
+          return;
+        }
+      }
+
       if (!_parsed.headers.length){ if (msg){ msg.style.color = 'var(--cm-danger)'; msg.textContent = tt('match_reports.no_columns_found', 'No columns found in file.'); } return; }
       autoMapAll();
       renderMapping();
       if (msg) msg.textContent = '';
     } catch (err){ if (msg){ msg.style.color = 'var(--cm-danger)'; msg.textContent = tt('match_reports.parse_error', 'Parse error: {msg}', { msg: (err.message || err) }); } }
+  }
+
+  /* El rival ya está escrito en el partido; se usa para saber cuál de las dos filas del
+     Excel somos nosotros sin preguntarlo. */
+  function currentOpponentName(){
+    const el = $('miOpponent');
+    if (el && el.value) return el.value;
+    return (window.mrCurrentMatch && window.mrCurrentMatch.opponent) || null;
+  }
+
+  /* ── El export de equipo: confirmar, no mapear ─────────────────────────────── */
+  function renderTeamStats(){
+    const wrap = $('miMapWrap'); if (!wrap || !_teamStats) return;
+    const W = window.cmWyscoutTeamStats;
+    const sides = _teamStats.sides;
+    const nMetrics = sides.reduce((m, s) => Math.max(m, Object.keys(s.stats).length), 0);
+
+    const sideRow = s => `
+      <div class="mi-ts-side">
+        <span class="mi-ts-tag ${s.side === 'us' ? 'is-us' : ''}">${esc(s.side === 'us'
+          ? tt('match_reports.ts_our_team', 'Our team')
+          : tt('match_reports.ts_opponent', 'Opponent'))}</span>
+        <b>${esc(s.team_name)}</b>
+        ${s.formation ? `<span class="mi-ts-form">${esc(s.formation)}</span>` : ''}
+        <span class="mi-ts-n">${Object.keys(s.stats).length}</span>
+      </div>`;
+
+    // Un vistazo a tres métricas, para que se vea que los números llegaron bien antes
+    // de guardar nada.
+    const peek = ['possession_pct', 'xg', 'ppda'].filter(k => sides.some(s => s.stats[k] != null));
+    const peekHTML = peek.map(k => `<span class="mi-ts-peek"><i>${esc(W.label(k))}</i>${
+      sides.map(s => `<b>${esc(W.format(k, s.stats[k]))}</b>`).join('<u>·</u>')}</span>`).join('');
+
+    wrap.style.display = '';
+    wrap.innerHTML = `
+      <div class="mi-ts">
+        <div class="mi-ts-h"><i class="ti ti-table-import"></i>${esc(tt('match_reports.ts_detected', 'Wyscout team stats'))}</div>
+        <p class="mi-ts-p">${esc(tt('match_reports.ts_detected_hint',
+          'Team-level metrics for both sides. They fill the match comparison and the season trend — player stats are not touched.'))}</p>
+        ${sides.map(sideRow).join('')}
+        ${_teamStats.matched ? '' : `<p class="mi-ts-warn">${esc(tt('match_reports.ts_guessed_sides',
+          'Could not match either team to this match’s opponent, so the first row was taken as ours. Check before importing.'))}</p>`}
+        <div class="mi-ts-peeks">${peekHTML}</div>
+        ${_teamStats.unknown && _teamStats.unknown.length ? `<p class="mi-ts-warn">${esc(tt('match_reports.ts_unknown_cols',
+          '{count} column(s) not recognised and skipped: {list}',
+          { count: _teamStats.unknown.length, list: _teamStats.unknown.slice(0, 3).join(', ') }))}</p>` : ''}
+      </div>
+      <div class="mi-actions" style="margin-top:10px">
+        <span style="flex:1"></span>
+        <button id="miImportCancel" class="cm-btn is-outline is-sm" type="button">${esc(tt('common.cancel', 'Cancel'))}</button>
+        <button id="miImportTS" class="cm-btn is-primary is-sm" type="button"><i class="ti ti-database-import" style="font-size:14px"></i>${
+          esc(tt('match_reports.ts_import_n', `Import ${nMetrics} metrics`, { count: nMetrics }))}</button>
+      </div>`;
+    $('miImportCancel').addEventListener('click', close);
+    $('miImportTS').addEventListener('click', doImportTeamStats);
+  }
+
+  async function doImportTeamStats(){
+    const msg = $('miStatsMsg'); if (msg){ msg.style.color = 'var(--cm-danger)'; msg.textContent = ''; }
+    if (!_matchId){ if (msg) msg.textContent = tt('match_reports.save_match_first', 'Save the match first.'); return; }
+    if (!_teamStats){ return; }
+    const btn = $('miImportTS'); if (btn) btn.disabled = true;
+    try {
+      const payloads = _teamStats.sides.map(s => ({
+        club_id: _clubId, match_id: _matchId, side: s.side,
+        team_name: s.team_name || null, formation: s.formation || null,
+        stats: s.stats, source: 'wyscout_xlsx',
+      }));
+      const res = await window.sb.from('team_match_stats')
+        .upsert(payloads, { onConflict: 'match_id,side' });
+      if (res.error) throw res.error;
+      if (msg){
+        msg.style.color = 'var(--cm-success)';
+        msg.textContent = tt('match_reports.ts_imported', '✓ Team stats imported');
+      }
+      close();
+      location.reload();
+    } catch (e){
+      if (btn) btn.disabled = false;
+      if (msg){ msg.style.color = 'var(--cm-danger)'; msg.textContent = tt('match_reports.import_error', 'Import error: {msg}', { msg: (e.message || e) }); }
+    }
   }
 
   function renderMapping(){

@@ -23,6 +23,8 @@ Após um jogo, para registrar o resultado e inserir (ou importar) as estatístic
 
 **Adicione as estatísticas dos jogadores.** Por jogador você registra minutos, nota, gols, assistências, cartões amarelos/vermelhos e posição — manualmente ou **importando** um arquivo CSV/Excel (por exemplo, uma exportação do Wyscout ou genérica), mapeando suas colunas e correspondendo as linhas aos seus jogadores por nome ou número. A produção de GPS (distância, sprint, velocidade máxima) é exibida ao lado a partir dos dados de GPS da sessão. As notas são codificadas por cores em faixas.
 
+**Adicione as estatísticas da equipe.** A exportação **Team Stats** do Wyscout (um Excel com uma linha por equipe) traz 53 métricas dos dois lados: posse de bola, xG, PPDA, passes progressivos e as recuperações e perdas divididas por terço do campo. Ao importá-la, duas tarjetas são preenchidas: a comparação com o adversário e **Como vem a equipe**, que coloca cada jogo em uma linha para acompanhar a evolução ao longo da temporada. Não é preciso mapear colunas: o importador reconhece o arquivo pelos cabeçalhos e só pede que você confirme qual das duas equipes é a sua.
+
 ## Conceitos-chave
 
 **O que um relatório de jogo captura.** Duas camadas: o **resultado da partida** (placar, adversário, competição, local, casa/fora, formação, posse de bola, observações) e as **estatísticas por jogador** (minutos, nota, gols, assistências, cartões, posição), com métricas de GPS sobrepostas a partir da sessão.

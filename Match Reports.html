@@ -328,6 +328,53 @@
     border-bottom:2px solid transparent;
     margin-bottom:-1px;
   }
+  /* ── Estadísticas de equipo: nosotros contra el rival ─────────────────────── */
+  .ts-empty { padding:28px 16px; text-align:center; color:var(--cm-fg-faint); font:var(--cm-body-sm); }
+  .ts-head { display:grid; grid-template-columns:1fr auto 1fr; gap:8px; align-items:center; padding:10px 14px; border-bottom:1px solid var(--cm-border-soft); background:var(--cm-bg-soft); }
+  .ts-head .nm { font:600 12px/1.3 var(--cm-font-sans); color:var(--cm-fg-strong); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .ts-head .nm.r { text-align:right; }
+  .ts-head .nm small { display:block; margin-top:2px; font:500 10.5px/1 var(--cm-font-mono); color:var(--cm-fg-faint); }
+  .ts-head .vs { font:500 10px/1 var(--cm-font-mono); letter-spacing:.08em; text-transform:uppercase; color:var(--cm-fg-faint); }
+  .ts-rows { padding:4px 14px 12px; }
+  .ts-row { padding:9px 0; border-bottom:1px solid var(--cm-border-soft); }
+  .ts-row:last-child { border-bottom:0; }
+  .ts-top { display:grid; grid-template-columns:auto 1fr auto; gap:8px; align-items:baseline; margin-bottom:5px; }
+  .ts-v { font:600 13.5px/1 var(--cm-font-mono); color:var(--cm-fg-strong); font-variant-numeric:tabular-nums; }
+  .ts-k { text-align:center; font:400 11.5px/1.35 var(--cm-font-sans); color:var(--cm-fg-muted); }
+  .ts-bars { display:grid; grid-template-columns:1fr 1fr; gap:3px; height:4px; }
+  .ts-bars span { height:100%; background:var(--cm-bg-sunk); border-radius:2px; display:flex; overflow:hidden; }
+  .ts-bars span.l { justify-content:flex-end; }
+  .ts-bars i { display:block; height:100%; border-radius:2px; }
+  .ts-bars span.l i { background:var(--cm-accent); }
+  .ts-bars span.r i { background:var(--cm-fg-faint); }
+  /* El campo en tercios: dónde se recupera y dónde se pierde. */
+  .ts-zones { margin:2px 14px 14px; border:1px solid var(--cm-border); border-radius:var(--cm-r-3); overflow:hidden; }
+  .ts-zones-h { padding:8px 11px; background:var(--cm-bg-soft); border-bottom:1px solid var(--cm-border-soft); font:600 11px/1 var(--cm-font-sans); letter-spacing:.05em; text-transform:uppercase; color:var(--cm-fg-muted); }
+  .ts-pitch { display:grid; grid-template-columns:repeat(3,1fr); }
+  .ts-third { padding:10px 10px 8px; border-right:1px dashed var(--cm-border); display:flex; flex-direction:column; gap:5px; }
+  .ts-third:last-child { border-right:0; }
+  .ts-third .zl { font:500 9.5px/1.2 var(--cm-font-mono); letter-spacing:.06em; text-transform:uppercase; color:var(--cm-fg-faint); }
+  .ts-third .zv { display:flex; align-items:baseline; gap:6px; }
+  .ts-third .zv i { width:7px; height:7px; border-radius:2px; align-self:center; flex:0 0 auto; }
+  .ts-third .zv b { font:600 16px/1 var(--cm-font-mono); color:var(--cm-fg-strong); font-variant-numeric:tabular-nums; }
+  .ts-third .zv u { text-decoration:none; font:400 10.5px/1.2 var(--cm-font-sans); color:var(--cm-fg-muted); }
+  .ts-legend { display:flex; flex-wrap:wrap; gap:6px 14px; padding:8px 11px; border-top:1px solid var(--cm-border-soft); background:var(--cm-bg-soft); font:400 11px/1.4 var(--cm-font-sans); color:var(--cm-fg-muted); }
+  .ts-legend span { display:inline-flex; align-items:center; gap:5px; }
+  .ts-legend i { width:8px; height:8px; border-radius:2px; }
+
+  /* ── Evolución del equipo a lo largo de la temporada ──────────────────────── */
+  .tr-body { padding:14px 16px 6px; }
+  .tr-kpis { display:flex; flex-wrap:wrap; gap:10px; margin-bottom:12px; }
+  .tr-kpi { flex:1; min-width:128px; padding:9px 11px; border:1px solid var(--cm-border); border-radius:var(--cm-r-3); background:var(--cm-bg-soft); }
+  .tr-kpi .kl { font:500 10px/1.2 var(--cm-font-mono); letter-spacing:.07em; text-transform:uppercase; color:var(--cm-fg-faint); }
+  .tr-kpi .kv { margin-top:5px; font:600 19px/1 var(--cm-font-mono); color:var(--cm-fg-strong); font-variant-numeric:tabular-nums; }
+  .tr-kpi .kd { margin-top:4px; font:500 11px/1.3 var(--cm-font-sans); color:var(--cm-fg-muted); }
+  .tr-kpi .kd.up { color:var(--cm-success); }
+  .tr-kpi .kd.down { color:var(--cm-danger); }
+  .tr-chart { overflow-x:auto; }
+  .tr-chart svg { display:block; }
+  .tr-note { padding:9px 16px 13px; font:400 11.5px/1.5 var(--cm-font-sans); color:var(--cm-fg-faint); }
+
   .mr-tab:hover { color:var(--cm-fg); }
   .mr-tab.is-on { color:var(--cm-fg-strong); border-bottom-color:var(--cm-accent); font-weight:600; }
   .mr-tab .ti { font-size:14px; }
@@ -618,13 +665,32 @@
             <div style="padding:28px 16px;text-align:center;color:var(--cm-fg-faint);font:var(--cm-body-sm)" data-i18n="match_reports.not_available_yet">Not available yet</div>
           </div>
 
-          <!-- Match stats compare — no team-vs-team source in our model yet -->
-          <div class="mr-card">
-            <div class="mr-card-h"><h3 data-i18n="match_reports.match_stats">Match stats</h3></div>
-            <div style="padding:28px 16px;text-align:center;color:var(--cm-fg-faint);font:var(--cm-body-sm)" data-i18n="match_reports.not_available_yet">Not available yet</div>
+          <!-- Match stats compare — filled from team_match_stats (Wyscout team export).
+               Stays hidden until someone imports it; there is nothing to compare
+               against when only our own side was ever entered by hand. -->
+          <div class="mr-card" id="mrTeamStatsCard">
+            <div class="mr-card-h">
+              <h3 data-i18n="match_reports.match_stats">Match stats</h3>
+              <span class="sub" id="mrTeamStatsSub"></span>
+            </div>
+            <div id="mrTeamStatsBody"></div>
           </div>
 
         </div>
+      </div>
+
+      <!-- Season trend — how the team is trending across every match that has team stats.
+           One metric at a time, picked from the select; the current match is marked on
+           the line. Hidden until there are at least two matches to compare. -->
+      <div class="mr-card" id="mrTrendCard" style="margin-top:14px;display:none">
+        <div class="mr-card-h">
+          <h3 data-i18n="match_reports.trend_title">Team trend</h3>
+          <span class="sub" id="mrTrendSub"></span>
+          <div class="right">
+            <select id="mrTrendMetric" class="cm-select" style="height:30px;padding:0 8px;background:var(--cm-surface);color:var(--cm-fg);border:1px solid var(--cm-border);border-radius:var(--cm-r-2);font:500 12px/1 var(--cm-font-sans);cursor:pointer"></select>
+          </div>
+        </div>
+        <div id="mrTrendBody"></div>
       </div>
 
       <!-- Match timeline — no match-events model yet -->
@@ -729,6 +795,9 @@
     renderSanctions(clubId);
     renderHero(match, _mrResult, club);
     renderScorers(_mrStats);
+    // La tendencia no depende de que ESTE partido tenga stats: se dibuja con todos los
+    // que sí las tienen, así que se carga aunque el de arriba todavía esté vacío.
+    loadTeamStats(clubId, _mrResult ? _mrResult.id : null);
   }
 
   // Cached context for language re-render.
@@ -738,6 +807,7 @@
     if (_mrCtx.match) document.getElementById('mrDate').textContent = mrFullDate(new Date(_mrCtx.match.session_date));
     renderHero(_mrCtx.match, _mrCtx.result, _mrCtx.club);
     renderScorers(_mrCtx.stats);
+    if (_mrCtx.clubId) loadTeamStats(_mrCtx.clubId, _mrCtx.result ? _mrCtx.result.id : null);
     if (_mrCtx.match && _mrCtx.clubId) loadGPS(_mrCtx.match.id, _mrCtx.clubId);
     else if (!_mrCtx.match) document.getElementById('mrPlayerBody').innerHTML =
       `<tr><td colspan="10" style="text-align:center;padding:32px;color:var(--cm-fg-muted)">${tt('match_reports.no_match_sessions', 'No match sessions found')}</td></tr>`;
@@ -989,6 +1059,277 @@
   boot();
 
   let _mrTeamId = null;
+  /* ═══════════════════════════════════════════════════════════════════════════
+     Estadísticas de equipo (team_match_stats) — el partido y la temporada.
+
+     Dos lecturas de lo mismo: la card de la derecha compara este partido contra el
+     rival, y la de abajo pone cada partido en una línea para ver hacia dónde va el
+     equipo. Las dos salen de la misma tabla, que hoy llena el export de equipo de
+     Wyscout.
+     ═══════════════════════════════════════════════════════════════════════════ */
+  let _mrTrend = null;   // { series: [...], matchId } para redibujar al cambiar métrica
+
+  async function loadTeamStats(clubId, currentMatchId){
+    const body = document.getElementById('mrTeamStatsBody');
+    if (!body || !window.cmWyscoutTeamStats) return;
+
+    let rows = [];
+    try {
+      const { data } = await window.sb.from('team_match_stats')
+        .select('side, team_name, formation, stats, match_id, match_results!inner(id, match_date, opponent, team_id, score_for, score_against)')
+        .eq('club_id', clubId);
+      rows = data || [];
+    } catch (_e) { rows = []; }
+
+    // El selector de equipo de arriba manda: sin él, la tendencia mezclaría plantel
+    // principal y juveniles en la misma línea.
+    if (_mrTeamId) rows = rows.filter(r => r.match_results && r.match_results.team_id === _mrTeamId);
+
+    // ── 1. Este partido, contra el rival ──
+    const here = rows.filter(r => r.match_id === currentMatchId);
+    const us = here.find(r => r.side === 'us'), them = here.find(r => r.side === 'them');
+    if (us) renderTeamStatsCompare(us, them);
+    else if (body) {
+      body.innerHTML = `<div class="ts-empty">${tt('match_reports.ts_none_yet',
+        'No team stats for this match yet — import a Wyscout team export.')}</div>`;
+      const sub = document.getElementById('mrTeamStatsSub'); if (sub) sub.textContent = '';
+    }
+
+    // ── 2. La temporada ──
+    const series = rows.filter(r => r.side === 'us' && r.match_results)
+      .map(r => ({
+        id: r.match_id,
+        date: r.match_results.match_date,
+        opponent: r.match_results.opponent || '—',
+        score: (r.match_results.score_for != null && r.match_results.score_against != null)
+          ? r.match_results.score_for + ':' + r.match_results.score_against : null,
+        stats: r.stats || {},
+      }))
+      .sort((a, b) => String(a.date).localeCompare(String(b.date)));
+
+    _mrTrend = { series, matchId: currentMatchId };
+    buildTrendPicker();
+  }
+
+  function renderTeamStatsCompare(us, them){
+    const W = window.cmWyscoutTeamStats;
+    const body = document.getElementById('mrTeamStatsBody');
+    const sub = document.getElementById('mrTeamStatsSub');
+    const A = us.stats || {}, B = (them && them.stats) || {};
+    if (sub) sub.textContent = them ? '' : tt('match_reports.ts_no_opponent', 'our side only');
+
+    const head = `
+      <div class="ts-head">
+        <span class="nm">${mrEsc(us.team_name || tt('match_reports.ts_our_team', 'Our team'))}${
+          us.formation ? `<small>${mrEsc(us.formation)}</small>` : ''}</span>
+        <span class="vs">${tt('match_reports.ts_vs', 'vs')}</span>
+        <span class="nm r">${mrEsc((them && them.team_name) || '—')}${
+          (them && them.formation) ? `<small>${mrEsc(them.formation)}</small>` : ''}</span>
+      </div>`;
+
+    const rows = W.HIGHLIGHT.filter(k => A[k] != null || B[k] != null).map(k => {
+      const a = Number(A[k]) || 0, b = Number(B[k]) || 0, t = a + b;
+      // Las barras comparan la parte de cada equipo. Sin rival cargado, la nuestra va
+      // llena: no hay contra qué medirla y media barra sugeriría un empate que no existe.
+      const pa = them ? (t ? (a / t) * 100 : 50) : 100;
+      const pb = them ? (t ? (b / t) * 100 : 50) : 0;
+      return `<div class="ts-row">
+          <div class="ts-top">
+            <span class="ts-v">${A[k] != null ? mrEsc(W.format(k, A[k])) : '—'}</span>
+            <span class="ts-k">${mrEsc(W.label(k))}</span>
+            <span class="ts-v">${B[k] != null ? mrEsc(W.format(k, B[k])) : '—'}</span>
+          </div>
+          <div class="ts-bars">
+            <span class="l"><i style="width:${pa}%"></i></span>
+            <span class="r"><i style="width:${pb}%"></i></span>
+          </div>
+        </div>`;
+    }).join('');
+
+    // Las zonas merecen su propio dibujo: son seis números que sólo se entienden
+    // puestos sobre el campo.
+    const zoneKeys = ['recoveries_low', 'recoveries_medium', 'recoveries_high',
+                      'losses_low', 'losses_medium', 'losses_high'];
+    let zones = '';
+    if (zoneKeys.some(k => A[k] != null)) {
+      const third = (sfx, label) => `
+        <div class="ts-third">
+          <span class="zl">${mrEsc(label)}</span>
+          <span class="zv"><i style="background:var(--cm-success)"></i><b>${A['recoveries_' + sfx] != null ? A['recoveries_' + sfx] : '—'}</b></span>
+          <span class="zv"><i style="background:var(--cm-danger)"></i><b>${A['losses_' + sfx] != null ? A['losses_' + sfx] : '—'}</b></span>
+        </div>`;
+      zones = `
+        <div class="ts-zones">
+          <div class="ts-zones-h">${tt('match_reports.ts_zones', 'Recoveries and losses by third')}</div>
+          <div class="ts-pitch">
+            ${third('low', tt('match_reports.ts_zone_own', 'Own third'))}
+            ${third('medium', tt('match_reports.ts_zone_mid', 'Middle third'))}
+            ${third('high', tt('match_reports.ts_zone_final', 'Final third'))}
+          </div>
+          <div class="ts-legend">
+            <span><i style="background:var(--cm-success)"></i>${tt('team_stat.recoveries', 'Recoveries')}${A.recoveries != null ? ' · ' + A.recoveries : ''}</span>
+            <span><i style="background:var(--cm-danger)"></i>${tt('team_stat.losses', 'Losses')}${A.losses != null ? ' · ' + A.losses : ''}</span>
+          </div>
+        </div>`;
+    }
+
+    body.innerHTML = head + `<div class="ts-rows">${rows}</div>` + zones;
+  }
+
+  function buildTrendPicker(){
+    const W = window.cmWyscoutTeamStats;
+    const card = document.getElementById('mrTrendCard');
+    const sel = document.getElementById('mrTrendMetric');
+    if (!card || !sel || !_mrTrend) return;
+    const series = _mrTrend.series;
+
+    // Con un solo partido no hay evolución que mirar; la card se queda guardada hasta
+    // que haya un segundo con qué comparar.
+    if (series.length < 2){ card.style.display = 'none'; return; }
+    card.style.display = '';
+
+    const options = W.TREND.filter(k => series.some(s => s.stats[k] != null));
+    if (!options.length){ card.style.display = 'none'; return; }
+    const keep = sel.value && options.indexOf(sel.value) !== -1 ? sel.value : options[0];
+    sel.innerHTML = options.map(k => `<option value="${k}" ${k === keep ? 'selected' : ''}>${mrEsc(W.label(k))}</option>`).join('');
+    sel.onchange = () => renderTrend(sel.value);
+    renderTrend(keep);
+  }
+
+  function renderTrend(key){
+    const W = window.cmWyscoutTeamStats;
+    const body = document.getElementById('mrTrendBody');
+    const sub = document.getElementById('mrTrendSub');
+    if (!body || !_mrTrend) return;
+
+    const pts = _mrTrend.series.filter(s => s.stats[key] != null)
+      .map(s => Object.assign({}, s, { v: Number(s.stats[key]) }));
+    if (pts.length < 2){ body.innerHTML = `<div class="ts-empty">${tt('match_reports.trend_need_more', 'Not enough matches with this metric yet.')}</div>`; return; }
+
+    if (sub) sub.textContent = tt('match_reports.trend_n_matches', `${pts.length} matches`, { count: pts.length });
+
+    const vals = pts.map(p => p.v);
+    const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
+    const last = vals[vals.length - 1], prev = vals[vals.length - 2];
+    const lower = W.lowerIsBetter(key);
+
+    // ── KPIs. El signo del cambio no alcanza: en PPDA o pérdidas, bajar es mejorar,
+    //    así que la dirección se decide por métrica y se escribe con palabras.
+    const delta = last - prev;
+    const better = lower ? delta < 0 : delta > 0;
+    const same = Math.abs(delta) < 1e-9;
+    const arrow = same ? '→' : (delta > 0 ? '↑' : '↓');
+    const cls = same ? '' : (better ? 'up' : 'down');
+    const word = same ? tt('match_reports.trend_flat', 'no change')
+      : (better ? tt('match_reports.trend_better', 'better') : tt('match_reports.trend_worse', 'worse'));
+    const best = lower ? Math.min.apply(null, vals) : Math.max.apply(null, vals);
+
+    const kpis = `
+      <div class="tr-kpis">
+        <div class="tr-kpi"><div class="kl">${tt('match_reports.trend_last', 'Last match')}</div>
+          <div class="kv">${mrEsc(W.format(key, last))}</div>
+          <div class="kd ${cls}">${arrow} ${mrEsc(W.format(key, Math.abs(delta)))} · ${mrEsc(word)}</div></div>
+        <div class="tr-kpi"><div class="kl">${tt('match_reports.trend_avg', 'Season average')}</div>
+          <div class="kv">${mrEsc(W.format(key, avg))}</div>
+          <div class="kd">${tt('match_reports.trend_over_n', `over ${pts.length} matches`, { count: pts.length })}</div></div>
+        <div class="tr-kpi"><div class="kl">${tt('match_reports.trend_best', 'Best')}</div>
+          <div class="kv">${mrEsc(W.format(key, best))}</div>
+          <div class="kd">${mrEsc((pts.find(p => p.v === best) || {}).opponent || '')}</div></div>
+      </div>`;
+
+    // ── El gráfico. Una serie: la identidad la da el título, no hace falta leyenda.
+    const n = pts.length;
+    const PADL = 46, PADR = 22, PADT = 18, PADB = 30, H = 168;
+    // El ancho se toma de la card: con cuatro partidos el gráfico llenaba un tercio y
+    // dejaba el resto en blanco. Cuando no entran, el mínimo por partido manda y el
+    // contenedor scrollea.
+    const avail = Math.max(320, (body.clientWidth || 900) - 32);
+    const step = Math.max(58, (avail - PADL - PADR) / Math.max(1, n - 1));
+    const W_ = PADL + PADR + step * (n - 1);
+    const plotH = H - PADT - PADB;
+
+    let lo = Math.min.apply(null, vals), hi = Math.max.apply(null, vals);
+    if (hi === lo){ hi = lo + 1; lo = lo - 1; }
+    const pad = (hi - lo) * 0.15; lo -= pad; hi += pad;
+    const x = i => PADL + step * i;
+    const y = v => PADT + plotH - ((v - lo) / (hi - lo)) * plotH;
+
+    const line = pts.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p.v).toFixed(1)}`).join(' ');
+    const area = `M${x(0).toFixed(1)},${(PADT + plotH).toFixed(1)} `
+      + pts.map((p, i) => `L${x(i).toFixed(1)},${y(p.v).toFixed(1)}`).join(' ')
+      + ` L${x(n - 1).toFixed(1)},${(PADT + plotH).toFixed(1)} Z`;
+
+    // Rejilla recesiva: tres referencias, cada una etiquetada con un valor real.
+    const ticks = [lo + (hi - lo) * 0.1, (lo + hi) / 2, hi - (hi - lo) * 0.1];
+    const grid = ticks.map(t => `
+      <line x1="${PADL}" y1="${y(t).toFixed(1)}" x2="${(W_ - PADR).toFixed(1)}" y2="${y(t).toFixed(1)}"
+            stroke="var(--cm-border-soft)" stroke-width="1"/>
+      <text x="${PADL - 8}" y="${(y(t) + 3.5).toFixed(1)}" text-anchor="end"
+            font-family="var(--cm-font-mono)" font-size="10" fill="var(--cm-fg-faint)">${mrEsc(W.format(key, t))}</text>`).join('');
+
+    const dots = pts.map((p, i) => {
+      const isNow = p.id === _mrTrend.matchId;
+      const title = `${p.opponent}${p.score ? ' · ' + p.score : ''} — ${W.format(key, p.v)}`;
+      return `<g class="tr-pt">
+          <circle cx="${x(i).toFixed(1)}" cy="${y(p.v).toFixed(1)}" r="${isNow ? 5 : 3.5}"
+                  fill="${isNow ? 'var(--cm-accent)' : 'var(--cm-surface)'}"
+                  stroke="var(--cm-accent)" stroke-width="2"/>
+          <circle cx="${x(i).toFixed(1)}" cy="${y(p.v).toFixed(1)}" r="14" fill="transparent">
+            <title>${mrEsc(title)}</title>
+          </circle>
+        </g>`;
+    }).join('');
+
+    // Sólo se rotulan los extremos y el partido abierto: un número sobre cada punto
+    // tapa la forma de la línea, que es lo que se vino a mirar.
+    // Los extremos se anclan al borde en vez de centrarse: centrado, el texto del último
+    // punto se sale del viewBox y queda cortado.
+    const anchor = i => i === 0 ? 'start' : (i === n - 1 ? 'end' : 'middle');
+    const labelIdx = new Set([0, n - 1, pts.findIndex(p => p.id === _mrTrend.matchId)].filter(i => i >= 0));
+    const labels = Array.from(labelIdx).map(i => `
+      <text x="${x(i).toFixed(1)}" y="${(y(pts[i].v) - 11).toFixed(1)}" text-anchor="${anchor(i)}"
+            font-family="var(--cm-font-mono)" font-size="10.5" font-weight="600"
+            fill="var(--cm-fg-strong)">${mrEsc(W.format(key, pts[i].v))}</text>`).join('');
+
+    const xlabels = pts.map((p, i) => {
+      // Con muchos partidos se alternan las etiquetas para que no se pisen.
+      if (n > 9 && i % 2 && i !== n - 1) return '';
+      // Cortar a lo bruto deja nombres irreconocibles ("Angkor T"): mejor cortar en el
+      // espacio y marcar con puntos suspensivos que quedó recortado.
+      const raw = String(p.opponent);
+      const nm = raw.length <= 12 ? raw
+        : (raw.slice(0, 12).replace(/\s+\S*$/, '') || raw.slice(0, 11)) + '…';
+      return `<text x="${x(i).toFixed(1)}" y="${H - 10}" text-anchor="${anchor(i)}"
+              font-family="var(--cm-font-sans)" font-size="10"
+              fill="${p.id === _mrTrend.matchId ? 'var(--cm-fg-strong)' : 'var(--cm-fg-faint)'}">${mrEsc(nm)}</text>`;
+    }).join('');
+
+    body.innerHTML = kpis + `
+      <div class="tr-chart">
+        <svg viewBox="0 0 ${W_.toFixed(0)} ${H}" width="${W_.toFixed(0)}" height="${H}" role="img"
+             aria-label="${mrEsc(W.label(key))}">
+          <defs><linearGradient id="trFill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="var(--cm-accent)" stop-opacity="0.13"/>
+            <stop offset="100%" stop-color="var(--cm-accent)" stop-opacity="0"/>
+          </linearGradient></defs>
+          ${grid}
+          <line x1="${PADL}" y1="${y(avg).toFixed(1)}" x2="${(W_ - PADR).toFixed(1)}" y2="${y(avg).toFixed(1)}"
+                stroke="var(--cm-fg-faint)" stroke-width="1" stroke-dasharray="3 3"/>
+          <path d="${area}" fill="url(#trFill)"/>
+          <path d="${line}" fill="none" stroke="var(--cm-accent)" stroke-width="2"
+                stroke-linejoin="round" stroke-linecap="round"/>
+          ${dots}${labels}${xlabels}
+        </svg>
+      </div>
+      <div class="tr-note">${tt('match_reports.trend_note',
+        'Dashed line: season average. Filled dot: the match open above. Hover a point for the opponent.')}</div>`;
+  }
+
+  function mrEsc(s){
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
+      ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+  }
+
   async function mrInitTeamSwitch(clubId) {
     const prof = await window.getProfile();
     const bucket = (prof?.role || prof?.club_role || '').toLowerCase();
@@ -1034,6 +1375,7 @@
   }
 </script>
 <script src="assets/match-stats.js"></script>
+<script src="assets/wyscout-team-stats.js"></script>
 <script src="assets/sanctions.js"></script>
 <script src="assets/sanctions-sync.js"></script>
 <script src="assets/match-import.js"></script>
