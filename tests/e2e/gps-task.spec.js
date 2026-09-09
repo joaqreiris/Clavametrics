@@ -55,7 +55,7 @@ const CARD = [{ id: 'card-task', position: 0, source: 'builder', size: 'md', con
   style: { color: '#15803D', size: 'md', span: 12 },
 } }];
 
-async function open(page, cards = CARD) {
+async function openTask(page, cards = CARD) {
   const seen = [];
   await page.route(`${SB}/rest/v1/**`, r => { seen.push(r.request().url()); return r.fulfill({ json: [], headers: { 'Content-Range': '0-0/0', 'Content-Type': 'application/json' } }); });
   await page.route(`${SB}/auth/v1/**`, r => r.fulfill({ json: { access_token: 'test-token', user: { id: 'user-1', email: 'test@test.com' } } }));
@@ -85,7 +85,7 @@ test.describe('GPS · cards de ejercicios (source=task)', () => {
   test.describe.configure({ timeout: 60_000 });
 
   test('el dashboard custom monta la card y la tabla trae los drills', async ({ page }) => {
-    await open(page);
+    await openTask(page);
     // 1) la pestaña custom existe y se puede abrir
     const tab = page.locator('.gp-sec[data-custom]');
     await expect(tab).toHaveCount(1);
@@ -120,7 +120,7 @@ test.describe('GPS · cards de ejercicios (source=task)', () => {
         dimensions: [{ id: 'drill' }, { id: 'field_size' }, { id: 'players_format' }],
         style: { color: '#15803D', size: 'md' } } },
     ];
-    await open(page, cards);
+    await openTask(page, cards);
     await page.locator('.gp-sec[data-custom]').click();
     await expect(page.locator('.gp-view.is-on .gp-c[data-card-id]')).toHaveCount(2, { timeout: 15_000 });
     // Ambas tienen que quedar VISIBLES (no basta con estar en el DOM: la colocación libre las
@@ -143,7 +143,7 @@ test.describe('GPS · cards de ejercicios (source=task)', () => {
   // reconstrucción de las pestañas (renombrar, crear otra, cambiar con quién se comparte) borraba
   // la vista y la volvía a crear SIN marcarla como activa → barra de filtros arriba y nada debajo.
   test('renombrar el dashboard abierto no deja la página en blanco', async ({ page }) => {
-    await open(page);
+    await openTask(page);
     await page.locator('.gp-sec[data-custom]').click();
     await expect(page.locator('.gp-view.is-on .gp-c[data-card-id="card-task"]')).toHaveCount(1, { timeout: 15_000 });
 
@@ -168,7 +168,7 @@ test.describe('GPS · cards de ejercicios (source=task)', () => {
       scope: { level: 'squad' }, range: { type: 'last30' }, comparison: null,
       metrics: [{ id: 'total_distance', agg: 'total', kind: 'accum', unit: 'm' }],
       dimensions: [], style: { color: '#15803D' } } }];
-    await open(page, cards);
+    await openTask(page, cards);
     await page.locator('.gp-sec[data-custom]').click();
     await expect(page.locator('.gp-view.is-on .gp-c[data-card-id="card-line"] canvas')).toHaveCount(1, { timeout: 20_000 });
     await page.waitForTimeout(600);
@@ -192,7 +192,7 @@ test.describe('GPS · cards de ejercicios (source=task)', () => {
       metrics: [{ id: 'total_distance', agg: 'avg', kind: 'accum', unit: 'm' },
                 { id: 'high_speed_distance', agg: 'avg', kind: 'accum', unit: 'm' }],
       dimensions: [{ id: 'drill' }], style: { color: '#15803D' } } }];
-    await open(page, cards);
+    await openTask(page, cards);
     await page.locator('.gp-sec[data-custom]').click();
     await expect(page.locator('.gp-view.is-on .gp-c[data-card-id="card-sc"] canvas')).toHaveCount(1, { timeout: 20_000 });
     await page.waitForTimeout(600);
@@ -223,7 +223,7 @@ test.describe('GPS · cards de ejercicios (source=task)', () => {
         schema: 'gp.card/v1', title: t.viz, viz: t.viz, source: 'task',
         scope: { level: 'squad' }, range: { type: 'last30' }, comparison: null,
         metrics: t.metrics, dimensions: t.dims, style: { color: '#15803D' } } }];
-      await open(page, cards);
+      await openTask(page, cards);
       await page.locator('.gp-sec[data-custom]').click();
       const body = page.locator('.gp-view.is-on .gp-c[data-card-id="card-x"] .gp-c-b');
       await expect(body).toHaveCount(1, { timeout: 20_000 });
@@ -238,4 +238,88 @@ test.describe('GPS · cards de ejercicios (source=task)', () => {
       expect(pinta).toBe(true);
     });
   }
+});
+
+test.describe('GPS · card en borrador del chart builder', () => {
+  test.describe.configure({ timeout: 60_000 });
+
+  // Al abrir el chart builder sobre un dashboard que ya tiene cards, el borrador nacía del
+  // tamaño MÍNIMO (2×3): un cuadradito encima de la tabla, con el título cortado y el texto de
+  // ayuda desbordado. Y el toggle S/M/L/FULL no lo agrandaba.
+  test('el borrador nace con el tamaño de su tipo, no con el mínimo', async ({ page }) => {
+    await openTask(page);
+    await page.locator('.gp-sec[data-custom]').click();
+    await page.locator('#gpbOpenBtn').first().click();
+    await page.waitForTimeout(1200);
+    const d = await page.evaluate(() => {
+      const el = document.querySelector('.gp-view.is-on .gp-c.is-draft');
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      return { w: +el.dataset.w, h: +el.dataset.h, px: Math.round(r.width), py: Math.round(r.height) };
+    });
+    expect(d).not.toBeNull();
+    // 'md' = 6 columnas × 7 filas. Con el mínimo daría 2×3.
+    expect(d.w).toBeGreaterThanOrEqual(6);
+    expect(d.h).toBeGreaterThanOrEqual(7);
+    expect(d.px).toBeGreaterThan(300);
+  });
+
+  // El caso real: se abre el builder y se ELIGE scatter. Ahí el borrador se quedaba diminuto y
+  // encima de la card que ya estaba, con el texto de ayuda desbordado.
+  test('al elegir scatter, el borrador conserva su tamaño y no pisa a la card de al lado', async ({ page }) => {
+    await openTask(page);
+    await page.locator('.gp-sec[data-custom]').click();
+    await page.locator('#gpbOpenBtn').first().click();
+    await page.waitForTimeout(800);
+    await page.locator('[data-type="scatter"]').first().click();
+    await page.waitForTimeout(1000);
+    const d = await page.evaluate(() => {
+      const el = document.querySelector('.gp-view.is-on .gp-c.is-draft');
+      const otras = [...document.querySelectorAll('.gp-view.is-on .gp-c:not(.is-draft)')];
+      const box = e => ({ x: +e.dataset.x, y: +e.dataset.y, w: +e.dataset.w, h: +e.dataset.h });
+      const b = box(el);
+      const pisa = otras.map(box).some(o =>
+        b.x < o.x + o.w && o.x < b.x + b.w && b.y < o.y + o.h && o.y < b.y + b.h);
+      const r = el.getBoundingClientRect();
+      return { ...b, px: Math.round(r.width), py: Math.round(r.height), pisa };
+    });
+    expect(d.w).toBeGreaterThanOrEqual(6);
+    expect(d.h).toBeGreaterThanOrEqual(7);
+    expect(d.px).toBeGreaterThan(300);
+    expect(d.pisa).toBe(false);
+  });
+
+  // El caso REAL: el dashboard ya tiene una card con su sitio guardado (una tabla de 12×11).
+  // El borrador nace sin coordenadas y tiene que buscarse un hueco — si en cambio nace ENCIMA,
+  // el motor de colisiones lo aplasta al mínimo (2×3) y sale el cuadradito.
+  test('con una card ya colocada, el borrador no nace encima ni aplastado', async ({ page }) => {
+    const cards = [{ id: 'card-big', position: 0, source: 'builder', size: 'md', config: {
+      schema: 'gp.card/v1', title: 'Work time +6', viz: 'table', source: 'task',
+      scope: { level: 'squad' }, range: { type: 'last30' }, comparison: null,
+      metrics: [{ id: 'total_distance', agg: 'total', kind: 'accum', unit: 'm' }],
+      dimensions: [{ id: 'drill' }],
+      style: { color: '#15803D', size: 'md', span: 12, canvas: { x: 0, y: 0, w: 12, h: 11, size: 'md' } } } }];
+    await openTask(page, cards);
+    await page.locator('.gp-sec[data-custom]').click();
+    await page.waitForTimeout(1200);            // deja que el lienzo coloque la card guardada
+    await page.locator('#gpbOpenBtn').first().click();
+    await page.waitForTimeout(1200);
+    const d = await page.evaluate(() => {
+      const el = document.querySelector('.gp-view.is-on .gp-c.is-draft');
+      const otras = [...document.querySelectorAll('.gp-view.is-on .gp-c:not(.is-draft)')];
+      const box = e => ({ x: +e.dataset.x, y: +e.dataset.y, w: +e.dataset.w, h: +e.dataset.h });
+      const b = box(el);
+      const pisa = otras.map(box).some(o =>
+        b.x < o.x + o.w && o.x < b.x + b.w && b.y < o.y + o.h && o.y < b.y + b.h);
+      const r = el.getBoundingClientRect();
+      // La card que YA estaba no se puede haber movido de su sitio guardado.
+      const guardada = otras.length ? box(otras[0]) : null;
+      return { ...b, px: Math.round(r.width), py: Math.round(r.height), pisa, guardada };
+    });
+    expect(d.w).toBeGreaterThanOrEqual(6);
+    expect(d.h).toBeGreaterThanOrEqual(7);
+    expect(d.pisa).toBe(false);
+    // Y la card guardada sigue donde estaba: abrir el builder no puede reacomodar el dashboard.
+    expect(d.guardada).toEqual({ x: 0, y: 0, w: 12, h: 11 });
+  });
 });

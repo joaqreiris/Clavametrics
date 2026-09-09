@@ -1093,6 +1093,44 @@
              titleFormat:{}, subtitleFormat:{} };
   }
 
+  /** Alto en filas de lienzo para un tamaño de card (el mismo mapa que usa gp-canvas). */
+  function _rowsForSize(size) {
+    const m = window.gpCanvas?.SIZE_ROWS || { sm: 5, md: 7, lg: 10, full: 13 };
+    return m[size] || m.md || 7;
+  }
+  /** Ancho en columnas para un tamaño (gp-resize manda; el mapa local dice lo mismo). */
+  function _colsForSize(size, isTable) {
+    if (typeof window.gpSpanFromSize === 'function') return window.gpSpanFromSize(size, !!isTable);
+    return ({ sm: 4, md: 6, lg: 8, full: 12 })[size] || 6;
+  }
+  function _writeCoords(el, x, y, w, h) {
+    el.dataset.x = x; el.dataset.y = y; el.dataset.w = w; el.dataset.h = h;
+    el.style.setProperty('--gp-x', x); el.style.setProperty('--gp-y', y);
+    el.style.setProperty('--gp-w', w); el.style.setProperty('--gp-h', h);
+  }
+  /**
+   * Sitio inicial del borrador: DEBAJO de todo lo que ya hay. Aparece donde el usuario lo espera
+   * (al final, como una card nueva) y, sobre todo, ninguna card guardada se mueve de su lugar
+   * para hacerle sitio — que es justo lo que no se puede romper.
+   */
+  function _seedDraftCoords(el, grid, size) {
+    const w = _colsForSize(size, false);
+    const h = _rowsForSize(size);
+    let y = 0;
+    grid.querySelectorAll(':scope > .gp-c').forEach(c => {
+      const cy = parseInt(c.dataset.y, 10), ch = parseInt(c.dataset.h, 10);
+      if (Number.isFinite(cy) && Number.isFinite(ch)) y = Math.max(y, cy + ch);
+    });
+    _writeCoords(el, 0, y, w, h);
+  }
+  /** Cambio de tamaño desde el toggle S/M/L/FULL: en el lienzo el tamaño son w/h, no data-size. */
+  function _resizeDraft(el, size) {
+    const x = parseInt(el.dataset.x, 10), y = parseInt(el.dataset.y, 10);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+    _writeCoords(el, x, y, _colsForSize(size, el.classList.contains('is-table')), _rowsForSize(size));
+    window.gpCanvas?.renderGrid?.(el.closest('.gp-grid'));
+  }
+
   function startBuild() {
     if (S) cancelBuild();
     S = freshState();
@@ -1119,8 +1157,13 @@
         </div>
       </div>
       <div class="gp-c-b" id="gpbDraftBody"></div>`;
+    _seedDraftCoords(draftCard, grid, 'md');
     grid.appendChild(draftCard);
     grid.classList.add('is-building');
+    // Sin esto el borrador queda FUERA del lienzo: nace sin coordenadas, el motor de colocación
+    // no lo toma y lo dibuja el CSS con lo que sobre — el cuadradito diminuto que no se podía
+    // ni mover ni agrandar. Colocarlo NO mueve a las demás: se le busca sitio DEBAJO de todas.
+    window.gpCanvas?.renderGrid?.(grid);
 
     draftCard.querySelector('[data-del]').onclick = cancelBuild;
 
@@ -1129,7 +1172,11 @@
       b.onclick = () => {
         const map = { S:'sm', M:'md', L:'lg', FULL:'full' };
         const sz = map[b.textContent.trim()];
-        if (sz) { S.size = sz; draftCard.dataset.size = sz; syncStyle(); renderCard(); }
+        if (sz) {
+          S.size = sz; draftCard.dataset.size = sz;
+          _resizeDraft(draftCard, sz);   // en el lienzo el tamaño son w/h: sin esto no pasaba nada
+          syncStyle(); renderCard();
+        }
       };
     });
 
@@ -1478,7 +1525,11 @@
         if (!S || draftCard !== cardEl) return;   // not editing this card → ignore
         const map = { S:'sm', M:'md', L:'lg', FULL:'full' };
         const sz = map[b.textContent.trim()];
-        if (sz) { S.size = sz; draftCard.dataset.size = sz; syncStyle(); renderCard(); }
+        if (sz) {
+          S.size = sz; draftCard.dataset.size = sz;
+          _resizeDraft(draftCard, sz);   // en el lienzo el tamaño son w/h: sin esto no pasaba nada
+          syncStyle(); renderCard();
+        }
       };
     });
 

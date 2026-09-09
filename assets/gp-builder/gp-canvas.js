@@ -458,7 +458,7 @@
 
   window.gpCanvas = {
     get enabled() { return ENABLED; },
-    COLS, ROW_PX, MINW, MINH,
+    COLS, ROW_PX, MINW, MINH, SIZE_ROWS,
     hasCoords, toCanvasLayout, syncLegacyFields, applyCoords, renderGrid, renderAll, compact, applyPage,
   };
 })();

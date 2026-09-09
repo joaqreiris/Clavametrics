@@ -256,7 +256,11 @@
     if (exceptKey !== 'md_code'    && state.md_code.length    && !state.md_code.includes(r.md))    return false;
     if (exceptKey !== 'microcycle' && state.microcycle.length && !state.microcycle.includes(r.mc)) return false;
     if (exceptKey !== 'player'     && state.player.length     && !state.player.includes(r.p))      return false;
-    if (exceptKey !== 'position'   && state.position.length   && !state.position.includes(r.pos))  return false;
+    // posv, NO pos: la selección está en el nivel de detalle ACTIVO (básico/grupo) y la fila
+    // guarda la posición CRUDA. Comparando contra la cruda sólo coincidían los códigos que se
+    // escriben igual en los dos niveles (CB, ST): elegir «Medios» no matcheaba ninguna fila, la
+    // cascada se quedaba sin datos y los demás desplegables se vaciaban.
+    if (exceptKey !== 'position'   && state.position.length   && !state.position.includes(r.posv)) return false;
     if (exceptKey !== 'rival'      && state.rival.length      && !state.rival.includes(r.rv))      return false;
     if (exceptKey !== 'session_type' && state.session_type.length && !state.session_type.includes(r.st)) return false;
     // work_context: default (sin selección) = SOLO 'team' (rehab/individual/top-up ocultos);
@@ -445,6 +449,12 @@
     } catch (e) { /* ignore */ }
     // Sin fecha elegida por el usuario → default inteligente (temporada actual o 90 días).
     if (!_dateUserSet) state.date = _defaultDateState();
+    // El nivel de detalle restaurado hay que APLICARLO: sin esto el estado decía «básico» pero
+    // las filas y las opciones seguían proyectadas al nivel anterior. Los botones marcaban un
+    // nivel, la lista ofrecía los códigos de otro y la cascada comparaba manzanas con naranjas
+    // — de ahí que sólo sobrevivieran CB y ST, que se escriben igual en los dos.
+    _applyPosGranularity();
+    _syncGranButtons();
     if (root) {
       DROPS.forEach(d => updateTrigger(d.key));
       DROPS.forEach(d => root.querySelector(`.fb-drop[data-key="${d.key}"]`)?.classList.toggle('fb-hidden', !isFilterVisible(d.key)));
@@ -1787,6 +1797,7 @@
     getPlayerOptions() { return options.player.slice(); },   // [{ value:id, label }]
     onChange(fn) { listeners.add(fn); return () => listeners.delete(fn); },
     setValue,   // set programático (cross-filter) — mismo pipeline que un click de checkbox
+    setPosGranularity,   // nivel de detalle de las posiciones (detallado · básico · grupo)
     setMetrics, // selector de métrica del dashboard ([] = cada card con la suya)
     clearAll: clearAll_,
     // reload() recarga las opciones/rangos (p.ej. tras resolverse el equipo o mutar datos) Y
