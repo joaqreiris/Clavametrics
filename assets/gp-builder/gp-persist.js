@@ -260,6 +260,17 @@
    * @returns {Promise<string>} new card id
    */
   window.saveDashboardCard = async function (config, clubId, reportType, userId, sb) {
+    // 'db-<uuid>' NO es un report_type: es la CLAVE DE VISTA de un dashboard propio del club. Si
+    // llega hasta acá, el destino es ese dashboard — no hay nada que crear. Sin esta guarda se
+    // insertaba un dashboard FANTASMA llamado «db-600756f4-…» y la card se iba ahí, con lo que
+    // desaparecía de la vista donde el usuario acababa de crearla.
+    if (typeof reportType === 'string' && reportType.startsWith('db-')) {
+      const dashId = reportType.slice(3);
+      if (typeof window.insertCardIntoDashboard === 'function') {
+        return window.insertCardIntoDashboard(config, dashId, userId, sb);
+      }
+      throw new Error(`saveDashboardCard: vista custom (${reportType}) sin insertCardIntoDashboard`);
+    }
     // get or create dashboard for this reportType
     let { data: dash } = await sb
       .from('dashboards')
