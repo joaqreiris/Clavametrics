@@ -94,6 +94,10 @@
     { id:'drill',          name:'Drill',          icon:'ti-soccer-field', group:'Task', task:true },
     { id:'field_size',     name:'Field size',     icon:'ti-ruler',        group:'Task', task:true },
     { id:'players_format', name:'Players format', icon:'ti-users',        group:'Task', task:true },
+    // Cómo está catalogado el ejercicio en la biblioteca. Permite comparar FAMILIAS de trabajo
+    // («los de fuerza contra los de velocidad») en vez de sesenta nombres de drill sueltos.
+    { id:'orientation',    name:'Orientation',    icon:'ti-target-arrow', group:'Task', task:true },
+    { id:'planned_intensity', name:'Planned intensity', icon:'ti-flame',  group:'Task', task:true },
   ];
   const DIM_MAP = new Map(DIMENSIONS.map(d => [d.id, d]));
   // Which dimensions apply to a given source. task dims → task only; md/mc/rival → session
@@ -136,6 +140,21 @@
     { id:'n_instances',                      name:'Number of sessions',unit:'',       kind:'accum', decimals:0 },
   ].map(m => ({ ...m, group_name:'Task', is_custom:false, squad_rollup:true, decimals: m.decimals ?? 1 }));
   const TASK_METRIC_IDS   = new Set(TASK_METRICS.map(m => m.id));
+  /**
+   * Etiqueta de un valor CATALOGADO del ejercicio (orientación / intensidad planificada).
+   * Usa las MISMAS claves que la Biblioteca de ejercicios: el análisis y la biblioteca tienen
+   * que llamar «Fuerza» a lo mismo, o son dos vocabularios para un solo dato.
+   */
+  const _TASK_LABEL_KEYS = {
+    orientation: { ACTIVATION: ['exlib.activation', 'Activation'], STRENGTH: ['exlib.strength', 'Strength'],
+                   VELOCITY:   ['exlib.velocity', 'Velocity'],     ENDURANCE: ['exlib.endurance', 'Endurance'] },
+    intensity:   { LOW: ['exlib.int_low', 'Low'], MEDIUM: ['exlib.int_medium', 'Medium'],
+                   HIGH: ['exlib.int_high', 'High'], VERY_HIGH: ['exlib.int_very_high', 'Very High'] },
+  };
+  window.gpTaskLabel = function (kind, raw) {
+    const e = _TASK_LABEL_KEYS[kind] && _TASK_LABEL_KEYS[kind][String(raw || '').toUpperCase()];
+    return e ? _tt(e[0], e[1]) : null;   // sin traducción conocida → el valor crudo del club
+  };
   const TASK_METRIC_GROUP = { g:'Task metrics', custom:false, items:TASK_METRICS };
   // Hidden from the Task flyout: their real value lives in a task column instead. time_played
   // is 0/null in migrated period data → use 'Work time' instead. distance_per_minute (DB
@@ -3794,6 +3813,12 @@
     const isTask = source === 'task';
     let out = rows;
     if (FB.playerIds?.length) { const s = new Set(FB.playerIds); out = out.filter(r => s.has(r.player_id)); }  // player_id is flat in both
+    // Orientación del ejercicio: sólo existe en las filas de TAREA (viene de la biblioteca vía
+    // la vista). En una card de sesiones el filtro no aplica y se ignora, en vez de dejarla vacía.
+    if (isTask && FB.orientations?.length) {
+      const s = new Set(FB.orientations);
+      out = out.filter(r => s.has(r.orientation));
+    }
     if (FB.positions?.length) {
       const s = new Set(FB.positions);
       // The bar emits values at the ACTIVE granularity (detailed / basic 6 / group), so the

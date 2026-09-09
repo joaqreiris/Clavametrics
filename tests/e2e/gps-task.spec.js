@@ -31,6 +31,7 @@ const TASKS = [];
         id: `t${i}${si}${pi}`, club_id: CLUB_ID, session_id: s.id, session_date: s.session_date,
         team_id: null, exercise_id: `ex${i}`, exercise_name: drill, field_size: size, players_format: fmt,
         field_width: 30, field_height: 20, players_count: 8, m2_per_player: 75,
+        orientation: i === 0 ? 'STRENGTH' : 'ENDURANCE', planned_intensity: i === 0 ? 'HIGH' : 'LOW',
         player_id: p.id, player_name: `${p.first_name} ${p.last_name}`, position: p.position, number: p.number,
         duration_seconds: i === 0 ? 300 : 1200, work_min: i === 0 ? 5 : 20,
         total_distance: 1000 + i * 100 + pi * 10, high_speed_distance: 100 + i * 10,
@@ -378,5 +379,64 @@ test.describe('GPS · carga mecánica por minuto', () => {
     // El fixture da 1.2 accel/min + 1 decel/min en cada fila ⇒ 2.2 por ejercicio.
     expect(vals.length).toBeGreaterThan(0);
     vals.forEach(v => expect(v).toBeCloseTo(2.2, 5));
+  });
+});
+
+test.describe('GPS · orientación del ejercicio', () => {
+  test.describe.configure({ timeout: 60_000 });
+
+  // La biblioteca ya sabe si un ejercicio es de fuerza, resistencia, velocidad o activación.
+  // Ese dato no llegaba al análisis: se podían comparar drills sueltos, pero no una familia de
+  // trabajo contra otra. Ahora es dimensión y filtro.
+  const cardCon = (dims) => ([{ id: 'card-or', position: 0, source: 'builder', size: 'lg', config: {
+    schema: 'gp.card/v1', title: 'Por orientación', viz: 'bars', source: 'task',
+    scope: { level: 'squad' }, range: { type: 'last30' }, comparison: null,
+    metrics: [{ id: 'total_distance', agg: 'total', kind: 'accum', unit: 'm' }],
+    dimensions: dims, style: { color: '#15803D' } } }]);
+
+  const etiquetas = (page) => page.evaluate(() => {
+    const cv = document.querySelector('.gp-view.is-on .gp-c[data-card-id="card-or"] canvas');
+    return window.Chart.getChart(cv).data.labels.map(String);
+  });
+
+  test('se puede agrupar por orientación, con el nombre traducido', async ({ page }) => {
+    await openTask(page, cardCon([{ id: 'orientation' }]));
+    await page.locator('.gp-sec[data-custom]').click();
+    await expect(page.locator('.gp-view.is-on .gp-c[data-card-id="card-or"] canvas')).toHaveCount(1, { timeout: 20_000 });
+    await page.waitForTimeout(700);
+    const l = await etiquetas(page);
+    expect(l).toHaveLength(2);
+    // «STRENGTH» se muestra como en la Biblioteca de ejercicios, no en crudo.
+    expect(l.join('|')).toMatch(/Strength|Fuerza|Força/i);
+    expect(l.join('|')).toMatch(/Endurance|Resistencia|Resistência/i);
+  });
+
+  test('el filtro deja sólo los ejercicios de esa orientación', async ({ page }) => {
+    await openTask(page, cardCon([{ id: 'drill' }]));
+    await page.locator('.gp-sec[data-custom]').click();
+    await expect(page.locator('.gp-view.is-on .gp-c[data-card-id="card-or"] canvas')).toHaveCount(1, { timeout: 20_000 });
+    await page.waitForTimeout(700);
+    expect(await etiquetas(page)).toHaveLength(2);       // los dos ejercicios
+
+    await page.evaluate(() => window.gpFilterBar.setValue('orientation', ['STRENGTH']));
+    await page.waitForTimeout(1200);
+    const l = await etiquetas(page);
+    expect(l).toHaveLength(1);                            // sólo el de fuerza
+    expect(l[0]).toBe('Rondo');
+  });
+
+  test('con cards de sesión el filtro ni se ofrece: no tendría nada que filtrar', async ({ page }) => {
+    const sesion = [{ id: 'card-ses', position: 0, source: 'builder', size: 'md', config: {
+      schema: 'gp.card/v1', title: 'De sesión', viz: 'bars', scope: { level: 'squad' },
+      range: { type: 'last30' }, metrics: [{ id: 'total_distance', agg: 'total' }],
+      dimensions: [{ id: 'player_name' }], style: { color: '#15803D' } } }];
+    await openTask(page, sesion);
+    await page.locator('.gp-sec[data-custom]').click();
+    await page.waitForTimeout(1200);
+    const visible = await page.evaluate(() => {
+      const d = document.querySelector('.fb-drop[data-key="orientation"]');
+      return !!d && !d.classList.contains('fb-hidden');
+    });
+    expect(visible).toBe(false);
   });
 });

@@ -26,7 +26,19 @@
     { key: 'rival',      icon: 'ti-ball-football',   placeholder: 'All rivals',      multi: true },
     { key: 'session_type', icon: 'ti-run',           placeholder: 'All types',       multi: true },
     { key: 'work_context', icon: 'ti-tag',           placeholder: 'All contexts',    multi: true },
+    // Orientación del ejercicio (biblioteca). `task:true` → sólo se ofrece cuando el dashboard
+    // tiene cards de EJERCICIOS: en uno de sesiones no filtraría nada y sería un desplegable de
+    // adorno. Ver _hasTaskCards.
+    { key: 'orientation', icon: 'ti-target-arrow',   placeholder: 'All orientations', multi: true, task: true },
   ];
+
+  /** ¿La vista activa tiene alguna card de ejercicios? (las cards llevan su config en __config) */
+  function _hasTaskCards() {
+    try {
+      const view = document.querySelector('.gp-view.is-on') || document;
+      return [...view.querySelectorAll('.gp-c')].some(el => el.__config?.source === 'task');
+    } catch (_e) { return false; }
+  }
 
   // Familia de cada filtro: ordena el menú de «Filtrar» y, de paso, enseña —quien no sabía que
   // existe «Contexto» lo encuentra mirando Sesión.
@@ -34,14 +46,15 @@
     md_code: 'time', date: 'time', microcycle: 'time',
     player: 'squad', position: 'squad',
     session_type: 'session', rival: 'session', work_context: 'session',
+    orientation: 'task',
   };
-  const FAMILY_LABEL = { time: 'Time', squad: 'Squad', session: 'Session' };
+  const FAMILY_LABEL = { time: 'Time', squad: 'Squad', session: 'Session', task: 'Drills' };
 
   // English labels for the Add-filter menu (placeholders quedan en su idioma actual).
   const FILTER_LABELS = {
     md_code: 'Matchday', date: 'Date', player: 'Players',
     position: 'Positions', microcycle: 'Microcycle', rival: 'Rival', session_type: 'Session type',
-    work_context: 'Context',
+    work_context: 'Context', orientation: 'Orientation',
   };
 
   // Training-context value → i18n label (gps_reports.work_context). Raw value stays the filter
@@ -116,6 +129,7 @@
     rival:      [],                            // nombres de rival (session_attributes.rival)
     session_type: [],                          // training_sessions.session_type (match/training/rehab/…)
     work_context: [],                          // gps_reports.work_context (team/rehab/individual/topup). [] = solo 'team'
+    orientation: [],                           // orientación del ejercicio (biblioteca): sólo afecta a cards de tarea
     posGranularity: 'detailed',                // 'detailed' | 'basic' | 'group' — analysis roll-up
     // date: preset (Last 7/30/…) XOR days (specific real dates, multi-select) XOR a manual
     // from/to custom range. `days` is the primary picker; from/to are also set to the
@@ -136,9 +150,16 @@
   function _defaultVisible() { return ['date']; }
   // Un filtro CON VALOR se ve siempre, esté o no en la lista: una barra que esconde algo que está
   // filtrando miente sobre lo que se está mirando.
-  function isFilterVisible(key) { return state.visibleFilters.includes(key) || isActive(key); }
+  function isFilterVisible(key) {
+    // Un filtro de EJERCICIOS en un dashboard sin cards de ejercicios no filtraría nada: se
+    // esconde aunque esté en la lista. Si ya tiene valor puesto se muestra igual — esconder algo
+    // que está filtrando sería mentir sobre lo que se está mirando.
+    const d = DROPS.find(x => x.key === key);
+    if (d?.task && !isActive(key) && !_hasTaskCards()) return false;
+    return state.visibleFilters.includes(key) || isActive(key);
+  }
   // opciones reales por desplegable: [{ value, label }]
-  const options = { md_code: [], player: [], position: [], microcycle: [], rival: [], session_type: [], work_context: [], date: [] };
+  const options = { md_code: [], player: [], position: [], microcycle: [], rival: [], session_type: [], work_context: [], orientation: [], date: [] };
   // Real seasons rows (team-scoped), for a "pick a specific season" section in the date panel.
   let _seasons = [];
 
@@ -210,7 +231,7 @@
 
   function _anyFilterActive() {
     return !!(state.md_code.length || state.player.length || state.position.length || state.microcycle.length
-      || state.rival.length || state.session_type.length || state.work_context.length
+      || state.rival.length || state.session_type.length || state.work_context.length || state.orientation.length
       || state.date.preset || state.date.from || state.date.to || (state.date.days && state.date.days.length));
   }
   // Keep from/to = min/max of the selected days, so consumers that only read from/to get
@@ -348,6 +369,7 @@
       rivals:        state.rival.slice(),
       sessionTypes:  state.session_type.slice(),
       workContexts:  state.work_context.slice(),   // [] = solo 'team' (default); resolver excluye no-team
+      orientations:  state.orientation.slice(),    // orientación del ejercicio; sólo afecta cards de tarea
       metrics:       state.metrics.slice(),        // [] = cada card con la suya
       posGranularity: state.posGranularity,
       date:          { ...state.date },
@@ -400,6 +422,7 @@
         md_code: state.md_code, player: state.player, position: state.position,
         microcycle: state.microcycle, rival: state.rival, session_type: state.session_type,
         work_context: state.work_context,
+        orientation: state.orientation,
         // NO persistir el default automático de fecha (temporada/90d): sólo la elección real del
         // usuario. Así el default se recalcula cada carga (temporada ACTUAL) y no queda pegado.
         date: _dateUserSet ? state.date : { preset: null, from: null, to: null, days: [] },
@@ -410,7 +433,7 @@
     } catch (e) { /* storage no disponible */ }
   }
   function resetStateSilent() {
-    state.md_code = []; state.player = []; state.position = []; state.microcycle = []; state.rival = []; state.session_type = []; state.work_context = [];
+    state.md_code = []; state.player = []; state.position = []; state.microcycle = []; state.rival = []; state.session_type = []; state.work_context = []; state.orientation = [];
     state.date = { preset: null, from: null, to: null, days: [] };
     state.posGranularity = 'detailed';
     state.visibleFilters = _defaultVisible();
@@ -431,6 +454,7 @@
         state.rival      = Array.isArray(s.rival)      ? s.rival      : [];
         state.session_type = Array.isArray(s.session_type) ? s.session_type : [];
         state.work_context = Array.isArray(s.work_context) ? s.work_context : [];
+        state.orientation  = Array.isArray(s.orientation)  ? s.orientation  : [];
         state.metrics    = Array.isArray(s.metrics) ? s.metrics.slice(0, METRIC_MAX) : [];
         state.posGranularity = ['detailed','basic','group'].includes(s.posGranularity) ? s.posGranularity : 'detailed';
         // Fecha guardada por el usuario (incluido "All time" explícito) manda; si no hay, default abajo.
@@ -1409,6 +1433,17 @@
       if (Array.isArray(p.positions)) p.positions.forEach(x => x && posSet.add(x));
     });
     _posRaw = Array.from(posSet);
+
+    // Orientaciones que el club USA en su biblioteca (no una lista fija): si nadie catalogó
+    // «Velocidad», ese filtro no tiene por qué existir. La etiqueta sale de las mismas claves
+    // que la Biblioteca de ejercicios (window.gpTaskLabel).
+    try {
+      const { data: _or } = await window.sb.from('exercises')
+        .select('orientation').eq('club_id', clubId).not('orientation', 'is', null);
+      const _set = new Set((_or || []).map(r => r.orientation).filter(Boolean));
+      const _lbl = v => (window.gpTaskLabel ? window.gpTaskLabel('orientation', v) : null) || v;
+      options.orientation = [..._set].sort().map(v => ({ value: v, label: _lbl(v) }));
+    } catch (_e) { options.orientation = []; }
 
     // MD code de una sesión: la COLUMNA match_day_offset primero (lo que escribe Daily
     // Planning), luego session_attributes.md_code como fallback. Mismo orden de prioridad
