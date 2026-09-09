@@ -50,6 +50,9 @@
       .mi-stats { margin-top:18px; padding-top:18px; border-top:1px solid var(--cm-border-soft); }
       .mi-stats-h { font:600 12px/1 var(--cm-font-sans); letter-spacing:.04em; text-transform:uppercase; color:var(--cm-fg-strong); margin-bottom:10px; }
       .mi-hint { margin:-4px 0 10px; font:400 12px/1.5 var(--cm-font-sans); color:var(--cm-fg-muted); }
+      .mi-locked { display:flex; align-items:flex-start; gap:7px; margin:10px 0 0; padding:9px 11px; border:1px solid var(--cm-border); border-radius:var(--cm-r-2); background:var(--cm-bg-soft); font:500 12px/1.5 var(--cm-font-sans); color:var(--cm-fg-muted); }
+      .mi-locked .ti { flex:0 0 auto; margin-top:1px; font-size:14px; color:var(--cm-fg-faint); }
+      .mi-stats [disabled] { opacity:.55; cursor:not-allowed; }
 
       /* Export de equipo de Wyscout: se confirma lo detectado, no se mapea columna a columna. */
       .mi-ts { margin-top:12px; padding:12px 13px; border:1px solid var(--cm-info-bd); background:var(--cm-info-bg); border-radius:var(--cm-r-3); display:flex; flex-direction:column; gap:8px; }
@@ -461,8 +464,21 @@
   function updateStatsSection(){
     const host = $('miStatsSection'); if (!host) return;
     if (!_matchId){
-      host.innerHTML = `<div class="mi-stats-h">${esc(tt('match_reports.stats_import', 'Import stats'))}</div>
-        <div style="color:var(--cm-fg-faint);font:var(--cm-body-sm)">${esc(tt('match_reports.save_details_first', 'Save the match details first.'))}</div>`;
+      // El campo se muestra igual, apagado. Antes acá sólo había una línea gris que se
+      // leía como un aviso y no como un paso: quedaba la sensación de que la opción de
+      // subir el archivo no existía.
+      host.innerHTML = `
+        <div class="mi-stats-h">${esc(tt('match_reports.stats_import', 'Import stats'))}</div>
+        <p class="mi-hint">${esc(tt('match_reports.stats_import_hint',
+          'Player stats (CSV/Excel, or a Wyscout event XML), or a Wyscout Team Stats export for team metrics. The file is recognised on its own.'))}</p>
+        <div class="mi-row" style="align-items:flex-end">
+          <label class="mi-field" style="flex:0 0 150px"><span class="mi-l">${esc(tt('match_reports.provider', 'Provider'))}</span>
+            <select class="cm-select" disabled><option>${esc(tt('match_reports.provider_generic', 'Generic'))}</option></select></label>
+          <label class="mi-field"><span class="mi-l">${esc(tt('match_reports.file_csv_xlsx_xml', 'File (.csv / .xlsx / .xml)'))}</span>
+            <input type="file" class="cm-input" disabled></label>
+        </div>
+        <p class="mi-locked"><i class="ti ti-lock"></i>${esc(tt('match_reports.save_details_first',
+          'Fill in the match date and opponent above, then Save — the file upload unlocks right after.'))}</p>`;
       return;
     }
     host.innerHTML = `
