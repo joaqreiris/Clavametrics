@@ -396,6 +396,12 @@
   /* Amistoso: mismos minutos, tinte ámbar para distinguirlo del oficial a simple vista */
   .av-cell-match.is-friendly { background:rgba(217,119,6,0.07); }
   .av-cell-match.is-friendly .av-cell-match-min { color:var(--cm-warning,#D97706); }
+  /* El GPS midió otra cosa. No se pisa el número: se marca la esquina para que se revise. */
+  .av-cell-match.is-gps-check { position:relative; }
+  .av-cell-match.is-gps-check::after {
+    content:''; position:absolute; top:2px; right:2px; width:0; height:0;
+    border-top:6px solid var(--cm-warning,#D97706); border-left:6px solid transparent;
+  }
   .av-matrix thead th.day.is-match.is-friendly { background:color-mix(in srgb, var(--cm-warning,#D97706) 8%, var(--cm-surface)); color:var(--cm-warning,#D97706); }
   .av-matrix thead th.day.is-match.is-friendly b,
   .av-matrix thead th.day.is-match.is-friendly .md-tag { color:var(--cm-warning,#D97706); }
@@ -875,7 +881,13 @@
     if (!status) return isFuture ? `<td class="${cls}"${data}></td>` : `<td class="${cls} is-off"${data}></td>`;
     if (status.startsWith('match:')) {
       const min = parseInt(status.split(':')[1], 10);
-      return `<td class="${cls} ${matchCellCls(pid, date)}"${data}>${min > 0 ? `<span class="av-cell-match-min">${min}′</span>` : dotEl('ab')}</td>`;
+      const _chk = pid ? _avGpsCheck[pid + '|' + date] : null;
+      const _chkAttr = _chk
+        ? ` title="${avEscAttr(tt('availability.gpsMismatch',
+            'The GPS measured {gps}′ and {saved}′ are recorded. Double-click to correct it.',
+            { gps: _chk.gps, saved: _chk.saved }))}"`
+        : '';
+      return `<td class="${cls} ${matchCellCls(pid, date)}${_chk ? ' is-gps-check' : ''}"${data}${_chkAttr}>${min > 0 ? `<span class="av-cell-match-min">${min}′</span>` : dotEl('ab')}</td>`;
     }
     if (status.indexOf('other_team') === 0) {
       // 'other_team#<teamId>' → nombre de ESE equipo; 'other_team' pelado → equipo primario del guest.
@@ -1213,6 +1225,65 @@
   }
 
   // ── Save cell to Supabase ──
+  // ── Minutos de partido medidos por el GPS ──────────────────────────────────────
+  // El GPS ya sabe cuánto estuvo cada jugador en cancha (gps_reports.time_played, vía la vista
+  // v_gps_player_minutes). Cargarlos a mano es trabajo repetido y, sobre todo, sale mal: en este
+  // club, de 122 partidos-jugador con los dos datos, 77 no coincidían — casi siempre porque el
+  // número escrito es una convención redonda (90, 60, 15) y el medido es otro.
+  //
+  // Qué hace:
+  //   · celda VACÍA  → se completa con el minuto medido y se guarda.
+  //   · celda CON valor que no cuadra (>2 min) → NO se pisa: se marca para revisar, con los dos
+  //     números en el tooltip. Son decisiones sobre el historial de minutos del club; las toma
+  //     el cuerpo técnico, no el importador.
+  //
+  // El top-up no hay que descontarlo: time_played no lo incluye (un suplente que sólo hizo
+  // top-up llega con time_played nulo, no con los 12' del top-up).
+  let _avGpsCheck = {};   // 'pid|fecha' → { gps, saved } de los que no cuadran
+  async function avApplyGpsMinutes(fromDate, toDate) {
+    _avGpsCheck = {};
+    if (!window.sb || !CLUB_ID) return;
+    let rows = [];
+    try {
+      let q = window.sb.from('v_gps_player_minutes')
+        .select('player_id, session_date, minutes')
+        .eq('club_id', CLUB_ID).eq('session_type', 'match')
+        .gte('session_date', fromDate).lte('session_date', toDate);
+      if (_avTeamId) q = q.or(`team_id.eq.${_avTeamId},team_id.is.null`);
+      const { data, error } = await q;
+      if (error) throw error;
+      rows = data || [];
+    } catch (e) {
+      // Sin la vista desplegada (o sin permiso) la pantalla sigue funcionando como siempre.
+      console.warn('[Availability] minutos del GPS no disponibles:', e?.message || e);
+      return;
+    }
+    const _pend = [];
+    for (const r of rows) {
+      const pid = String(r.player_id), date = String(r.session_date).slice(0, 10);
+      const gps = Number(r.minutes);
+      if (!Number.isFinite(gps) || gps <= 0) continue;
+      const k = pid + '|' + date;
+      const cur = avMap[k];
+      const saved = Number(cur?.minutes) || 0;
+      // Lesionado / no disponible: el GPS no puede contradecir un estado que puso el staff.
+      if (cur && cur.status && cur.status !== 'available' && saved === 0) continue;
+      if (saved === 0) {
+        const kind = (window.__avMatchKind || {})[date] || 'official';
+        avMap[k] = Object.assign({}, cur, { player_id: pid, date, status: 'available',
+          minutes: gps, match_kind: kind, club_id: CLUB_ID, team_id: cur?.team_id ?? (_avTeamId || null) });
+        _pend.push({ player_id: pid, date, status: 'available', minutes: gps, match_kind: kind,
+          club_id: CLUB_ID, team_id: avMap[k].team_id, notes: cur?.notes ?? null });
+      } else if (Math.abs(saved - gps) > 2) {
+        _avGpsCheck[k] = { gps, saved };
+      }
+    }
+    if (_pend.length) {
+      try { await window.sb.from('availability').upsert(_pend, { onConflict: 'player_id,date' }); }
+      catch (e) { console.warn('[Availability] no se pudieron guardar los minutos del GPS:', e?.message || e); }
+    }
+  }
+
   async function saveAvailability(pid, date, status, minutes = 0, teamIdOverride) {
     if (!CLUB_ID) return;
     // Estados globales (lesión/enfermedad/selección) → team_id NULL (se ven en todos los equipos).
@@ -1574,6 +1645,7 @@
     });
     avMap      = {};
     (availData || []).forEach(r => { avMap[r.player_id + '|' + r.date] = r; });
+    await avApplyGpsMinutes(mcStart, mcEnd);   // minutos de PARTIDO medidos por el GPS
     injuredIds = new Set((injuriesData || []).map(r => r.player_id));
     yesterdayByPlayer = yesterdayData
       ? Object.fromEntries(yesterdayData.map(r => [r.player_id, r]))
@@ -2396,7 +2468,7 @@
     const stat = {};
     // minutes = minutos OFICIALES; minutesFr = amistosos (fila vieja sin match_kind = oficial).
     // No se suman juntos en ningún lado: el % de participación se calcula solo sobre oficiales.
-    players.forEach(p => stat[p.id] = { id:p.id, name: `${p.last_name||''} ${p.first_name||''}`.trim(), number: p.number, avail:0, partial:0, injury:0, illness:0, absent:0, national:0, otherTeam:0, minutes:0, minutesFr:0, total:0 });
+    players.forEach(p => stat[p.id] = { id:p.id, name: `${p.last_name||''} ${p.first_name||''}`.trim(), number: p.number, avail:0, partial:0, injury:0, illness:0, absent:0, national:0, otherTeam:0, minutes:0, minutesFr:0, trainMin:0, total:0 });
     (avail||[]).forEach(r => {
       const s = stat[r.player_id]; if (!s) return;
       if (r.date > todayStr) return;   // future pre-fills are planning, not events — don't count as elapsed
@@ -2413,6 +2485,22 @@
       else if (st === 'away' || st === 'national') s.national++;
     });
     // Techo de minutos OFICIALES del equipo (el jugador que más jugó marca el 100%)
+    // Minutos ENTRENADOS, medidos por el GPS. No se escriben en Availability —ahí los minutos
+    // son los de partido, que es lo que el cuerpo técnico carga y audita—: acá sólo se miran,
+    // para poder leer el volumen de trabajo junto al de competencia.
+    try {
+      let tq = window.sb.from('v_gps_player_minutes')
+        .select('player_id, minutes')
+        .eq('club_id', CLUB_ID).eq('session_type', 'training')
+        .in('player_id', pids.map(String))
+        .gte('session_date', from).lte('session_date', to);
+      if (_avTeamId) tq = tq.or(`team_id.eq.${_avTeamId},team_id.is.null`);
+      const { data: trainRows } = await tq;
+      (trainRows || []).forEach(r => {
+        const s = stat[r.player_id]; if (s) s.trainMin += Number(r.minutes) || 0;
+      });
+    } catch (e) { console.warn('[Availability] minutos entrenados no disponibles:', e?.message || e); }
+
     const _maxMin = Math.max(1, ...Object.values(stat).map(s => s.minutes));
     Object.values(stat).forEach(s => { s.partPct = Math.round((s.minutes/_maxMin)*100); });
 
@@ -2511,6 +2599,7 @@
               <th data-sort="otherTeam" style="padding:9px 10px;text-align:center;font:600 10.5px/1 var(--cm-font-sans);color:#6366F1;cursor:pointer">${tt('availability.statsColOther','Other')}</th>
               <th data-sort="minutes" style="padding:9px 10px;text-align:center;font:600 10.5px/1 var(--cm-font-sans);color:var(--cm-fg-strong);cursor:pointer">${tt('availability.statsColMinOff','Min off.')}</th>
               <th data-sort="minutesFr" style="padding:9px 10px;text-align:center;font:600 10.5px/1 var(--cm-font-sans);color:var(--cm-warning,#D97706);cursor:pointer">${tt('availability.statsColMinFr','Min friendly')}</th>
+              <th data-sort="trainMin" style="padding:9px 10px;text-align:center;font:600 10.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted);cursor:pointer" title="${tt('availability.statsColMinTrainHint','Minutes on the pitch in training, measured by the GPS')}">${tt('availability.statsColMinTrain','Min training')}</th>
               <th data-sort="pct" style="padding:9px 16px;text-align:right;font:600 10.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted);cursor:pointer;min-width:120px">${tt('availability.statsColPctAvail','% Availability')}</th>
               <th data-sort="partPct" style="padding:9px 16px;text-align:right;font:600 10.5px/1 var(--cm-font-sans);color:var(--cm-info,#2563eb);cursor:pointer;min-width:120px">${tt('availability.statsColPctMinOff','% Official min')}</th>
             </tr></thead>
@@ -2630,6 +2719,7 @@
           <td style="padding:10px;text-align:center;font:600 13px/1 var(--cm-font-mono);color:${s.otherTeam?'#6366F1':'var(--cm-fg-faint,#cbd5e1)'}">${s.otherTeam}</td>
           <td style="padding:10px;text-align:center;font:700 13px/1 var(--cm-font-mono);color:var(--cm-fg-strong)">${s.minutes}'</td>
           <td style="padding:10px;text-align:center;font:700 13px/1 var(--cm-font-mono);color:${s.minutesFr?'var(--cm-warning,#D97706)':'var(--cm-fg-faint,#cbd5e1)'}">${s.minutesFr}'</td>
+          <td style="padding:10px;text-align:center;font:700 13px/1 var(--cm-font-mono);color:${s.trainMin?'var(--cm-fg-muted)':'var(--cm-fg-faint,#cbd5e1)'}">${s.trainMin}'</td>
           <td style="padding:10px 16px"><div style="display:flex;align-items:center;gap:8px;justify-content:flex-end"><div style="flex:1;max-width:70px;height:6px;background:var(--cm-bg-soft);border-radius:3px;overflow:hidden"><div style="width:${pct}%;height:100%;background:${barColor};border-radius:3px"></div></div><span style="font:700 12.5px/1 var(--cm-font-mono);color:${barColor};min-width:36px;text-align:right">${pct}%</span></div></td>
           <td style="padding:10px 16px"><div style="display:flex;align-items:center;gap:8px;justify-content:flex-end"><div style="flex:1;max-width:70px;height:6px;background:var(--cm-bg-soft);border-radius:3px;overflow:hidden"><div style="width:${s.partPct}%;height:100%;background:var(--cm-info,#2563eb);border-radius:3px"></div></div><span style="font:700 12.5px/1 var(--cm-font-mono);color:var(--cm-info,#2563eb);min-width:36px;text-align:right">${s.partPct}%</span></div></td>
         </tr>`;
