@@ -641,6 +641,18 @@
   function metIcon(m) { return (m && m.calculated) ? 'ti-math-function' : (CAT_ICON[m.group_name] || 'ti-chart-bar'); }
   function metSample(m) { return CAT_SAMPLE[m.group_name] || 100; }
 
+  /**
+   * Qué agregado mostrar en el subtítulo de la card.
+   * «% del partido» NO usa el agregado elegido: compara la media POR SESIÓN contra la referencia
+   * de partido (sumar cinco entrenamientos contra un partido daría 400%). Poner «sum» ahí era
+   * decir una cosa y hacer otra, justo en el rótulo que explica cómo leer el número.
+   */
+  function _subAgg(S) {
+    if (!S || !S.metrics || !S.metrics[0]) return '';
+    if (S.type === 'demand') return _tt('gps_analysis.sub_per_session', 'per session');
+    return AGG[S.metrics[0].agg]?.short.toLowerCase() || '';
+  }
+
   function autoTitle(S) {
     if (S.title) return S.title;
     if (!S.metrics.length) return _vizFull(S.type);
@@ -1350,7 +1362,7 @@
       const subElE   = targetCard.querySelector('.sub');
       if (titleElE) titleElE.textContent = autoTitle(S);
       if (subElE) {
-        const agg0 = S.metrics[0] ? (AGG[S.metrics[0].agg]?.short.toLowerCase() || '') : '';
+        const agg0 = _subAgg(S);
         subElE.textContent = `${_vizFull(S.type).toLowerCase()}${agg0?' · '+agg0:''} · ${S.scope}${cmpBadge(S)}`;
       }
       gpApplyHeaderFormat(targetCard, { titleFormat: S.titleFormat, subtitleFormat: S.subtitleFormat }, S.type);
@@ -1438,7 +1450,7 @@
     const subEl   = savedCard.querySelector('.sub');
     if (titleEl) titleEl.textContent = autoTitle(S);
     if (subEl) {
-      const agg0 = S.metrics[0] ? (AGG[S.metrics[0].agg]?.short.toLowerCase() || '') : '';
+      const agg0 = _subAgg(S);
       subEl.textContent = `${_vizFull(S.type).toLowerCase()}${agg0?' · '+agg0:''} · ${S.scope}${cmpBadge(S)}`;
     }
     gpApplyHeaderFormat(savedCard, { titleFormat: S.titleFormat, subtitleFormat: S.subtitleFormat }, S.type);
@@ -2794,7 +2806,7 @@
     // No pisar el título mientras el usuario lo está tipeando inline (perdería el cursor).
     if (titleEl && document.activeElement !== titleEl) titleEl.textContent = autoTitle(S);
     if (subEl) {
-      const agg0 = S.metrics[0] ? (AGG[S.metrics[0].agg]?.short.toLowerCase() || '') : '';
+      const agg0 = _subAgg(S);
       subEl.textContent = `${_vizFull(S.type).toLowerCase()}${agg0?' · '+agg0:''} · ${S.scope}${cmpBadge(S)}`;
     }
     _wireInlineTitle(titleEl);
@@ -7195,12 +7207,27 @@
   async function _buildDemandData(config, series) {
     const opts = _demandOpts(config);
     const out = [];
-    for (const s of (series || [])) {
+    // Las referencias de TODAS las métricas en un solo viaje. Antes se pedía una por una y en
+    // cadena: con 6 métricas eran 6 idas y vueltas (más el recorte por contexto de cada una), y
+    // la card tardaba visiblemente más que las demás del dashboard.
+    const _series = (series || []);
+    const _allPids = [...new Set(_series.flatMap(s =>
+      (s.points || []).filter(p => p.fid).map(p => String(p.fid))))];
+    let _refs = {};
+    if (_allPids.length && _clubId) {
+      try {
+        _refs = window.getMatchBaselineBatchMulti
+          ? await window.getMatchBaselineBatchMulti(_allPids, _series.map(s => s.label), _clubId, opts)
+          : {};
+      } catch (e) { console.warn('gpb demand baselines:', e); }
+    }
+    for (const s of _series) {
       const met  = catalogMap.get(s.label);
       const pts  = (s.points || []).filter(p => p.fid && p.y != null && isFinite(p.y));
-      const pids = [...new Set(pts.map(p => String(p.fid)))];
-      let bl = {};
-      if (pids.length && window.getMatchBaselineBatch && _clubId) {
+      let bl = _refs[s.label] || {};
+      // Sin la función nueva (motor viejo cacheado), se cae a la ruta de una métrica.
+      if (!Object.keys(bl).length && window.getMatchBaselineBatch && _clubId && pts.length) {
+        const pids = [...new Set(pts.map(p => String(p.fid)))];
         try { bl = (await window.getMatchBaselineBatch(pids, s.label, _clubId, opts)) || {}; }
         catch (e) { console.warn('gpb demand baseline:', e); }
       }

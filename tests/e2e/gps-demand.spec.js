@@ -40,6 +40,8 @@ async function open(page, cards, { sessions = SESSIONS, reports = REPORTS } = {}
   // mida lo que es suyo — la aritmética del porcentaje, no la consulta de los partidos.
   await page.addInitScript(([ref]) => {
     const stub = async (pids, metric) => {
+      // Sólo se cuentan las llamadas que hace la CARD, no las que el doble multi hace por dentro.
+      if (window.__refCalls && !window.__inMulti) window.__refCalls.single++;
       const out = {};
       for (const pid of pids) {
         out[pid] = (metric === 'total_distance' && ref[pid])
@@ -49,6 +51,19 @@ async function open(page, cards, { sessions = SESSIONS, reports = REPORTS } = {}
       return out;
     };
     Object.defineProperty(window, 'getMatchBaselineBatch', { get: () => stub, set: () => {}, configurable: true });
+    // La card pide TODAS las referencias en un viaje (getMatchBaselineBatchMulti). El doble
+    // responde igual, métrica por métrica, para que el test siga midiendo la aritmética del
+    // porcentaje y no la consulta.
+    window.__refCalls = { single: 0, multi: 0 };
+    const stubMulti = async (pids, metrics, club, o) => {
+      window.__refCalls.multi++;
+      window.__inMulti = true;
+      const out = {};
+      for (const m of (metrics || [])) out[m] = await stub(pids, m, club, o);
+      window.__inMulti = false;
+      return out;
+    };
+    Object.defineProperty(window, 'getMatchBaselineBatchMulti', { get: () => stubMulti, set: () => {}, configurable: true });
   }, [REF]);
   await page.route(`${SB}/rest/v1/**`, r => r.fulfill({ json: [], headers: { 'Content-Range': '0-0/0', 'Content-Type': 'application/json' } }));
   await page.route(`${SB}/auth/v1/**`, r => r.fulfill({ json: { access_token: 'test-token', user: { id: 'user-1', email: 'test@test.com' } } }));
@@ -153,5 +168,18 @@ test.describe('GPS · % de la demanda de partido', () => {
     await open(page, card([{ id: 'total_distance', agg: 'avg' }]), { sessions, reports });
     const body = page.locator('.gp-view.is-on .gp-c[data-card-id="card-dem"] .gp-c-b');
     await expect(body).toContainText(/mezcla|mixes|mistura/i);
+  });
+
+  // Las referencias de TODAS las métricas se piden en UN viaje. Antes iba una consulta por
+  // métrica y encadenadas: con seis métricas, seis idas y vueltas (más el recorte por contexto
+  // de cada una) y la card tardaba bastante más que el resto del dashboard.
+  test('pide las referencias de todas las métricas en un solo viaje', async ({ page }) => {
+    await open(page, card([
+      { id: 'total_distance', agg: 'avg' },
+      { id: 'high_speed_distance', agg: 'avg' },
+    ]));
+    const calls = await page.evaluate(() => window.__refCalls);
+    expect(calls.multi).toBe(1);      // una sola llamada, con las dos métricas dentro
+    expect(calls.single).toBe(0);     // ninguna consulta suelta por métrica
   });
 });

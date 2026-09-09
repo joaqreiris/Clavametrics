@@ -414,6 +414,92 @@
     return out;
   };
 
+  // ── VARIAS métricas de una vez (un solo viaje) ─────────────────
+  /**
+   * Igual que getMatchBaselineBatch pero para varias métricas: UNA consulta con todas las
+   * columnas en vez de una por métrica. Devuelve { metric: { player_id: {baseline, count, …} } }.
+   *
+   * Por qué: la card «% del partido» pide 6-8 métricas, y una llamada por métrica son 6-8
+   * viajes ENCADENADOS —cada uno con su propio recorte por contexto, que son dos consultas
+   * más—. La card tardaba visiblemente más que las demás. Traer las columnas juntas es el
+   * mismo trabajo para el servidor y un solo viaje para el navegador.
+   *
+   * Las métricas que no son columnas (EAV/custom) caen a la ruta de siempre, una por una: son
+   * pocas y ahí no hay nada que juntar.
+   */
+  window.getMatchBaselineBatchMulti = async function (player_ids, metrics, clubId, opts) {
+    const out = {};
+    const list = Array.from(new Set(metrics || [])).filter(Boolean);
+    if (!player_ids?.length || !list.length || !clubId) return out;
+
+    const core = list.filter(m => BASELINE_METRICS.includes(m));
+    const rest = list.filter(m => !BASELINE_METRICS.includes(m));
+
+    if (core.length) {
+      const settings = await _loadClubSettings(clubId);
+      const n    = (opts && opts.n) || settings.baseline_n || DEFAULT_N;
+      const mode = (opts && opts.mode) || 'best';
+      const matchDates = await _loadMatchDates(clubId);
+      if (matchDates.size) {
+        const { dates, longEnough } = _refRule(settings, matchDates);
+        if (dates.length) {
+          const _cols = Array.from(new Set(core.concat(['time_played'])));
+          const _sel  = `session_id, player_id, ${_cols.join(', ')}, training_sessions!inner(session_date)`;
+          const data = await window.cmFetchAll(() => window.sb
+            .from('gps_reports')
+            .select(_sel)
+            .in('player_id', player_ids)
+            .eq('club_id', clubId)
+            .in('training_sessions.session_date', dates), { label: 'baseline.multi' }).catch(() => null);
+          if (data) {
+            const scoped = await _scopeToTeam(data, clubId, player_ids, _sel);
+            const pick = (items) => {
+              if (mode === 'avg') return items.map(i => i.v);
+              if (mode === 'recent') {
+                return items.slice().sort((a, b) => String(b.d || '').localeCompare(String(a.d || '')))
+                            .slice(0, n).map(i => i.v);
+              }
+              return items.slice().sort((a, b) => b.v - a.v).slice(0, n).map(i => i.v);
+            };
+            core.forEach(metric => {
+              const vals = {};
+              scoped.forEach(r => {
+                if (!longEnough(r)) return;
+                const v = r[metric];
+                if (v == null || !isFinite(+v)) return;
+                (vals[r.player_id] = vals[r.player_id] || []).push({ v: +v, d: r.training_sessions?.session_date });
+              });
+              const res = {};
+              player_ids.forEach(pid => {
+                const chosen = vals[pid] ? pick(vals[pid]) : [];
+                const count = chosen.length;
+                if (count < MIN_MATCHES) {
+                  res[pid] = { baseline: null, count, confidence: 'none', source: 'insufficient_data',
+                    warning: `Insufficient match data (${count}/${MIN_MATCHES} minimum)` };
+                } else {
+                  const mean = chosen.reduce((a, b) => a + b, 0) / count;
+                  res[pid] = { baseline: +mean.toFixed(2), count,
+                    confidence: (mode === 'avg' || count >= n) ? 'high' : 'medium',
+                    source: (mode === 'avg' || count >= n) ? 'full' : 'partial',
+                    warning: (mode !== 'avg' && count < n) ? `Baseline from ${count} matches (recommended: ${n})` : null };
+                }
+              });
+              out[metric] = res;
+            });
+          }
+        }
+      }
+    }
+    // Las que no son columna: ruta de siempre, en paralelo (no encadenadas).
+    if (rest.length) {
+      const got = await Promise.all(rest.map(m =>
+        window.getMatchBaselineBatch(player_ids, m, clubId, opts).catch(() => ({}))));
+      rest.forEach((m, i) => { out[m] = got[i] || {}; });
+    }
+    core.forEach(m => { if (!out[m]) out[m] = {}; });
+    return out;
+  };
+
   // ── All metrics for one player ─────────────────────────────────
   window.getAllBaselines = async function (player_id, clubId, opts) {
     const results = {};
