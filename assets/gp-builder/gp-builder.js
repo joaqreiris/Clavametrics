@@ -455,7 +455,15 @@
     const dimIds = (S.dimensions || []).map(d => d.id);
     const modes = [];
     if (dimIds.includes('microcycle')) modes.push('prev_mc');
-    if (dimIds.includes('md_code') || dimIds.includes('session_date')) { modes.push('last_md'); modes.push('avg_md'); }
+    if (dimIds.includes('md_code') || dimIds.includes('session_date')) {
+      modes.push('last_md'); modes.push('avg_md');
+      // «vs la anterior»: cada FECHA contra la anterior del mismo MD. Es lo que hace falta para
+      // elegir dos fechas (dos MD-3) y ver el % entre ellas — los otros dos modos comparan todo
+      // lo seleccionado contra una referencia previa al rango, no una fecha con la otra.
+      // Sólo con el eje de FECHAS: agrupando por MD cada barra ya es un MD distinto y «la
+      // anterior» no querría decir nada.
+      if (dimIds.includes('session_date')) modes.push('prev_occ');
+    }
     return modes;
   }
   function _hasRelMetric(S) { return !!S && (S.metrics || []).some(m => m.rel); }
@@ -471,8 +479,10 @@
       prev_mc: _tt('gps_analysis.builder_rel_prev_mc', 'Δ% vs previous MC'),
       last_md: _tt('gps_analysis.builder_rel_last_md', 'Δ% vs last same MD'),
       avg_md:  _tt('gps_analysis.builder_rel_avg_md',  'Δ% vs MD average'),
+      prev_occ: _tt('gps_analysis.builder_rel_prev_occ', 'Δ% vs the previous one'),
     };
-    const ICO = { prev_mc: 'ti-calendar-stats', last_md: 'ti-history', avg_md: 'ti-chart-bar' };
+    const ICO = { prev_mc: 'ti-calendar-stats', last_md: 'ti-history', avg_md: 'ti-chart-bar',
+                  prev_occ: 'ti-arrow-narrow-left' };
     const opt = (val, label, icon) => `<button class="rb-opt ${cur === val ? 'is-on' : ''}" data-rel-opt="${esc(val)}">
       <span class="ic"><i class="ti ${icon}"></i></span>
       <span class="tx"><span class="t">${esc(label)}</span></span>
@@ -543,9 +553,18 @@
       }
       occIdx.set(si, g);
     });
-    const refVal = (metricIdx, groupKey, mode) => {
+    const refVal = (metricIdx, groupKey, mode, curDate) => {
       const arr = (occIdx.get(metricIdx) || new Map()).get(groupKey);
       if (!arr || !arr.length) return null;
+      if (mode === 'prev_occ') {
+        // La ocurrencia inmediatamente anterior A ESTA, del mismo MD (el groupKey ya lo incluye,
+        // así que un MD-3 nunca se compara con un MD-1). Sirve tanto para dos fechas sueltas
+        // —la segunda contra la primera— como para un rango largo: cada MD contra el MD previo.
+        if (!curDate) return null;
+        const prev = arr.filter(o => o.date && o.date < curDate && o.val != null && !isNaN(o.val))
+                        .sort((a, b) => b.date.localeCompare(a.date));
+        return prev.length ? prev[0].val : null;
+      }
       if (mode === 'avg_md') {
         const vs = arr.map(o => o.val).filter(v => v != null && !isNaN(v));
         return vs.length ? vs.reduce((a, b) => a + b, 0) / vs.length : null;
@@ -556,20 +575,41 @@
       return prior.length ? prior[0].val : null;
     };
 
-    const mdOfDate = v => (isDateAxis ? (window._gpMdForDate?.[String(v).slice(0, 10)] || '') : v);
+    // Fecha → MD. Se arma desde las FILAS (que traen su match_day_offset) y sólo después se
+    // recurre al mapa global de la barra: el MD propio de la sesión es la fuente primaria, y
+    // depender del mapa global dejaba sin comparar a las sesiones que no estuvieran en él.
+    const _mdByDate = new Map();
+    [...seasonRows, ...rows].forEach(r => {
+      const d = r.training_sessions?.session_date ?? r.session_date;
+      if (!d) return;
+      const k = String(d).slice(0, 10);
+      if (_mdByDate.has(k)) return;
+      const md = _gpMdOf(_sess(r));
+      if (md) _mdByDate.set(k, String(md));
+    });
+    const mdOfDate = v => {
+      if (!isDateAxis) return v;
+      const k = String(v).slice(0, 10);
+      return _mdByDate.get(k) || window._gpMdForDate?.[k] || '';
+    };
     const out = [];
     curSeries.forEach((s, si) => {
       const mc = config.metrics?.[si];   // curSeries es 1:1 con config.metrics (ids repetibles)
       const mode = mc && mc.rel;
-      if ((mode !== 'last_md' && mode !== 'avg_md') || !s.points?.length) return;
+      if ((mode !== 'last_md' && mode !== 'avg_md' && mode !== 'prev_occ') || !s.points?.length) return;
       const nm  = catalogMap.get(s.label)?.name || s.name || s.label;
-      const lbl = mode === 'avg_md' ? _tt('gps_analysis.builder_rel_avg_md_short', 'Δ% vs MD avg')
-                                    : _tt('gps_analysis.builder_rel_last_md_short', 'Δ% vs last MD');
+      const lbl = mode === 'avg_md'   ? _tt('gps_analysis.builder_rel_avg_md_short', 'Δ% vs MD avg')
+                : mode === 'prev_occ' ? _tt('gps_analysis.builder_rel_prev_occ_short', 'Δ% vs previous')
+                                      : _tt('gps_analysis.builder_rel_last_md_short', 'Δ% vs last MD');
       out.push({ label: `${s.label}__relmd`, name: `${lbl} · ${nm}`, unit: '%', line: true, _rel: 'md',
         points: s.points.map(p => {
           const dv = p.dims || [p.x];
-          const groupKey = [...dv.filter((_, i) => i !== tIdx), mdOfDate(dv[tIdx])].join('¦');
-          const ref = refVal(si, groupKey, mode);
+          const _md = mdOfDate(dv[tIdx]);
+          // Sin MD no hay «mismo MD» que comparar: se deja sin variación en vez de emparejar
+          // dos días sueltos que no tienen nada que ver.
+          if (mode === 'prev_occ' && !_md) return { ...p, y: null, _abs: p.y };
+          const groupKey = [...dv.filter((_, i) => i !== tIdx), _md].join('¦');
+          const ref = refVal(si, groupKey, mode, isDateAxis ? String(dv[tIdx]).slice(0, 10) : null);
           const raw = (ref != null && ref !== 0 && !isNaN(ref) && p.y != null && !isNaN(p.y)) ? (p.y - ref) / ref * 100 : null;
           const e = _capPct(raw);
           return { ...p, y: e.v, _abs: p.y, _capped: e.capped };
@@ -3236,7 +3276,7 @@
       // Modo relativo "vs MD" (Δ% vs último MD igual / vs promedio MD): trae la referencia
       // de la temporada y AÑADE una línea de % por métrica. Sólo bars, sin comparación mc.
       if (config.viz === 'bars' && config.comparison?.baseline !== 'mc'
-          && (config.metrics || []).some(m => m.rel === 'last_md' || m.rel === 'avg_md')) {
+          && (config.metrics || []).some(m => m.rel === 'last_md' || m.rel === 'avg_md' || m.rel === 'prev_occ')) {
         try {
           const mdExtra = await _buildMdRelSeries(config, rows, series, ctx, sb, FBcard);
           if (stale()) return;
