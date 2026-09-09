@@ -84,6 +84,16 @@ const TEAM_ROWS = [
     match_results: { id: 'mres-3', match_date: '2026-09-05', opponent: 'Angkor Tiger', team_id: null, score_for: 0, score_against: 0 } },
 ];
 
+/* El plantel. El arquero no tiene fila de GPS: nunca le ponen dispositivo, así que
+   ni aparece en el partido hasta que alguien le carga los minutos. */
+const SQUAD = [
+  { id: 'gk1', first_name: 'WAGNER', last_name: 'DIDA', number: 28, position: 'GK' },
+  { id: 'p1',  first_name: 'IN KHIN', last_name: 'DARO', number: 2, position: 'RB' },
+  { id: 'p2',  first_name: 'KIM', last_name: 'HYEONSU', number: 22, position: 'ST' },
+  { id: 'p3',  first_name: 'Pedro', last_name: 'NUNES', number: 44, position: 'CB' },
+  { id: 'p4',  first_name: 'SAN', last_name: 'BORA', number: 23, position: 'RW' },
+];
+
 /* Un escudo cualquiera, embebido para que no dependa de la red. El nombre lleva "FC"
    a propósito: en el partido el rival está escrito sin sufijo, y aun así tiene que
    encontrarlo. */
@@ -110,7 +120,7 @@ const GPS = [
   { player_id: 'p4', time_played: null, total_distance: 473, high_speed_distance: 5,
     sprint_distance: 0, max_speed: 28.42, distance_per_minute: null, accelerations: 1,
     decelerations: 0, player_load: 5, is_invalid: false,
-    players: { first_name: 'SAN', last_name: 'BORA', position: 'GK' } },
+    players: { first_name: 'SAN', last_name: 'BORA', position: 'RW' } },
   // Descartado en la revisión del GPS: no es un dato, no debe contarse ni mostrarse.
   { player_id: 'p5', time_played: 90, total_distance: 99999, high_speed_distance: 0,
     sprint_distance: 0, max_speed: 99, distance_per_minute: 0, accelerations: 0,
@@ -118,7 +128,7 @@ const GPS = [
     players: { first_name: 'GPS', last_name: 'ROTO', position: 'CM' } },
 ];
 
-async function gotoMatch(page, { teamRows = TEAM_ROWS, gps = GPS, branding = BRANDING, result = RESULT, captured = {} } = {}) {
+async function gotoMatch(page, { teamRows = TEAM_ROWS, gps = GPS, branding = BRANDING, result = RESULT, captured = {}, squad = SQUAD } = {}) {
   await injectSession(page);
   // Lo que se prueba acá son las cards, no el candado del plan. El getter ignora la
   // asignación que hace supabase-init.js al cargar, así que el módulo abre siempre.
@@ -142,6 +152,7 @@ async function gotoMatch(page, { teamRows = TEAM_ROWS, gps = GPS, branding = BRA
     if (url.includes('/match_results'))     return route.fulfill({ json: [result] });
     if (url.includes('/gps_reports'))       return route.fulfill({ json: gps });
     if (url.includes('/opponent_branding')) return route.fulfill({ json: branding });
+    if (url.includes('/players'))           return route.fulfill({ json: squad });
     if (url.includes('/player_match_stats')) {
       // Lo que se escribe al editar a mano queda acá para poder revisarlo.
       if (route.request().method() === 'POST') {
@@ -278,6 +289,29 @@ test.describe('Match Reports · estadísticas de equipo', () => {
     await page.click('#mrEditOn');
     await page.waitForSelector('.mr-edit');
     expect(await page.locator('#mrPlayerBody tr').count()).toBeGreaterThan(antes);
+  });
+
+  test('el arquero aparece al editar aunque no tenga GPS', async ({ page }) => {
+    await gotoMatch(page);
+    // En lectura no está: no tiene fila de GPS ni estadísticas, no dejó rastro.
+    await expect(page.locator('#mrPlayerBody')).not.toContainText('DIDA');
+    await page.click('#mrEditOn');
+    await page.waitForSelector('.mr-edit');
+    // Editando sale el plantel entero, con los arqueros primero.
+    await expect(page.locator('#mrPlayerBody')).toContainText('DIDA');
+    await expect(page.locator('#mrPlayerBody tr').first()).toContainText('DIDA');
+  });
+
+  test('una vez cargados sus minutos, el arquero queda en la tabla', async ({ page }) => {
+    await gotoMatch(page, { gps: GPS.slice(0, 2) });
+    await page.click('#mrEditOn');
+    await page.waitForSelector('.mr-edit');
+    // Fila del arquero: primera, columna de minutos.
+    await page.locator('#mrPlayerBody tr').first().locator('input').first().fill('97');
+    const post = page.waitForRequest(r =>
+      r.url().includes('/player_match_stats') && r.method() === 'POST', { timeout: 15_000 });
+    await page.click('#mrEditSave');
+    await post;
   });
 
   test('cancelar no guarda nada', async ({ page }) => {

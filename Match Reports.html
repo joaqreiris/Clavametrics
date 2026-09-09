@@ -906,6 +906,24 @@
   let _mrPlayers = null;      // filas ya combinadas (GPS + stats), para redibujar sin reconsultar
   let _mrEditing = false;
   let _mrEdits = {};          // player_id -> { campo: valor } mientras se edita
+  let _mrSquad = null;        // el plantel del equipo, sólo se pide al entrar en edición
+
+  /* Al arquero no le ponen GPS, así que no tiene fila en `gps_reports` — y como la
+     tabla se arma con lo que el partido registró, no aparecía por ningún lado: no era
+     que estuviera filtrado por minutos, es que nunca entraba. Editando hace falta el
+     plantel entero, porque justamente se va a cargar a quien no dejó rastro. */
+  async function loadSquad(){
+    if (_mrSquad || !_mrCtx || !_mrCtx.clubId) return _mrSquad;
+    try {
+      let q = window.sb.from('players')
+        .select('id, first_name, last_name, number, position')
+        .eq('club_id', _mrCtx.clubId).is('archived_at', null);
+      if (_mrTeamId) q = q.eq('team_id', _mrTeamId);
+      const { data } = await q;
+      _mrSquad = data || [];
+    } catch (_e) { _mrSquad = []; }
+    return _mrSquad;
+  }
 
   async function loadGPS(sessionId, clubId) {
     const tbody = document.getElementById('mrPlayerBody');
@@ -954,7 +972,17 @@
     const thead = document.getElementById('mrPlayerHead');
     const subEl = document.getElementById('mrPlayerSub');
     if (!tbody) return;
-    const all = _mrPlayers || [];
+    let all = _mrPlayers || [];
+    if (_mrEditing && _mrSquad && _mrSquad.length){
+      // El plantel manda, con los datos del partido pegados al que los tenga.
+      const byId = {};
+      all.forEach(r => { byId[r.id] = r; });
+      all = _mrSquad.map(p => byId[p.id] || {
+        id: p.id, g: null, s: null,
+        p: { first_name: p.first_name, last_name: p.last_name, position: p.position },
+        min: null,
+      });
+    }
 
     if (!all.length) {
       if (subEl) subEl.textContent = '';
@@ -973,8 +1001,16 @@
     const shown = (anyMinutes && !_mrEditing) ? all.filter(r => r.min != null && r.min > 0) : all;
     const hidden = all.length - shown.length;
 
-    // 4) Orden: valoración si la hay, si no los minutos y después la distancia.
-    const rows = shown.slice().sort((a, b) => {
+    // 4) Orden. Editando conviene el orden de una planilla —arqueros primero, después
+    //    por línea— y no el del rendimiento: se va recorriendo el equipo, no leyendo.
+    const POS_ORDER = ['GK','CB','LB','RB','CDM','CM','CAM','LW','RW','ST'];
+    const rows = _mrEditing
+      ? shown.slice().sort((a, b) => {
+          const pa = POS_ORDER.indexOf(a.p.position), pb = POS_ORDER.indexOf(b.p.position);
+          if (pa !== pb) return (pa < 0 ? 99 : pa) - (pb < 0 ? 99 : pb);
+          return String(a.p.last_name || '').localeCompare(String(b.p.last_name || ''));
+        })
+      : shown.slice().sort((a, b) => {
       const ra = num(a.s && a.s.rating), rb = num(b.s && b.s.rating);
       if (ra != null || rb != null) return (rb == null ? -Infinity : rb) - (ra == null ? -Infinity : ra);
       if ((b.min || 0) !== (a.min || 0)) return (b.min || 0) - (a.min || 0);
@@ -1098,7 +1134,11 @@
         _mrMatchId ? '' : ' disabled title="' + esc(tt('match_reports.save_match_first', 'Save the match first.')) + '"'
       }><i class="ti ti-pencil" style="font-size:14px"></i>${esc(tt('match_reports.edit_stats', 'Edit stats'))}</button>`;
       const b = document.getElementById('mrEditOn');
-      if (b && _mrMatchId) b.onclick = () => { _mrEditing = true; _mrEdits = {}; renderPlayerTable(); };
+      if (b && _mrMatchId) b.onclick = async () => {
+        b.disabled = true;
+        await loadSquad();
+        _mrEditing = true; _mrEdits = {}; renderPlayerTable();
+      };
       return;
     }
     host.innerHTML = `<span class="mr-edit-msg" id="mrEditMsg"></span>
