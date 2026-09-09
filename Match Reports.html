@@ -329,6 +329,20 @@
     border-bottom:2px solid transparent;
     margin-bottom:-1px;
   }
+  /* Los cinco números del partido, arriba de todo. */
+  .kpi-strip { display:grid; grid-template-columns:repeat(5,1fr); }
+  @media (max-width:900px){ .kpi-strip { grid-template-columns:repeat(2,1fr); } }
+  @media (max-width:520px){ .kpi-strip { grid-template-columns:1fr; } }
+  .kpi { padding:14px 16px; border-right:1px solid var(--cm-border-soft); display:flex; flex-direction:column; gap:5px; min-width:0; }
+  .kpi:last-child { border-right:0; }
+  @media (max-width:900px){ .kpi { border-bottom:1px solid var(--cm-border-soft); } }
+  .kpi-l { font:500 10px/1.2 var(--cm-font-mono); letter-spacing:.09em; text-transform:uppercase; color:var(--cm-fg-faint); }
+  .kpi-v { font:600 26px/1 var(--cm-font-mono); color:var(--cm-fg-strong); font-variant-numeric:tabular-nums; letter-spacing:-0.01em; }
+  .kpi-s { display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 8px; font:400 11.5px/1.4 var(--cm-font-sans); color:var(--cm-fg-muted); }
+  .kpi-d { font:500 11.5px/1.4 var(--cm-font-mono); color:var(--cm-fg-faint); font-variant-numeric:tabular-nums; }
+  .kpi-d.up { color:var(--cm-success); }
+  .kpi-d.down { color:var(--cm-danger); }
+
   /* ── Estadísticas de equipo: nosotros contra el rival ─────────────────────── */
   .ts-empty { padding:28px 16px; text-align:center; color:var(--cm-fg-faint); font:var(--cm-body-sm); }
   .ts-head { display:grid; grid-template-columns:1fr auto 1fr; gap:8px; align-items:center; padding:10px 14px; border-bottom:1px solid var(--cm-border-soft); background:var(--cm-bg-soft); }
@@ -620,9 +634,10 @@
         </div>
       </header>
 
-      <!-- KPI strip — no team-vs-team source in our model yet -->
-      <div class="mr-card" style="margin-bottom:18px">
-        <div style="padding:20px 16px;text-align:center;color:var(--cm-fg-faint);font:var(--cm-body-sm)" data-i18n="match_reports.team_kpis_not_available_yet">Team KPIs — not available yet</div>
+      <!-- KPI strip — los cinco números del partido. Se llena desde team_match_stats;
+           mientras no haya nada importado se queda con el mensaje de siempre. -->
+      <div class="mr-card" id="mrKpiCard" style="margin-bottom:18px">
+        <div id="mrKpiBody" style="padding:20px 16px;text-align:center;color:var(--cm-fg-faint);font:var(--cm-body-sm)" data-i18n="match_reports.team_kpis_not_available_yet">Team KPIs — not available yet</div>
       </div>
 
       <!-- Two-col -->
@@ -1159,7 +1174,7 @@
     // ── 1. Este partido, contra el rival ──
     const here = rows.filter(r => r.match_id === currentMatchId);
     const us = here.find(r => r.side === 'us'), them = here.find(r => r.side === 'them');
-    if (us) renderTeamStatsCompare(us, them);
+    if (us) { renderTeamStatsCompare(us, them); renderKpis(us, them, rows); }
     else if (body) {
       body.innerHTML = `<div class="ts-empty">${tt('match_reports.ts_none_yet',
         'No team stats for this match yet — import a Wyscout team export.')}</div>`;
@@ -1185,6 +1200,72 @@
 
     _mrTrend = { series, matchId: currentMatchId };
     buildTrendPicker();
+  }
+
+  /* Los cinco números del partido, arriba de todo.
+
+     Cada uno lleva su contraste al lado, porque un número solo no dice nada: 12 remates
+     puede ser mucho o poco, 12 contra 14 ya es una lectura. El contraste natural es el
+     rival —que viene en el mismo archivo— y, cuando hay más partidos cargados, la
+     distancia contra el propio promedio.
+
+     xG va primero a propósito: es lo único que habla de la CALIDAD de lo generado, y
+     suele contar una historia distinta a la posesión. */
+  function renderKpis(us, them, allRows){
+    const W = window.cmWyscoutTeamStats;
+    const body = document.getElementById('mrKpiBody');
+    if (!body || !W) return;
+    const A = us.stats || {}, B = (them && them.stats) || {};
+
+    // El promedio de la temporada, para saber si este partido se salió de lo habitual.
+    const mine = (allRows || []).filter(r => r.side === 'us').map(r => r.stats || {});
+    const avgOf = k => {
+      const v = mine.map(s => s[k]).filter(x => x != null).map(Number);
+      return v.length > 1 ? v.reduce((a, b) => a + b, 0) / v.length : null;
+    };
+
+    const KPIS = [
+      { key: 'xg', label: tt('team_stat.xg', 'xG'),
+        // El xG del rival ES el xG en contra: por eso se guarda su fila entera.
+        vs: B.xg != null ? tt('match_reports.kpi_vs_x', 'vs {v}', { v: W.format('xg', B.xg) }) : null },
+      { key: 'shots_on_target', label: tt('match_reports.kpi_on_target', 'Shots on target'),
+        vs: A.shots != null ? tt('match_reports.kpi_of_n', 'of {v} shots', { v: A.shots }) : null },
+      { key: 'touches_in_penalty_area', label: tt('team_stat.touches_in_penalty_area', 'Touches in the box'),
+        vs: B.touches_in_penalty_area != null ? tt('match_reports.kpi_vs_x', 'vs {v}', { v: B.touches_in_penalty_area }) : null },
+      { key: 'possession_pct', label: tt('team_stat.possession_pct', 'Possession'),
+        vs: A.average_passes_per_possession != null
+          ? tt('match_reports.kpi_per_poss', '{v} passes per possession', { v: W.format('average_passes_per_possession', A.average_passes_per_possession) }) : null },
+      { key: 'ppda', label: tt('team_stat.ppda', 'PPDA'),
+        vs: B.ppda != null ? tt('match_reports.kpi_vs_x', 'vs {v}', { v: W.format('ppda', B.ppda) }) : null },
+    ].filter(k => A[k.key] != null);
+
+    if (!KPIS.length) return;
+
+    body.removeAttribute('data-i18n');
+    body.style.cssText = '';
+    body.className = 'kpi-strip';
+    body.innerHTML = KPIS.map(k => {
+      const v = A[k.key], avg = avgOf(k.key);
+      let delta = '';
+      if (avg != null){
+        const d = Number(v) - avg;
+        const better = W.lowerIsBetter(k.key) ? d < 0 : d > 0;
+        const flat = Math.abs(d) < 1e-9;
+        // La diferencia contra el promedio de un conteo va con un decimal: "0,67 remates
+        // al arco de más" finge una precisión que el dato no tiene.
+        const counts = mine.map(s => s[k.key]).filter(x => x != null).every(x => Number.isInteger(Number(x)));
+        const amount = counts ? String(Math.round(Math.abs(d) * 10) / 10).replace('.', ',')
+                              : W.format(k.key, Math.abs(d));
+        delta = `<span class="kpi-d ${flat ? '' : (better ? 'up' : 'down')}">${
+          flat ? '=' : (d > 0 ? '↑' : '↓')} ${esc(amount)} ${
+          esc(tt('match_reports.kpi_vs_avg', 'vs avg'))}</span>`;
+      }
+      return `<div class="kpi">
+        <div class="kpi-l">${esc(k.label)}</div>
+        <div class="kpi-v">${esc(W.format(k.key, v))}</div>
+        <div class="kpi-s">${k.vs ? esc(k.vs) : ''}${delta}</div>
+      </div>`;
+    }).join('');
   }
 
   function renderTeamStatsCompare(us, them){

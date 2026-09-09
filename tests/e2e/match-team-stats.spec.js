@@ -25,6 +25,7 @@ const US = {
   progressive_passes: 70, progressive_passes_accurate: 49, progressive_passes_pct: 70,
   passes_to_final_third: 53, passes_to_final_third_accurate: 31,
   penalty_area_entries: 21, penalty_area_entries_runs: 9, penalty_area_entries_crosses: 4,
+  touches_in_penalty_area: 14, average_passes_per_possession: 3.54,
   recoveries: 65, recoveries_low: 36, recoveries_medium: 21, recoveries_high: 8,
   losses: 107, losses_low: 21, losses_medium: 34, losses_high: 52,
   duels: 194, duels_won: 100, duels_pct: 51.55,
@@ -37,6 +38,7 @@ const THEM = {
   progressive_passes: 57, progressive_passes_accurate: 43, progressive_passes_pct: 75.44,
   passes_to_final_third: 39, passes_to_final_third_accurate: 21,
   penalty_area_entries: 18, penalty_area_entries_runs: 3, penalty_area_entries_crosses: 4,
+  touches_in_penalty_area: 15, average_passes_per_possession: 2.04,
   recoveries: 68, recoveries_low: 35, recoveries_medium: 26, recoveries_high: 7,
   losses: 104, losses_low: 16, losses_medium: 37, losses_high: 51,
   duels: 194, duels_won: 84, duels_pct: 43.3,
@@ -197,6 +199,31 @@ test.describe('Match Reports · estadísticas de equipo', () => {
     await expect(page.locator('#mrTrendCard')).toBeHidden();
   });
 
+
+  // ── Los cinco números de arriba ────────────────────────────────────────────
+  test('resume el partido en cinco números, cada uno con su contraste', async ({ page }) => {
+    await gotoMatch(page);
+    const kpis = page.locator('.kpi-strip .kpi');
+    await expect(kpis).toHaveCount(5);
+    // xG primero: es lo que habla de la calidad de lo generado.
+    await expect(kpis.first()).toContainText('0,54');
+    // Y al lado el del rival, que es el xG en contra — sale de su fila del mismo archivo.
+    await expect(kpis.first()).toContainText('0,81');
+    await expect(page.locator('.kpi-strip')).toContainText('5,88');   // PPDA
+  });
+
+  test('un número solo no alcanza: cada KPI se compara contra el promedio', async ({ page }) => {
+    await gotoMatch(page);
+    // La posesión de este partido (62,1) está por encima del promedio de la serie.
+    const poss = page.locator('.kpi').filter({ hasText: '62,1' });
+    await expect(poss.locator('.kpi-d')).toHaveClass(/up/);
+  });
+
+  test('sin nada importado la tira de KPIs no se inventa nada', async ({ page }) => {
+    await gotoMatch(page, { teamRows: [] });
+    await expect(page.locator('.kpi-strip')).toHaveCount(0);
+    await expect(page.locator('#mrKpiBody')).toContainText('not available yet');
+  });
 
   // ── Tabla partido a partido ────────────────────────────────────────────────
   test('lista cada partido con su resultado y marca lo que está sobre el promedio', async ({ page }) => {
