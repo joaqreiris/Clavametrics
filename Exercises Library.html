@@ -1419,6 +1419,15 @@
 
   btn.addEventListener('click', openMapDrills);
 
+  // El wizard de importación manda acá con ?mapdrills=1 cuando el archivo trajo drills que
+  // todavía no apuntan a ningún ejercicio: se abre el panel solo, sin que haya que buscarlo.
+  try {
+    if (new URLSearchParams(location.search).get('mapdrills') === '1') {
+      history.replaceState({}, '', location.pathname);   // no reabrirlo al recargar
+      openMapDrills();
+    }
+  } catch (_) {}
+
   async function openMapDrills(){
     const clubId = await window.getClubId();
     if (!clubId) return;

@@ -2067,6 +2067,10 @@
     let outlierCount = 0;
     let speedSpikeCount = 0;
     const warnings   = [];
+    // Nombre del CSV que no está en el squad → cuántas FILAS se saltearon por él. Antes esto
+    // era un warning por fila: un solo jugador con 30 filas llenaba las 5 líneas que muestra
+    // el resumen y tapaba a los demás.
+    const unmatchedPlayers = new Map();
     const UUID_RE    = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     const _rowKey    = r => `${r.player_id ?? '_'}__${r.session_id}`;
 
@@ -2077,7 +2081,7 @@
       const playerId  = key ? (confirmedMap[key] || null) : null;
 
       if (hasPlayerMapping && !playerId) {
-        if (key) warnings.push(`"${key}" not matched — row skipped`);
+        if (key) unmatchedPlayers.set(key, (unmatchedPlayers.get(key) || 0) + 1);
         continue;
       }
 
@@ -2194,7 +2198,7 @@
     if (outlierCount) warnings.push(`${outlierCount} row${outlierCount === 1 ? '' : 's'} flagged invalid (total_distance > ${((window.GpsUnits?.OUTLIER_MAX_M ?? 25000) / 1000)} km) — inserted but excluded from aggregates`);
     if (speedSpikeCount) warnings.push(`${speedSpikeCount} row${speedSpikeCount === 1 ? '' : 's'} had an impossible max_speed (≥ ${(window.GpsUnits?.MAX_SPEED_KMH ?? 40)} km/h) — that value was cleared, the rest of the row was kept`);
 
-    return { insertable, extrasMap, skippedCells, warnings, attrsBySession, outlierCount, speedSpikeCount };
+    return { insertable, extrasMap, skippedCells, warnings, attrsBySession, outlierCount, speedSpikeCount, unmatchedPlayers };
   }
 
   // ── CSV con columna de PERÍODO: consolidación a sesión + filas de período ─────────
@@ -2456,7 +2460,7 @@
 
       // ── 2. Build insertable rows ───────────────────────────
       setStatus('Mapping rows…');
-      const { insertable, extrasMap, skippedCells, warnings, attrsBySession } = buildInsertableRows(dateSessionMap, singleSessionId);
+      const { insertable, extrasMap, skippedCells, warnings, attrsBySession, unmatchedPlayers } = buildInsertableRows(dateSessionMap, singleSessionId);
 
       if (!insertable.length) {
         finishWithError('No importable rows found — check player matching and column mapping.');
@@ -2468,6 +2472,9 @@
       // (evita "ON CONFLICT cannot affect row a second time" de Postgres).
       const rowKey = r => `${r.player_id ?? '_'}__${r.session_id}`;
       let { sessionRows: deduped, periodRows } = _consolidatePeriods(insertable, extrasMap, rowKey);
+      // Los nombres del ARCHIVO, antes de que el modo 'skip' descarte los períodos ya existentes:
+      // un drill sigue sin asignar aunque su fila no se haya vuelto a insertar.
+      const _periodNamesInFile = [...new Set(periodRows.map(r => r.period_name).filter(Boolean))];
 
       // ── 2b. ¿Ya existen reportes GPS para estas filas? → preguntar qué hacer ──
       // Robustez cross-fuente (CSV ↔ API Catapult): el upsert de abajo PISA silenciosamente
@@ -2639,6 +2646,24 @@
         }
       } catch (e) { console.warn('gps import MD/MC-gap detection:', e); }
 
+      // ── 4b. Drills sin asignar ────────────────────────────
+      // Los períodos entran a gps_period_reports igual, pero v_gps_task_analysis los toma sólo
+      // si gps_drill_map dice a qué ejercicio pertenecen (o que se ignoran). Sin ese paso la
+      // importación "salió bien" y el análisis por tarea igual queda vacío, sin que nada avise.
+      let _unmappedDrills = [];
+      try {
+        const _names = _periodNamesInFile;
+        if (_names.length) {
+          // Sin .in(): un histórico puede traer cientos de nombres y la URL del GET revienta.
+          // El mapa del club es una fila por nombre de drill — barato de traer entero.
+          const { data: _map } = await window.sb.from('gps_drill_map')
+            .select('period_name,exercise_id,ignored').eq('club_id', clubId);
+          const _decided = new Set((_map || [])
+            .filter(m => m.exercise_id || m.ignored).map(m => m.period_name));
+          _unmappedDrills = _names.filter(n => !_decided.has(n)).sort((a, b) => a.localeCompare(b));
+        }
+      } catch (e) { console.warn('gps import unmapped-drills check:', e); }
+
       // ── 5. Success ────────────────────────────────────────
       document.getElementById('wizSpinner')?.remove();
       const sessionCount    = isMultiMode ? Object.keys(dateSessionMap).length : 1;
@@ -2654,6 +2679,9 @@
         ? ` · ${attrCount} session attribute${attrCount !== 1 ? 's' : ''}` : '';
       const periodLine      = periodRows.length
         ? ` · ${periodRows.length} period${periodRows.length !== 1 ? 's' : ''}` : '';
+      const _unmatchedList  = [...(unmatchedPlayers || new Map())]
+        .map(([name, rows]) => ({ name, rows }))
+        .sort((a, b) => b.rows - a.rows);
 
       document.getElementById('wizBody').innerHTML = `
         <div style="display:flex;flex-direction:column;align-items:center;gap:12px;padding:24px 0;text-align:center">
@@ -2683,6 +2711,20 @@
             <div style="font:500 11.5px/1.5 var(--cm-font-mono);color:var(--cm-fg-muted);margin-bottom:8px">${_mdGapDays.map(d => d.date).join(' · ')}</div>
             <button class="cm-btn is-ghost is-sm" id="wizAssignMd" style="height:28px"><i class="ti ti-clipboard-list" style="font-size:12px"></i>${_wt('gps_import.md_gap_cta','Assign in Daily Planning')}</button>
           </div>` : ''}
+          ${_unmappedDrills.length ? `
+          <div style="width:100%;padding:10px 12px;background:rgba(245,158,11,.08);border:1px solid var(--cm-warning);border-radius:var(--cm-r-3);text-align:left">
+            <div style="display:flex;align-items:center;gap:6px;font:600 12px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong);margin-bottom:4px"><i class="ti ti-route" style="font-size:14px;color:var(--cm-warning)"></i>${_wt('gps_import.drill_gap_title','Drills not linked to an exercise')} (${_unmappedDrills.length})</div>
+            <div style="font:500 11.5px/1.45 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:7px">${_wt('gps_import.drill_gap_body','The GPS data is saved, but task analysis only shows drills that are linked to an exercise. Link them once and every future import with the same name lands on its own.')}</div>
+            <div style="font:500 11.5px/1.5 var(--cm-font-mono);color:var(--cm-fg-muted);margin-bottom:8px">${_unmappedDrills.slice(0, 8).map(esc).join(' · ')}${_unmappedDrills.length > 8 ? ` · +${_unmappedDrills.length - 8}` : ''}</div>
+            <button class="cm-btn is-ghost is-sm" id="wizMapDrills" style="height:28px"><i class="ti ti-route" style="font-size:12px"></i>${_wt('gps_import.drill_gap_cta','Map drills')}</button>
+          </div>` : ''}
+          ${_unmatchedList.length ? `
+          <div style="width:100%;padding:10px 12px;background:rgba(245,158,11,.08);border:1px solid var(--cm-warning);border-radius:var(--cm-r-3);text-align:left">
+            <div style="display:flex;align-items:center;gap:6px;font:600 12px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong);margin-bottom:4px"><i class="ti ti-user-question" style="font-size:14px;color:var(--cm-warning)"></i>${_wt('gps_import.unmatched_title','Players not in the squad')} (${_unmatchedList.length})</div>
+            <div style="font:500 11.5px/1.45 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:7px">${_wt('gps_import.unmatched_body','These names came in the file but are not in your squad, so their rows were skipped. Add them in Squad and import the file again to recover their data.')}</div>
+            <div style="font:500 11.5px/1.5 var(--cm-font-mono);color:var(--cm-fg-muted);margin-bottom:8px">${_unmatchedList.slice(0, 8).map(u => `${esc(u.name)} (${u.rows})`).join(' · ')}${_unmatchedList.length > 8 ? ` · +${_unmatchedList.length - 8}` : ''}</div>
+            <button class="cm-btn is-ghost is-sm" id="wizOpenSquad" style="height:28px"><i class="ti ti-users-group" style="font-size:12px"></i>${_wt('gps_import.unmatched_cta','Open Squad')}</button>
+          </div>` : ''}
         </div>`;
       document.getElementById('wizFooter').innerHTML = `<div class="right"><button class="cm-btn is-primary is-sm" id="wizDone">Done</button></div>`;
       document.getElementById('wizDone').addEventListener('click', () => {
@@ -2694,6 +2736,13 @@
       document.getElementById('wizAssignMd')?.addEventListener('click', () => {
         const g = _mdGapDays[0]; if (!g) return;
         window.location.href = `Daily Planning.html?date=${g.date}${g.sessionId ? `&session=${g.sessionId}` : ''}`;
+      });
+      // Abre la biblioteca con el panel de mapeo ya desplegado (?mapdrills=1).
+      document.getElementById('wizMapDrills')?.addEventListener('click', () => {
+        window.location.href = 'Exercises Library.html?mapdrills=1';
+      });
+      document.getElementById('wizOpenSquad')?.addEventListener('click', () => {
+        window.location.href = 'Squad.html';
       });
       // Sugerencia: abrir Calendar en el mes del primer día sin microciclo, para crear/extender el MC.
       document.getElementById('wizCreateMc')?.addEventListener('click', () => {
