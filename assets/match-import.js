@@ -49,6 +49,7 @@
       .mi-msg { font:600 12px/1.3 var(--cm-font-sans); }
       .mi-stats { margin-top:18px; padding-top:18px; border-top:1px solid var(--cm-border-soft); }
       .mi-stats-h { font:600 12px/1 var(--cm-font-sans); letter-spacing:.04em; text-transform:uppercase; color:var(--cm-fg-strong); margin-bottom:10px; }
+      .mi-hint { margin:-4px 0 10px; font:400 12px/1.5 var(--cm-font-sans); color:var(--cm-fg-muted); }
 
       /* Export de equipo de Wyscout: se confirma lo detectado, no se mapea columna a columna. */
       .mi-ts { margin-top:12px; padding:12px 13px; border:1px solid var(--cm-info-bd); background:var(--cm-info-bg); border-radius:var(--cm-r-3); display:flex; flex-direction:column; gap:8px; }
@@ -460,12 +461,14 @@
   function updateStatsSection(){
     const host = $('miStatsSection'); if (!host) return;
     if (!_matchId){
-      host.innerHTML = `<div class="mi-stats-h">${esc(tt('match_reports.player_stats_import', 'Player stats import'))}</div>
+      host.innerHTML = `<div class="mi-stats-h">${esc(tt('match_reports.stats_import', 'Import stats'))}</div>
         <div style="color:var(--cm-fg-faint);font:var(--cm-body-sm)">${esc(tt('match_reports.save_details_first', 'Save the match details first.'))}</div>`;
       return;
     }
     host.innerHTML = `
-      <div class="mi-stats-h">${esc(tt('match_reports.player_stats_import', 'Player stats import'))}</div>
+      <div class="mi-stats-h">${esc(tt('match_reports.stats_import', 'Import stats'))}</div>
+      <p class="mi-hint">${esc(tt('match_reports.stats_import_hint',
+        'Player stats (CSV/Excel, or a Wyscout event XML), or a Wyscout Team Stats export for team metrics. The file is recognised on its own.'))}</p>
       <div class="mi-row" style="align-items:flex-end">
         <label class="mi-field" style="flex:0 0 150px"><span class="mi-l">${esc(tt('match_reports.provider', 'Provider'))}</span>
           <select id="miProvider" class="cm-select"><option value="generic">${esc(tt('match_reports.provider_generic', 'Generic'))}</option><option value="wyscout">Wyscout</option></select></label>
@@ -511,9 +514,8 @@
   /* El rival ya está escrito en el partido; se usa para saber cuál de las dos filas del
      Excel somos nosotros sin preguntarlo. */
   function currentOpponentName(){
-    const el = $('miOpponent');
-    if (el && el.value) return el.value;
-    return (window.mrCurrentMatch && window.mrCurrentMatch.opponent) || null;
+    const el = $('miOpp');                 // el campo "Rival" del formulario de arriba
+    return (el && el.value.trim()) || null;
   }
 
   /* ── El export de equipo: confirmar, no mapear ─────────────────────────────── */
