@@ -3,9 +3,11 @@
 import { test, expect } from '@playwright/test';
 import { SB, PROFILE, CLUB, injectSession, mockBase } from './_shared.js';
 
+/* El calendario guarda el tipo en minúscula. El mock respeta ese filtro a propósito:
+   si alguien vuelve a consultar 'Match', esta sesión no se devuelve y los tests caen. */
 const SESSION_M = {
   id: 'sess-m1', club_id: 'club-1', title: 'Angkor Tiger (A)',
-  session_type: 'Match', session_date: '2026-09-05', duration: 93, notes: '',
+  session_type: 'match', session_date: '2026-09-05', duration: 93, notes: '',
 };
 
 const RESULT = {
@@ -76,7 +78,11 @@ async function gotoMatch(page, { teamRows = TEAM_ROWS } = {}) {
   await page.route(`${SB}/rest/v1/**`, async route => {
     const url = route.request().url();
     if (url.includes('/team_match_stats'))  return route.fulfill({ json: teamRows });
-    if (url.includes('/training_sessions')) return route.fulfill({ json: [SESSION_M] });
+    if (url.includes('/training_sessions')) {
+      // Sólo responde si se pidió el tipo tal como lo escribe el calendario.
+      const ok = /session_type=eq\.match(&|$)/.test(url);
+      return route.fulfill({ json: ok ? [SESSION_M] : [] });
+    }
     if (url.includes('/match_results'))     return route.fulfill({ json: [RESULT] });
     // Este handler corre antes que el de mockBase y `continue()` saltaría a la red, así
     // que el perfil y el club se sirven acá: sin club_id el boot corta y no consulta nada.
@@ -142,6 +148,14 @@ test.describe('Match Reports · estadísticas de equipo', () => {
     // Las recuperaciones en campo rival bajan 11 → 8: empeora.
     await trend.locator('#mrTrendMetric').selectOption('recoveries_high');
     await expect(trend.locator('.tr-kpi').first().locator('.kd')).toHaveClass(/down/);
+  });
+
+  test('encuentra la sesión de partido del calendario, que se guarda en minúscula', async ({ page }) => {
+    await gotoMatch(page);
+    // Si la consulta volviera a pedir 'Match', el mock devuelve [] y no hay partido
+    // que mostrar: la fecha del encabezado se queda en el guion.
+    await expect(page.locator('#mrDate')).not.toHaveText('—');
+    await expect(page.locator('#mrPlayerBody')).not.toContainText('No match sessions');
   });
 
   test('sin nada importado invita a importar en vez de mostrar una card vacía', async ({ page }) => {

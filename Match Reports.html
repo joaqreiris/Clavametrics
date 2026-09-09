@@ -761,11 +761,14 @@
     if (!clubId) return;
     await mrInitTeamSwitch(clubId);
 
-    // Load most recent match session
+    // Load most recent match session.
+    // El tipo se guarda en minúscula ('match') en todo el resto de la app — Availability,
+    // Load Planner, day-context y las páginas de GPS lo consultan así. Esta pantalla
+    // buscaba 'Match' y por eso no encontraba NINGÚN partido, por muchos que hubiera.
     let _mrMatchQ = window.sb.from('training_sessions')
       .select('id, title, session_date, duration, notes')
       .eq('club_id', clubId)
-      .eq('session_type', 'Match');
+      .eq('session_type', 'match');
     if (_mrTeamId) _mrMatchQ = _mrMatchQ.eq('team_id', _mrTeamId);
     const { data: matches } = await _mrMatchQ
       .order('session_date', { ascending: false })

@@ -89,7 +89,9 @@
       _teamId = (teamSel && teamSel.value) || null;
       let q = window.sb.from('training_sessions')
         .select('id, title, session_date')
-        .eq('club_id', _clubId).eq('session_type', 'Match')
+        // 'match' en minúscula: es como lo guarda el calendario y como lo lee el resto
+        // de la app. Con 'Match' este selector salía siempre vacío.
+        .eq('club_id', _clubId).eq('session_type', 'match')
         .order('session_date', { ascending: false }).limit(30);
       if (_teamId) q = q.eq('team_id', _teamId);
       const { data } = await q;
