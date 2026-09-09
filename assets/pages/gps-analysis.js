@@ -2710,6 +2710,14 @@ async function _gpResolvePending(clubId, p, body, ov, btn) {
     if (res && Number(res.rows) === 0) {
       showToast(tt('gps_analysis.pending_zero', 'Linked, but 0 GPS rows came down — check the metric mapping or that the activity has data.'), true);
     }
+    // Atletas de Catapult sin vincular: sus filas NO se importan. El sync por rango ya lo avisa en
+    // la barra de Admin; acá no se avisaba nada y el dato faltante pasaba desapercibido.
+    // (Si el gps-sync desplegado es viejo no manda `skipped` y esto no molesta.)
+    if (res && Number(res.skipped) > 0) {
+      showToast(tt('gps_analysis.pending_skipped',
+        '{n} rows were skipped: there are Catapult athletes not linked to a player. Link them in Admin → Map athletes and sync again.',
+        { n: Number(res.skipped) }), true);
+    }
     showToast(p.create ? tt('gps_analysis.pending_done', 'Session created — GPS attached') : tt('gps_analysis.pending_assoc_done', 'GPS attached to the session'));
     window.cmInvalidateGpsCache?.();
     // Recargar las OPCIONES del filterbar (fechas/sesiones) — cargaron al abrir la página, antes

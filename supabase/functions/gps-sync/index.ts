@@ -1077,8 +1077,12 @@ Deno.serve(async (req: Request) => {
       // Limpiar el pendiente por si processActivity no lo hizo (ej. la actividad no vino en la lista).
       await adminClient.from('gps_pending_activities').delete().eq('club_id', clubId).eq('external_activity_id', activityId);
 
-      console.log('[gps-sync] attach', { activityId, sessionId, rows: result.rows, errs: result.errs });
-      return json({ ok: true, rows: result.rows, periods: result.per, errs: result.errs }, 200);
+      console.log('[gps-sync] attach', { activityId, sessionId, rows: result.rows, skipped: result.skip, errs: result.errs });
+      // `skipped` = filas de atletas Catapult que no están vinculados a un jugador. En el sync por
+      // RANGO esto viaja en los totales del job y la barra lo avisa; el attach lo descartaba, y es
+      // JUSTO el camino habitual en temporada en curso (la actividad del día queda pendiente hasta
+      // que existe la sesión), así que el aviso no aparecía nunca.
+      return json({ ok: true, rows: result.rows, periods: result.per, skipped: result.skip, errs: result.errs }, 200);
     }
 
     // ══ START MODE (client) ═══════════════════════════════════════════════

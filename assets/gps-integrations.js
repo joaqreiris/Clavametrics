@@ -462,6 +462,27 @@ window.cmMountGpsIntegrations = function (hostEl, opts) {
     }, 10000);
   }
 
+  // ── Drills sin asignar tras un sync ────────────────────────────────────────
+  // La sync escribe gps_period_reports con el nombre del drill de Catapult, pero
+  // v_gps_task_analysis sólo toma los que gps_drill_map apunta a un ejercicio (o marca como
+  // ignorados). Sin este recordatorio el sync dice "890 periods", parece que salió todo, y el
+  // análisis por tarea queda vacío. Se consulta UNA vez por job terminado y se repinta.
+  let _drillGap = { jobId:null, n:0 };
+  async function _checkDrillGap(prov, job){
+    if(_drillGap.jobId===job.id) return;              // ya consultado para este job
+    _drillGap = { jobId: job.id, n: 0 };
+    try{
+      const cid = await getClubId(); if(!cid) return;
+      const [pn, dm] = await Promise.all([
+        window.sb.from('v_gps_period_names').select('period_name').eq('club_id', cid),
+        window.sb.from('gps_drill_map').select('period_name,exercise_id,ignored').eq('club_id', cid),
+      ]);
+      const decided = new Set((dm.data||[]).filter(m=>m.exercise_id||m.ignored).map(m=>m.period_name));
+      const n = (pn.data||[]).filter(p=>p.period_name && !decided.has(p.period_name)).length;
+      if(_drillGap.jobId===job.id && n>0){ _drillGap.n = n; _paintSyncBar(prov); }
+    }catch(_){ /* el recordatorio es cosmético: nunca debe romper la barra */ }
+  }
+
   // Render the progress bar for a provider from its cached job + toggle its Sync button.
   function _paintSyncBar(prov){
     const bar=document.querySelector(`[data-syncbar="${prov}"]`); if(!bar) return;
@@ -521,6 +542,12 @@ window.cmMountGpsIntegrations = function (hostEl, opts) {
       ? `<span class="gps-sync-warn" style="display:inline-flex;align-items:center;gap:4px;color:var(--cm-warning,#d97706)"><i class="ti ti-alert-triangle-filled"></i>${_esc(tt('admin.gps_sync_unmapped_warn','Some GPS was skipped — Catapult athletes not linked yet. Their data won\'t import until you map them and re-sync.'))}</span><button class="gps-int-btn ghost" data-syncmap="${prov}">${tt('admin.gps_map_athletes','Map athletes')}</button>`
       : '';
 
+    // Recordatorio de mapeo: sólo con el sync terminado y períodos bajados.
+    if(isDone && (+t.periods||0)>0) _checkDrillGap(prov, job);
+    const warnDrills = (isDone && _drillGap.jobId===job.id && _drillGap.n>0)
+      ? `<span class="gps-sync-warn" style="display:inline-flex;align-items:center;gap:4px;color:var(--cm-warning,#d97706)"><i class="ti ti-route"></i>${_esc(tt('admin.gps_sync_drill_gap','{n} drills are not linked to an exercise yet — task analysis skips them.',{ n:_drillGap.n }))}</span><button class="gps-int-btn ghost" data-syncdrills="1">${tt('admin.gps_map_drills','Map drills')}</button>`
+      : '';
+
     bar.style.display='';
     bar.innerHTML=`
       <div class="gps-sync-row">
@@ -532,6 +559,7 @@ window.cmMountGpsIntegrations = function (hostEl, opts) {
         <span>${_esc(label)}</span>
         ${sum?`<span>· ${_esc(sum)}</span>`:''}
         ${warnUnlinked}
+        ${warnDrills}
         ${running?`<button class="gps-int-btn ghost gps-sync-cancel" data-synccancel="${prov}">${tt('admin.gps_cancel','Cancel')}</button>`:''}
         ${retry?`<button class="gps-int-btn ghost gps-sync-retry" data-syncretry="${prov}">${tt('admin.gps_retry','Retry')}</button>`:''}
         ${isDone?`<button class="gps-int-btn ghost gps-sync-dismiss" data-syncdismiss="${prov}">${tt('common.dismiss','Dismiss')}</button>`:''}
@@ -539,6 +567,10 @@ window.cmMountGpsIntegrations = function (hostEl, opts) {
     const rb=bar.querySelector('[data-syncretry]'); if(rb) rb.addEventListener('click',()=>syncNow(prov));
     const cb=bar.querySelector('[data-synccancel]'); if(cb) cb.addEventListener('click',()=>_cancelSync(prov));
     const mb=bar.querySelector('[data-syncmap]'); if(mb) mb.addEventListener('click',()=>mapAthletes(prov));
+    // Reusa el panel de la biblioteca (?mapdrills=1 lo abre solo). Se puede asignar o cerrar:
+    // el recordatorio no bloquea nada, y la barra se cierra con Dismiss.
+    const dr=bar.querySelector('[data-syncdrills]');
+    if(dr) dr.addEventListener('click',()=>{ window.location.href='Exercises Library.html?mapdrills=1'; });
     const db=bar.querySelector('[data-syncdismiss]'); if(db) db.addEventListener('click',()=>{ const iid=INTS[prov]?.id; if(iid) delete _syncJobs[iid]; _paintSyncBar(prov); });
 
     // El botón lleva el % para que el avance se vea también con la card colapsada o sin mirar
