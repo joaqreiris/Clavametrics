@@ -583,6 +583,51 @@
     $('miImportTS').addEventListener('click', doImportTeamStats);
   }
 
+  /**
+   * Pasa al partido lo que el export de equipo sabe y el informe todavía no: el marcador
+   * y la posesión. Sólo rellena huecos — un valor ya cargado no se pisa, porque puede
+   * ser una corrección deliberada de lo que dice el proveedor.
+   * @returns {Promise<string[]>} los campos que quedaron completados, para avisar.
+   */
+  async function fillMatchFromTeamStats(){
+    if (!_teamStats || !_matchId) return [];
+    const us = _teamStats.sides.find(s => s.side === 'us');
+    const them = _teamStats.sides.find(s => s.side === 'them');
+    if (!us) return [];
+
+    let current = null;
+    try {
+      const { data } = await window.sb.from('match_results')
+        .select('score_for, score_against, possession, competition')
+        .eq('id', _matchId).limit(1);
+      current = (data && data[0]) || null;
+    } catch (_e) { return []; }
+    if (!current) return [];
+
+    const patch = {}, names = [];
+    const gf = us.stats.goals;
+    // Los goles en contra salen del rival; si el archivo trajo un solo equipo, los
+    // encajados del nuestro dicen lo mismo.
+    const ga = (them && them.stats.goals != null) ? them.stats.goals : us.stats.conceded_goals;
+
+    if (current.score_for == null && gf != null && current.score_against == null && ga != null){
+      patch.score_for = Math.round(gf);
+      patch.score_against = Math.round(ga);
+      names.push(tt('match_reports.score', 'score'));
+    }
+    if (current.possession == null && us.stats.possession_pct != null){
+      patch.possession = Math.round(us.stats.possession_pct);
+      names.push(tt('match_reports.possession_label', 'possession'));
+    }
+    if (!names.length) return [];
+
+    try {
+      const { error } = await window.sb.from('match_results').update(patch).eq('id', _matchId);
+      if (error) return [];
+    } catch (_e) { return []; }
+    return names;
+  }
+
   async function doImportTeamStats(){
     const msg = $('miStatsMsg'); if (msg){ msg.style.color = 'var(--cm-danger)'; msg.textContent = ''; }
     if (!_matchId){ if (msg) msg.textContent = tt('match_reports.save_match_first', 'Save the match first.'); return; }
@@ -597,9 +642,17 @@
       const res = await window.sb.from('team_match_stats')
         .upsert(payloads, { onConflict: 'match_id,side' });
       if (res.error) throw res.error;
+
+      // El archivo también trae el marcador y la posesión, y el partido puede tenerlos
+      // en blanco: el encabezado quedaba con dos guiones al lado de una card llena de
+      // datos. Se completa SÓLO lo que falte — lo que se cargó a mano manda.
+      const filled = await fillMatchFromTeamStats();
+
       if (msg){
         msg.style.color = 'var(--cm-success)';
-        msg.textContent = tt('match_reports.ts_imported', '✓ Team stats imported');
+        msg.textContent = tt('match_reports.ts_imported', '✓ Team stats imported')
+          + (filled.length ? ' · ' + tt('match_reports.ts_also_filled',
+              'also filled in: {fields}', { fields: filled.join(', ') }) : '');
       }
       close();
       location.reload();

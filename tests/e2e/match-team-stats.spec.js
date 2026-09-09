@@ -256,3 +256,107 @@ test.describe('Match Reports · estadísticas de equipo', () => {
     expect(head.some(h => h.includes('km/h'))).toBe(true);
   });
 });
+
+/* ── El importador, de punta a punta ────────────────────────────────────────────
+   Se sube un .xlsx de verdad con la forma del export de Wyscout (encabezados que
+   abarcan varias columnas incluidos) y se mira qué termina viajando a la base. */
+test.describe('Match Reports · importar el export de equipo', () => {
+  const FIXTURE = 'tests/fixtures/wyscout-team-stats.xlsx';
+
+  async function openImporter(page, captured) {
+    await injectSession(page);
+    await page.addInitScript(() => {
+      Object.defineProperty(window, 'guardModule', { get: () => async () => true, set: () => {}, configurable: true });
+      Object.defineProperty(window, 'CM_PLAN_GATING_ENABLED', { get: () => false, set: () => {}, configurable: true });
+    });
+    await mockBase(page);
+    await page.route(`${SB}/rest/v1/**`, async route => {
+      const url = route.request().url(), method = route.request().method();
+      const one = (route.request().headers()['accept'] || '').includes('pgrst.object');
+      if (url.includes('/team_match_stats')) {
+        if (method === 'POST') { captured.upsert = JSON.parse(route.request().postData() || '[]'); return route.fulfill({ json: [] }); }
+        return route.fulfill({ json: [] });
+      }
+      if (url.includes('/match_results')) {
+        if (method === 'PATCH') { captured.patch = JSON.parse(route.request().postData() || '{}'); return route.fulfill({ json: [] }); }
+        // El partido está guardado pero sin marcador ni posesión: los huecos que el
+        // archivo tiene que completar.
+        const row = { id: 'mres-3', club_id: 'club-1', session_id: 'sess-m1', opponent: 'Angkor Tiger',
+                      match_date: '2026-09-05', score_for: null, score_against: null, possession: null, competition: 'CPL' };
+        return route.fulfill({ json: one ? row : [row] });
+      }
+      if (url.includes('/training_sessions')) return route.fulfill({ json: /session_type=eq\.match(&|$)/.test(url) ? [SESSION_M] : [] });
+      if (url.includes('/gps_reports')) return route.fulfill({ json: [] });
+      if (url.includes('/profiles')) return route.fulfill({ json: one ? PROFILE : [PROFILE] });
+      if (url.includes('/clubs')) return route.fulfill({ json: one ? CLUB : [CLUB] });
+      return route.fulfill({ json: one ? {} : [] });
+    });
+    await page.goto('/Match%20Reports.html');
+    await page.waitForSelector('#impOpen', { timeout: 15_000 });
+    await page.click('#impOpen');
+    // Elegir la sesión es lo que carga el partido: sin match_id el importador no tiene
+    // dónde colgar las estadísticas y deja el campo de archivo bloqueado.
+    await page.waitForSelector('#miSession', { timeout: 15_000 });
+    await page.selectOption('#miSession', 'sess-m1');
+    await page.waitForSelector('#miFile:not([disabled])', { timeout: 15_000 });
+  }
+
+  test('reconoce el archivo, dice quién es quién y guarda las 27 métricas de cada lado', async ({ page }) => {
+    const captured = {};
+    await openImporter(page, captured);
+    await page.setInputFiles('#miFile', FIXTURE);
+    await page.waitForSelector('.mi-ts', { timeout: 15_000 });
+
+    // Lo detectó sin que nadie eligiera un formato, y ubicó los dos equipos.
+    await expect(page.locator('.mi-ts')).toContainText('Kompong Dewa');
+    await expect(page.locator('.mi-ts')).toContainText('Angkor Tiger');
+    await expect(page.locator('.mi-ts-tag.is-us')).toHaveCount(1);
+    // Sin aviso de "no pude identificar": el rival del partido alcanzó para resolverlo.
+    await expect(page.locator('.mi-ts-warn')).toHaveCount(0);
+    // Y muestra números antes de guardar nada.
+    await expect(page.locator('.mi-ts-peeks')).toContainText('62,1 %');
+
+    // Esperar a que el upsert llegue, no un tiempo fijo: con la máquina cargada un
+    // sleep se queda corto y el test falla sin que nada esté roto.
+    const upsertDone = page.waitForRequest(r =>
+      r.url().includes('/team_match_stats') && r.method() === 'POST', { timeout: 15_000 });
+    await page.click('#miImportTS');
+    await upsertDone;
+    await expect.poll(() => captured.upsert, { timeout: 10_000 }).toBeTruthy();
+
+    expect(Array.isArray(captured.upsert)).toBe(true);
+    expect(captured.upsert).toHaveLength(2);
+    const us = captured.upsert.find(r => r.side === 'us');
+    const them = captured.upsert.find(r => r.side === 'them');
+    expect(us.team_name).toBe('Kompong Dewa');
+    expect(them.team_name).toBe('Angkor Tiger');
+    expect(us.formation).toBe('4-3-3');
+    expect(us.source).toBe('wyscout_xlsx');
+    // Los encabezados que abarcan varias columnas llegaron expandidos y en su lugar.
+    expect(us.stats.possession_pct).toBeCloseTo(62.14, 2);
+    expect(us.stats.recoveries_high).toBe(8);
+    expect(us.stats.losses_low).toBe(21);
+    expect(us.stats.progressive_passes_accurate).toBe(49);
+    expect(us.stats.penalty_area_entries_runs).toBe(9);
+    expect(us.stats.ppda).toBeCloseTo(5.88, 2);
+    expect(them.stats.ppda).toBeCloseTo(10.07, 2);
+  });
+
+  test('completa el marcador y la posesión del partido, que estaban vacíos', async ({ page }) => {
+    const captured = {};
+    await openImporter(page, captured);
+    await page.setInputFiles('#miFile', FIXTURE);
+    await page.waitForSelector('.mi-ts', { timeout: 15_000 });
+    const patchDone = page.waitForRequest(r =>
+      r.url().includes('/match_results') && r.method() === 'PATCH', { timeout: 15_000 });
+    await page.click('#miImportTS');
+    await patchDone;
+    await expect.poll(() => captured.patch, { timeout: 10_000 }).toBeTruthy();
+
+    // El archivo dice 2:1 y 62,14 % de posesión.
+    expect(captured.patch).toBeTruthy();
+    expect(captured.patch.score_for).toBe(2);
+    expect(captured.patch.score_against).toBe(1);
+    expect(captured.patch.possession).toBe(62);
+  });
+});
