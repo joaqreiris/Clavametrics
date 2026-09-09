@@ -120,10 +120,14 @@
     { id:'high_speed_distance_per_min',      name:'HSR / min',         unit:'m/min',  kind:'avg' },
     { id:'very_high_speed_distance_per_min', name:'VHSR / min',        unit:'m/min',  kind:'avg' },
     { id:'hmld_per_min',                     name:'HMLD / min',        unit:'m/min',  kind:'avg' },
-    { id:'sprint_distance_per_min',          name:'Sprint dist / min', unit:'m/min',  kind:'avg', hidden:true },
-    { id:'player_load_per_min',              name:'Player load / min', unit:'AU/min', kind:'avg', hidden:true },
-    { id:'accelerations_per_min',            name:'Accel / min',       unit:'/min',   kind:'avg', hidden:true },
-    { id:'decelerations_per_min',            name:'Decel / min',       unit:'/min',   kind:'avg', hidden:true },
+    { id:'sprint_distance_per_min',          name:'Sprint dist / min', unit:'m/min',  kind:'avg' },
+    { id:'player_load_per_min',              name:'Player load / min', unit:'AU/min', kind:'avg' },
+    { id:'accelerations_per_min',            name:'Accel / min',       unit:'/min',   kind:'avg' },
+    { id:'decelerations_per_min',            name:'Decel / min',       unit:'/min',   kind:'avg' },
+    // Acc+Dec por minuto: la carga mecánica es de las que más cambia con la duración de la
+    // tarea, y era la única familia sin versión normalizada. Se deriva sumando las dos /min
+    // (ver DERIVED en el resolver), así que no hace falta ninguna columna nueva.
+    { id:'acc_dec_per_min',                  name:'Acc+Dec / min',     unit:'/min',   kind:'avg' },
     { id:'m2_per_player',                    name:'m² per player',     unit:'m²',     kind:'avg' },
     // Optional (not imposed): the user adds these from "+ Add metric" if wanted. work_time is
     // computed in the resolver from duration_seconds → MINUTES; kind 'avg' → default agg AVG
@@ -901,15 +905,15 @@
               </div>
             </div>
             <div class="es-sec">
-              <div class="es-toggle">
+              <div class="es-toggle" data-only="bars,line,scatter,radar,box,demand">
                 <span class="tx"><span class="t" data-i18n="gps_analysis.builder_axes">Axes</span><span class="s" data-i18n="gps_analysis.builder_axes_sub">Show axis lines &amp; labels</span></span>
                 <button class="es-sw-t is-on" data-toggle="axes"></button>
               </div>
-              <div class="es-toggle">
+              <div class="es-toggle" data-only="bars,line,scatter,radar">
                 <span class="tx"><span class="t" data-i18n="gps_analysis.builder_legend">Legend</span><span class="s" data-i18n="gps_analysis.builder_legend_sub">Show metric legend</span></span>
                 <button class="es-sw-t is-on" data-toggle="legend"></button>
               </div>
-              <div class="es-toggle">
+              <div class="es-toggle" data-only="bars,line,scatter,radar,ranking">
                 <span class="tx"><span class="t" data-i18n="gps_analysis.builder_data_labels">Data labels</span><span class="s" data-i18n="gps_analysis.builder_data_labels_sub">Show values on chart</span></span>
                 <button class="es-sw-t" data-toggle="labels"></button>
               </div>

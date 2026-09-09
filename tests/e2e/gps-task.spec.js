@@ -353,3 +353,30 @@ test.describe('GPS · comparar ejercicios de distinta duración', () => {
     await expect(aviso(page)).toHaveCount(0);
   });
 });
+
+test.describe('GPS · carga mecánica por minuto', () => {
+  test.describe.configure({ timeout: 60_000 });
+
+  // accelerations_per_min y decelerations_per_min existían pero estaban escondidas, y su suma
+  // (Acc+Dec / min) no existía: la carga mecánica era la única familia que no se podía mirar
+  // normalizada por duración, que es justo donde más engaña el acumulado.
+  test('Acc+Dec / min suma las dos columnas por minuto', async ({ page }) => {
+    const cards = [{ id: 'card-ad', position: 0, source: 'builder', size: 'lg', config: {
+      schema: 'gp.card/v1', title: 'Carga mecánica', viz: 'bars', source: 'task',
+      scope: { level: 'squad' }, range: { type: 'last30' }, comparison: null,
+      metrics: [{ id: 'acc_dec_per_min', agg: 'avg', kind: 'avg', unit: '/min' }],
+      dimensions: [{ id: 'drill' }], style: { color: '#15803D' } } }];
+    await openTask(page, cards);
+    await page.locator('.gp-sec[data-custom]').click();
+    await expect(page.locator('.gp-view.is-on .gp-c[data-card-id="card-ad"] canvas')).toHaveCount(1, { timeout: 20_000 });
+    await page.waitForTimeout(700);
+    const vals = await page.evaluate(() => {
+      const cv = document.querySelector('.gp-view.is-on .gp-c[data-card-id="card-ad"] canvas');
+      const ch = window.Chart.getChart(cv);
+      return ch.data.datasets[0].data.map(Number);
+    });
+    // El fixture da 1.2 accel/min + 1 decel/min en cada fila ⇒ 2.2 por ejercicio.
+    expect(vals.length).toBeGreaterThan(0);
+    vals.forEach(v => expect(v).toBeCloseTo(2.2, 5));
+  });
+});
