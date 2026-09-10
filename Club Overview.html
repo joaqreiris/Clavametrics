@@ -88,12 +88,34 @@
 .co-chip.neutral{background:var(--cm-neutral-bg);color:var(--cm-neutral);border-color:var(--cm-neutral-bd)}
 .co-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
 
-.co-grid2{display:grid;grid-template-columns:1fr 380px;gap:18px;align-items:start}
 .co-panel{background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-6);box-shadow:var(--cm-shadow-1);overflow:hidden}
 .co-phead{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--cm-border)}
 .co-phead h2{font:var(--cm-title);color:var(--cm-fg-strong);margin:0}
 .co-legend{display:flex;align-items:center;gap:12px;font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted);flex-wrap:wrap}
 .co-legend span{display:inline-flex;align-items:center;gap:5px}
+
+/* Barra de tipos: la leyenda de puntitos, ahora clicable. Apagar un tipo lo
+   saca de la grilla — no de los datos: los KPI y las alertas no se tocan. */
+.co-typebar{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.co-tchip{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border-radius:var(--cm-r-pill);
+  border:1px solid var(--cm-border);background:var(--cm-surface);color:var(--cm-fg-strong);
+  font:600 11.5px/1 var(--cm-font-sans);cursor:pointer;white-space:nowrap;
+  transition:background var(--cm-dur-1) var(--cm-ease),border-color var(--cm-dur-1) var(--cm-ease),opacity var(--cm-dur-1) var(--cm-ease)}
+.co-tchip:hover{background:var(--cm-bg-soft)}
+.co-tchip[aria-pressed="false"]{opacity:.5;color:var(--cm-fg-muted);background:transparent}
+.co-tchip[aria-pressed="false"] .co-dot{background:var(--cm-fg-faint)!important}
+.co-tchip.all{font-weight:700}
+
+.co-dens{display:inline-flex;align-items:center;gap:2px;padding:2px;background:var(--cm-bg-sunk);
+  border:1px solid var(--cm-border);border-radius:var(--cm-r-pill)}
+.co-dens button{height:24px;padding:0 11px;border:0;border-radius:var(--cm-r-pill);background:transparent;
+  color:var(--cm-fg-muted);font:600 11.5px/1 var(--cm-font-sans);cursor:pointer;white-space:nowrap;
+  transition:background var(--cm-dur-1) var(--cm-ease),color var(--cm-dur-1) var(--cm-ease)}
+.co-dens button:hover{color:var(--cm-fg)}
+.co-dens button.on{background:var(--cm-surface);color:var(--cm-fg-strong);box-shadow:var(--cm-shadow-1)}
+.co-toolbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 18px;border-bottom:1px solid var(--cm-border);background:var(--cm-bg-soft)}
+.co-drawer .co-phead .mdtag{margin-left:0}
+.co-drawer .co-phead h2{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
 /* schedule */
 .co-sched{overflow-x:auto}
@@ -121,6 +143,7 @@
 .co-ev{display:block;border-radius:var(--cm-r-2);padding:5px 7px;border:1px solid var(--cm-border);border-left-width:3px;background:var(--cm-surface-2)}
 .co-ev .et{font:600 11px/1.25 var(--cm-font-sans);color:var(--cm-fg-strong);display:flex;align-items:flex-start;gap:5px;overflow-wrap:anywhere;word-break:break-word}
 .co-ev .et i{font-size:12px;flex-shrink:0;margin-top:1px}
+.co-ev .et > span{min-width:0}
 .co-md{max-width:calc(100% - 12px)}
 .co-ev .em{font:500 10px/1.2 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:2px}
 .co-ev.field{border-left-color:var(--cm-accent)}
@@ -129,9 +152,64 @@
 .co-ev.recovery{border-left-color:var(--cm-violet)}
 .co-ev.travel{border-left-color:#06B6D4}
 .co-ev.other{border-left-color:var(--cm-neutral)}
+
+/* Logística (comidas, reuniones, viajes, prensa…) condensada en pastillas.
+   Antes cada almuerzo ocupaba lo mismo que un entrenamiento de 720 AU y
+   estiraba la fila del equipo entero: un sábado de partido llegaba a 900px
+   de alto. La pastilla dice lo único que se necesita de un vistazo —qué y a
+   qué hora—; el detalle completo sigue a un clic, en el panel lateral. */
+.co-logi{display:flex;flex-wrap:wrap;gap:4px;margin-top:auto;padding-top:5px;border-top:1px dashed var(--cm-border-soft)}
+.co-cell > .co-logi:first-child,.co-md + .co-logi{margin-top:0;padding-top:0;border-top:0}
+.co-pill{display:inline-flex;align-items:center;gap:4px;max-width:100%;height:20px;padding:0 7px;
+  border:1px solid var(--cm-border);border-radius:var(--cm-r-pill);background:var(--cm-bg-soft);
+  color:var(--cm-fg-muted);font:600 10px/1 var(--cm-font-mono);cursor:pointer;
+  transition:background var(--cm-dur-1) var(--cm-ease),border-color var(--cm-dur-1) var(--cm-ease),color var(--cm-dur-1) var(--cm-ease)}
+.co-pill i{font-size:12px;flex-shrink:0;color:var(--cm-fg-faint)}
+.co-pill span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.co-pill:hover{background:var(--cm-surface);border-color:var(--cm-accent);color:var(--cm-fg-strong)}
+.co-pill.sel{border-color:var(--cm-accent);background:var(--cm-accent-soft);color:var(--cm-accent)}
+.co-pill.sel i{color:var(--cm-accent)}
+.co-pill.travel i{color:#0891B2}
+.co-pill.recovery i{color:var(--cm-violet)}
+.co-pill.gym i{color:var(--cm-info)}
+.co-pill.field i{color:var(--cm-accent)}
+
+/* Densidad compacta: el título va en una línea con ellipsis. Es lo que evita
+   que «ACTIVATION GYM» se parta en «ACTIVATI / ON GYM» y triplique la altura. */
+.co-sched.is-compact .co-cell{min-height:56px;padding:5px;gap:3px}
+.co-sched.is-compact .co-ev{padding:4px 6px}
+.co-sched.is-compact .co-ev .et{align-items:center;overflow-wrap:normal;word-break:normal}
+.co-sched.is-compact .co-ev .et > span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.co-sched.is-compact .co-ev .et i{margin-top:0}
+.co-sched.is-compact .co-ev .em{font-size:9.5px}
+.co-sched.is-compact .co-pill{height:18px;padding:0 6px;font-size:9.5px}
+.co-sched.is-compact .co-pill i{font-size:11px}
+.co-sched.is-compact .co-rl{padding:8px 10px}
+.co-sched.is-compact .co-noplan,.co-sched.is-compact .co-empty-cell{min-height:44px}
 .co-noplan{display:flex;align-items:center;justify-content:center;gap:6px;min-height:64px;border:1px dashed var(--cm-warning-bd);border-radius:var(--cm-r-2);color:var(--cm-warning);font:500 10.5px/1.2 var(--cm-font-sans);text-align:center;background:var(--cm-warning-bg)}
 .co-noplan i{font-size:13px}
 .co-empty-cell{min-height:64px}
+
+/* Detalle del día: antes era una columna fija de 380px que le comía a la
+   grilla un tercio del ancho — con siete días eso dejaba columnas de ~120px
+   y los títulos se partían solos. Ahora es un panel lateral que se abre al
+   hacer clic, y la semana usa los 1400px enteros. */
+.co-drawer-ov{position:fixed;inset:0;background:rgba(15,23,42,.34);opacity:0;pointer-events:none;
+  transition:opacity var(--cm-dur-2) var(--cm-ease);z-index:var(--cm-z-overlay)}
+.co-drawer{position:fixed;top:0;right:0;height:100dvh;width:min(440px,94vw);display:flex;flex-direction:column;
+  background:var(--cm-surface);border-left:1px solid var(--cm-border);border-radius:0;box-shadow:var(--cm-shadow-3);
+  transform:translateX(100%);transition:transform var(--cm-dur-3) var(--cm-ease-out);
+  z-index:calc(var(--cm-z-overlay) + 1);visibility:hidden}
+body.co-drawer-open .co-drawer{transform:none;visibility:visible}
+body.co-drawer-open .co-drawer-ov{opacity:1;pointer-events:auto}
+.co-drawer .co-phead{flex-shrink:0}
+.co-drawer .co-dbody{flex:1;min-height:0;overflow-y:auto}
+.co-drawer .co-dfoot{flex-shrink:0;border-top:1px solid var(--cm-border);padding:14px 18px}
+@media (prefers-reduced-motion:reduce){.co-drawer,.co-drawer-ov{transition:none}}
+@media (max-width:640px){
+  .co-drawer{width:100vw;top:auto;bottom:0;height:88dvh;border-left:0;border-top:1px solid var(--cm-border);
+    border-radius:var(--cm-r-6) var(--cm-r-6) 0 0;transform:translateY(100%)}
+}
 
 /* detail */
 .co-detail .co-phead .mdtag{margin-left:auto;font:600 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);background:var(--cm-bg-sunk);border:1px solid var(--cm-border);border-radius:var(--cm-r-pill);padding:4px 9px}
@@ -229,7 +307,6 @@
   .co-pulse{grid-template-columns:repeat(3,1fr)}
 }
 @media (max-width:1080px){
-  .co-grid2{grid-template-columns:1fr}
   .co-pulse{grid-template-columns:repeat(2,1fr)}
   .co-strip{grid-template-columns:1fr}
   .co-returns{grid-template-columns:1fr}
@@ -281,36 +358,19 @@
 
       <div class="co-pulse" id="coPulse"></div>
 
-      <div class="co-grid2">
-        <div class="co-panel">
-          <div class="co-phead">
-            <h2 data-i18n="club_overview.weekly_schedule">Weekly schedule</h2>
-            <div class="co-grow"></div>
-            <div class="co-legend">
-              <span><span class="co-dot" style="background:var(--cm-accent)"></span><span data-i18n="club_overview.leg_field">Field</span></span>
-              <span><span class="co-dot" style="background:var(--cm-info)"></span><span data-i18n="club_overview.leg_gym">Gym</span></span>
-              <span><span class="co-dot" style="background:var(--cm-violet)"></span><span data-i18n="club_overview.leg_recovery">Recovery</span></span>
-              <span><span class="co-dot" style="background:var(--cm-danger)"></span><span data-i18n="club_overview.leg_match">Match</span></span>
-              <span><span class="co-dot" style="background:#06B6D4"></span><span data-i18n="club_overview.leg_travel">Travel</span></span>
-              <span><span class="co-dot" style="background:var(--cm-neutral)"></span><span data-i18n="club_overview.leg_other">Other</span></span>
-            </div>
-          </div>
-          <div class="co-sched"><div class="co-sched-inner" id="coSched"></div></div>
-        </div>
-
-        <div class="co-panel co-detail">
-          <div class="co-phead">
-            <h2 id="coDetailTitle" data-i18n="club_overview.weekly_schedule">Session detail</h2>
-            <span class="mdtag" id="coDetailMd" style="display:none"></span>
-          </div>
-          <div class="co-dbody" id="coDetailBody">
-            <div class="co-muted" data-i18n="club_overview.empty_day">Select a day to see its plan.</div>
-          </div>
-          <div class="co-dfoot" id="coDetailFoot" style="display:none">
-            <a class="cm-btn is-ghost is-sm" id="coOpenField"><i class="ti ti-eye"></i><span data-i18n="club_overview.open_field">Open Daily Planning</span></a>
-            <a class="cm-btn is-ghost is-sm" id="coOpenGym"><i class="ti ti-barbell"></i><span data-i18n="club_overview.open_gym">Open Gym Planner</span></a>
+      <div class="co-panel">
+        <div class="co-phead">
+          <h2 data-i18n="club_overview.weekly_schedule">Weekly schedule</h2>
+          <div class="co-grow"></div>
+          <div class="co-dens" id="coDens" role="group" aria-label="Density">
+            <button type="button" data-dens="compact" data-i18n="club_overview.dens_compact">Compact</button>
+            <button type="button" data-dens="cozy" data-i18n="club_overview.dens_cozy">Cozy</button>
           </div>
         </div>
+        <div class="co-toolbar">
+          <div class="co-typebar" id="coTypeBar"></div>
+        </div>
+        <div class="co-sched"><div class="co-sched-inner" id="coSched"></div></div>
       </div>
 
       <div class="co-panel co-returns-panel">
@@ -334,6 +394,24 @@
       </div>
     </div>
   </main>
+
+  <!-- Detalle del día — panel lateral -->
+  <div class="co-drawer-ov" id="coDrawerOv"></div>
+  <aside class="co-panel co-detail co-drawer" id="coDrawer" role="dialog" aria-modal="true" aria-labelledby="coDetailTitle">
+    <div class="co-phead">
+      <h2 id="coDetailTitle" data-i18n="club_overview.weekly_schedule">Session detail</h2>
+      <span class="mdtag" id="coDetailMd" style="display:none"></span>
+      <div class="co-grow"></div>
+      <button class="cm-icon-btn" id="coDrawerClose" data-i18n-attr="title:common.close;aria-label:common.close" title="Close" aria-label="Close"><i class="ti ti-x"></i></button>
+    </div>
+    <div class="co-dbody" id="coDetailBody">
+      <div class="co-muted" data-i18n="club_overview.empty_day">Select a day to see its plan.</div>
+    </div>
+    <div class="co-dfoot" id="coDetailFoot" style="display:none">
+      <a class="cm-btn is-ghost is-sm" id="coOpenField"><i class="ti ti-eye"></i><span data-i18n="club_overview.open_field">Open Daily Planning</span></a>
+      <a class="cm-btn is-ghost is-sm" id="coOpenGym"><i class="ti ti-barbell"></i><span data-i18n="club_overview.open_gym">Open Gym Planner</span></a>
+    </div>
+  </aside>
 </div>
 
 <script defer src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin="anonymous"></script>

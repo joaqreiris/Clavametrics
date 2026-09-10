@@ -13,7 +13,7 @@
   function safeUrl(u) { const s = String(u == null ? '' : u).trim(); return /^(https?:\/\/|\/|\.\/|#)/i.test(s) ? s : '#'; }
   function initials(n) { n = String(n || '').trim(); if (!n) return '•'; const p = n.split(/\s+/); return ((p[0][0] || '') + (p[1] ? p[1][0] : '')).toUpperCase(); }
 
-  const state = { clubId: null, profile: null, teams: [], scopeTeam: '', refDate: new Date(), week: [], data: null, sel: null, kpi: null };
+  const state = { clubId: null, profile: null, teams: [], scopeTeam: '', refDate: new Date(), week: [], data: null, sel: null, kpi: null, hideTypes: new Set(), density: 'compact' };
 
   // ── date helpers (locales, nunca UTC) ──
   function ymd(d) { return window.cmYMD ? window.cmYMD(d) : (d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0')); }
@@ -55,9 +55,51 @@
     day_off: 'ti-beach', recovery: 'ti-heart-rate-monitor', gym: 'ti-barbell', tactical: 'ti-soccer-field', beach: 'ti-beach', outdoor: 'ti-run'
   };
   function calIcon(t) { t = (t || '').toLowerCase(); return CAL_ICONS[t] || 'ti-calendar-event'; }
+  // Eventos de calendario que SÍ son trabajo planificado: van como card, con su
+  // color y su carga. Todo lo demás del calendario (comidas, reuniones, viajes,
+  // prensa, día libre…) es logística: informa la hora y poco más, así que va
+  // como pastilla y deja de estirar la fila del equipo.
+  const WORK_TYPES = new Set(['gym', 'prehab', 'recovery', 'tactical', 'prevention', 'physio', 'beach', 'outdoor', 'evaluation']);
+  function isLogistics(e) { return e.kind === 'cal' && !WORK_TYPES.has(String(e.etype || '').toLowerCase()); }
+
   function calLabel(t) { t = (t || '').toLowerCase(); return tt('calendar.type_' + t, t.replace(/_/g, ' ').replace(/^\w/, c => c.toUpperCase())); } // reusa etiquetas del Calendar
   function defaultTitle(cls) { return cls === 'gym' ? tt('club_overview.leg_gym', 'Gym') : cls === 'recovery' ? tt('club_overview.leg_recovery', 'Recovery') : cls === 'match' ? tt('club_overview.leg_match', 'Match') : tt('club_overview.leg_field', 'Field session'); }
   function fmtTime(t) { return t ? String(t).slice(0, 5) : ''; }
+
+  // ── preferencias de vista (barra de tipos + densidad) ──
+  const TYPE_DEFS = [
+    ['field', 'var(--cm-accent)', 'club_overview.leg_field', 'Field'],
+    ['gym', 'var(--cm-info)', 'club_overview.leg_gym', 'Gym'],
+    ['recovery', 'var(--cm-violet)', 'club_overview.leg_recovery', 'Recovery'],
+    ['match', 'var(--cm-danger)', 'club_overview.leg_match', 'Match'],
+    ['travel', '#06B6D4', 'club_overview.leg_travel', 'Travel'],
+    ['other', 'var(--cm-neutral)', 'club_overview.leg_other', 'Other']
+  ];
+  function loadHiddenTypes() { try { return new Set(JSON.parse(localStorage.getItem('co_hide_types') || '[]')); } catch (_) { return new Set(); } }
+  function saveHiddenTypes(set) { try { localStorage.setItem('co_hide_types', JSON.stringify([...set])); } catch (_) {} }
+  function loadDensity() { try { return localStorage.getItem('co_density') === 'cozy' ? 'cozy' : 'compact'; } catch (_) { return 'compact'; } }
+  function saveDensity(v) { try { localStorage.setItem('co_density', v); } catch (_) {} }
+  function renderTypeBar() {
+    const bar = document.getElementById('coTypeBar'); if (!bar) return;
+    const hidden = state.hideTypes;
+    const all = '<button type="button" class="co-tchip all" data-type="*" aria-pressed="' + (hidden.size ? 'false' : 'true') + '">' + esc(tt('club_overview.type_all', 'All')) + '</button>';
+    bar.innerHTML = all + TYPE_DEFS.map(d =>
+      '<button type="button" class="co-tchip" data-type="' + d[0] + '" aria-pressed="' + (hidden.has(d[0]) ? 'false' : 'true') + '">' +
+      '<span class="co-dot" style="background:' + d[1] + '"></span>' + esc(tt(d[2], d[3])) + '</button>').join('');
+  }
+  function toggleType(key) {
+    if (key === '*') state.hideTypes = new Set();
+    else if (state.hideTypes.has(key)) state.hideTypes.delete(key);
+    else state.hideTypes.add(key);
+    saveHiddenTypes(state.hideTypes); renderTypeBar(); renderGrid();
+    const sel = state.sel;
+    if (sel) { const ev = findEvOf(sel.team, sel.ymd, sel.key); if (!ev || state.hideTypes.has(ev.cls)) { closeDrawer(); resetDetail(); } }
+  }
+  function applyDensity() {
+    const sched = document.querySelector('.co-sched');
+    if (sched) sched.classList.toggle('is-compact', state.density === 'compact');
+    document.querySelectorAll('#coDens button[data-dens]').forEach(b => b.classList.toggle('on', b.dataset.dens === state.density));
+  }
   function auOf(s) { return (s.duration && s.estimated_rpe) ? Math.round(s.duration * s.estimated_rpe) : 0; }
   function fmtHomeAway(h) { h = (h || '').toLowerCase(); return h === 'home' ? tt('common.home', 'Home') : h === 'away' ? tt('common.away', 'Away') : h === 'neutral' ? tt('common.neutral', 'Neutral') : ''; }
 
@@ -267,7 +309,14 @@
   }
   function evHtml(e) {
     const meta = evMeta(e);
-    return '<div class="co-ev ' + e.cls + '" data-key="' + evKey(e) + '" role="button" tabindex="0"><div class="et"><i class="ti ' + (e.icon || evIcon(e.cls)) + '"></i>' + esc(e.title) + '</div>' + (meta ? '<div class="em">' + esc(meta) + '</div>' : '') + '</div>';
+    return '<div class="co-ev ' + e.cls + '" data-key="' + evKey(e) + '" role="button" tabindex="0"><div class="et"><i class="ti ' + (e.icon || evIcon(e.cls)) + '"></i><span>' + esc(e.title) + '</span></div>' + (meta ? '<div class="em">' + esc(meta) + '</div>' : '') + '</div>';
+  }
+  // Pastilla de logística: icono + hora. El título entero va en el tooltip y en
+  // el panel lateral; aquí sólo se necesita saber qué pasa y cuándo.
+  function pillHtml(e) {
+    const tip = [e.title, [e.time, e.endTime].filter(Boolean).join(' – '), e.loc].filter(Boolean).join(' · ');
+    return '<button type="button" class="co-pill ' + e.cls + '" data-key="' + evKey(e) + '" title="' + esc(tip) + '" aria-label="' + esc(tip) + '">' +
+      '<i class="ti ' + (e.icon || evIcon(e.cls)) + '"></i>' + (e.time ? '<span>' + esc(e.time) + '</span>' : '') + '</button>';
   }
   function renderGrid() {
     const teams = scopeTeams();
@@ -278,19 +327,25 @@
     teams.forEach(t => {
       h += '<div class="co-row"><div class="co-rl"><div class="tn">' + esc(t.name) + '</div><div class="tm">' + rosterCount(t.id) + ' ' + tt('common.players', 'players') + '</div></div>';
       state.week.forEach(d => {
-        const evs = cellEvents(t.id, d.ymd), md = mdFor(t.id, d.ymd);
+        const all = cellEvents(t.id, d.ymd), evs = all.filter(e => !state.hideTypes.has(e.cls)), md = mdFor(t.id, d.ymd);
         const gmds = groupMdsFor(t.id, d.ymd, md);
         const mdHtml = (md ? '<span class="co-md' + (md === 'MD' ? ' md0' : '') + '">' + md + '</span>' : '')
           + gmds.map(v => '<span class="co-md md2" title="' + tt('club_overview.group_md_hint', 'Group MD — set per session in Daily Planning') + '">' + v + '</span>').join('');
-        let inner;
-        if (evs.length) inner = evs.map(evHtml).join('');
-        else if (isPlanExpected(t.id, d.ymd)) inner = '<div class="co-noplan"><i class="ti ti-alert-triangle"></i>' + tt('club_overview.no_plan', 'No plan yet') + '</div>';
+        const cards = evs.filter(e => !isLogistics(e)), logi = evs.filter(isLogistics);
+        let inner = '';
+        if (evs.length) {
+          inner = cards.map(evHtml).join('') + (logi.length ? '<div class="co-logi">' + logi.map(pillHtml).join('') + '</div>' : '');
+        // «Sin plan» mira los eventos reales, no los filtrados: apagar un tipo en
+        // la barra no puede inventar un día sin planificar.
+        } else if (!all.length && isPlanExpected(t.id, d.ymd)) inner = '<div class="co-noplan"><i class="ti ti-alert-triangle"></i>' + tt('club_overview.no_plan', 'No plan yet') + '</div>';
         else inner = '<div class="co-empty-cell"></div>';
         h += '<div class="co-cell' + (evs.length ? ' clk' : '') + '" data-team="' + t.id + '" data-ymd="' + d.ymd + '">' + mdHtml + inner + '</div>';
       });
       h += '</div>';
     });
     document.getElementById('coSched').innerHTML = h;
+    applyDensity();
+    if (state.sel) markSelected(state.sel.team, state.sel.ymd, state.sel.key);
   }
 
   // ── DAY DETAIL ──
@@ -631,19 +686,43 @@
     if (key && key.indexOf('c:') === 0) return evs.find(x => x.cid === key.slice(2)) || evs[0] || null;
     return evs[0] || null;
   }
-  function selectEvent(teamId, y, key) {
-    document.querySelectorAll('.co-ev.sel').forEach(x => x.classList.remove('sel'));
+  function markSelected(teamId, y, key) {
+    document.querySelectorAll('.co-ev.sel,.co-pill.sel').forEach(x => x.classList.remove('sel'));
+    if (!key) return;
     const cell = document.querySelector('.co-cell[data-team="' + cssEsc(teamId) + '"][data-ymd="' + y + '"]');
-    if (cell && key) { const card = cell.querySelector('.co-ev[data-key="' + key + '"]'); if (card) card.classList.add('sel'); }
-    state.sel = { team: teamId, ymd: y, key: key };
-    renderSession(findEvOf(teamId, y, key), teamId, y);
+    if (!cell) return;
+    const el = cell.querySelector('.co-ev[data-key="' + key + '"],.co-pill[data-key="' + key + '"]');
+    if (el) el.classList.add('sel');
   }
-  function autoSelect() {
-    const teams = scopeTeams(); if (!teams.length) { resetDetail(); return; }
-    const today = todayY();
-    for (const t of teams) { const evs = cellEvents(t.id, today); if (evs.length && state.week.some(w => w.ymd === today)) { selectEvent(t.id, today, evKey(evs[0])); return; } }
-    for (const t of teams) for (const d of state.week) { const evs = cellEvents(t.id, d.ymd); if (evs.length) { selectEvent(t.id, d.ymd, evKey(evs[0])); return; } }
-    resetDetail();
+  let _lastFocus = null;
+  function openDrawer() {
+    if (document.body.classList.contains('co-drawer-open')) return;
+    _lastFocus = document.activeElement;
+    document.body.classList.add('co-drawer-open');
+    const c = document.getElementById('coDrawerClose'); if (c) c.focus();
+  }
+  function closeDrawer() {
+    if (!document.body.classList.contains('co-drawer-open')) return;
+    document.body.classList.remove('co-drawer-open');
+    document.querySelectorAll('.co-ev.sel,.co-pill.sel').forEach(x => x.classList.remove('sel'));
+    state.sel = null;
+    try { if (_lastFocus && document.contains(_lastFocus)) _lastFocus.focus(); } catch (_) {}
+  }
+  function selectEvent(teamId, y, key) {
+    state.sel = { team: teamId, ymd: y, key: key };
+    markSelected(teamId, y, key);
+    renderSession(findEvOf(teamId, y, key), teamId, y);
+    openDrawer();
+  }
+  // Tras recargar la semana: si el panel estaba abierto y el evento sigue ahí,
+  // se repinta; si no, se cierra. Con el detalle en drawer ya no se abre nada
+  // solo al entrar — la semana entera se lee sin nada tapándola.
+  function revalidateSelection() {
+    const sel = state.sel;
+    if (!sel || !document.body.classList.contains('co-drawer-open')) { state.sel = null; return; }
+    const inScope = scopeTeams().some(t => t.id === sel.team), onWeek = state.week.some(w => w.ymd === sel.ymd);
+    if (!inScope || !onWeek || !findEvOf(sel.team, sel.ymd, sel.key)) { closeDrawer(); resetDetail(); return; }
+    selectEvent(sel.team, sel.ymd, sel.key);
   }
 
   function renderTeamSelect() {
@@ -659,7 +738,7 @@
     await fetchWeek();
     state.kpi = computeKpis();
     renderPulse(); renderGrid(); renderAlerts(); renderReturns();
-    autoSelect();
+    revalidateSelection();
   }
 
   async function boot() {
@@ -692,7 +771,16 @@
     document.getElementById('coSeasonLbl').textContent = seas ? (tt('common.season', 'Season') + ' ' + seas) : '';
     renderTeamSelect();
 
-    document.getElementById('coSched').addEventListener('click', e => { const card = e.target.closest('.co-ev[data-key]'); if (!card) return; const cell = card.closest('.co-cell'); if (cell) selectEvent(cell.dataset.team, cell.dataset.ymd, card.dataset.key); });
+    state.hideTypes = loadHiddenTypes(); state.density = loadDensity();
+    renderTypeBar(); applyDensity();
+
+    document.getElementById('coSched').addEventListener('click', e => { const card = e.target.closest('.co-ev[data-key],.co-pill[data-key]'); if (!card) return; const cell = card.closest('.co-cell'); if (cell) selectEvent(cell.dataset.team, cell.dataset.ymd, card.dataset.key); });
+    document.getElementById('coSched').addEventListener('keydown', e => { if (e.key !== 'Enter' && e.key !== ' ') return; const card = e.target.closest('.co-ev[data-key]'); if (!card) return; e.preventDefault(); const cell = card.closest('.co-cell'); if (cell) selectEvent(cell.dataset.team, cell.dataset.ymd, card.dataset.key); });
+    document.getElementById('coTypeBar').addEventListener('click', e => { const c = e.target.closest('.co-tchip[data-type]'); if (c) toggleType(c.dataset.type); });
+    document.getElementById('coDens').addEventListener('click', e => { const b = e.target.closest('button[data-dens]'); if (!b) return; state.density = b.dataset.dens; saveDensity(state.density); applyDensity(); });
+    document.getElementById('coDrawerClose').onclick = closeDrawer;
+    document.getElementById('coDrawerOv').onclick = closeDrawer;
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDrawer(); });
     const detailPanel = document.querySelector('.co-detail');
     if (detailPanel) detailPanel.addEventListener('click', e => {
       const play = e.target.closest('.co-play');
@@ -708,7 +796,7 @@
     await refresh();
     await renderActivity();
 
-    window.addEventListener('cm:langchanged', () => { renderTeamSelect(); renderPulse(); renderGrid(); renderAlerts(); renderReturns(); if (state.sel) selectEvent(state.sel.team, state.sel.ymd, state.sel.key); else autoSelect(); });
+    window.addEventListener('cm:langchanged', () => { renderTeamSelect(); renderTypeBar(); renderPulse(); renderGrid(); renderAlerts(); renderReturns(); revalidateSelection(); });
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
