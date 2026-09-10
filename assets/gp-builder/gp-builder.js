@@ -520,7 +520,7 @@
    * Un jugador con datos en una sola de las dos fechas queda sin barra: no hay diferencia que
    * calcular, y poner 0 o el valor absoluto mentiría.
    */
-  async function _buildDelta2Series(config, rows, curSeries, ctx, sb, days) {
+  async function _buildDelta2Series(config, rows, curSeries, ctx, sb, days, info) {
     const [dOld, dNew] = [...days].map(d => String(d).slice(0, 10)).sort();
     if (!dOld || !dNew || dOld === dNew) return curSeries;
     const dimIds = (config.dimensions || []).map(d => d.id);
@@ -546,7 +546,7 @@
       idx.set(si, g);
     });
 
-    return curSeries.map((sr, si) => {
+    const out = curSeries.map((sr, si) => {
       if (config.metrics?.[si]?.rel !== 'delta2' || !sr.points?.length) return sr;
       const g = idx.get(si) || new Map();
       const nm = catalogMap.get(sr.label)?.name || sr.name || sr.label;
@@ -561,6 +561,45 @@
           return { ...p, y: e.v, _abs: p.y, _capped: e.capped, _from: a, _to: b };
         }) };
     });
+
+    // Quien no entrenó uno de los dos días no tiene diferencia que mostrar. Dejarlo en el eje
+    // con la barra vacía llenaba el gráfico de huecos que se leen como un cero o como un error;
+    // se lo saca, pero se dice quién, porque desaparecer sin aviso es peor que el hueco.
+    const conDato = new Set();
+    const todos = new Map();      // x → etiqueta, en el orden en que aparecen
+    out.forEach((sr, si) => {
+      if (config.metrics?.[si]?.rel !== 'delta2') return;
+      for (const p of sr.points) {
+        if (!todos.has(p.x)) todos.set(p.x, String(p.x));
+        if (p.y != null) conDato.add(p.x);
+      }
+    });
+    const fuera = [...todos.keys()].filter(x => !conDato.has(x));
+    if (info) info.dropped = fuera.map(x => todos.get(x));
+    if (!fuera.length) return out;
+    // Sólo se filtran las series en Δ%: una métrica sin el modo puesto conserva su eje.
+    const quitar = new Set(fuera);
+    return out.map((sr, si) => (config.metrics?.[si]?.rel === 'delta2'
+      ? { ...sr, points: sr.points.filter(p => !quitar.has(p.x)) }
+      : sr));
+  }
+
+  /** Nota al pie: a quién no se pudo comparar entre las dos fechas, y por qué. */
+  function _delta2Note(body, info) {
+    try {
+      const fuera = info && info.dropped;
+      if (!body || !Array.isArray(fuera) || !fuera.length) return;
+      const note = document.createElement('div');
+      note.className = 'gp-delta2-note';
+      note.style.cssText = 'text-align:center;margin-top:2px;font:500 10.5px/1.3 var(--cm-font-sans);color:var(--cm-text-muted,#64748b)';
+      note.title = fuera.join(' · ');   // la lista completa, al pasar el mouse
+      const muestra = fuera.slice(0, 3).join(', ') + (fuera.length > 3 ? '…' : '');
+      note.innerHTML = `<i class="ti ti-info-circle" style="font-size:11px;vertical-align:-1px"></i> ${
+        esc(_tt('gps_analysis.delta2_dropped',
+            '{n} without data on one of the two dates, left out: {who}',
+            { n: fuera.length, who: muestra }))}`;
+      body.appendChild(note);
+    } catch (e) { /* un aviso nunca puede romper una card */ }
   }
 
   /** Δ% vs MD (last_md / avg_md). A diferencia de la de MC, la referencia NO está en el
@@ -3344,11 +3383,12 @@
 
       // Δ% entre las dos fechas elegidas: no añade nada, convierte la barra en el porcentaje.
       // Va antes que el «vs MD» porque los dos modos son excluyentes por métrica.
+      const _d2info = {};
       if (config.viz === 'bars' && (config.metrics || []).some(m => m.rel === 'delta2')) {
         const _days = (FBcard?.date?.days || []).slice();
         if (_days.length === 2) {
           try {
-            const d2 = await _buildDelta2Series(config, rows, series, ctx, sb, _days);
+            const d2 = await _buildDelta2Series(config, rows, series, ctx, sb, _days, _d2info);
             if (stale()) return;
             if (d2) series = d2;
           } catch (e) { console.warn('gpb delta2 failed — degrading:', e); }
@@ -3715,6 +3755,7 @@
       if (stale()) return;
       _renderCardInto(body, config, series, drawOpts);
       _taskDurationNote(body, config, rows);
+      _delta2Note(body, _d2info);
       cardEl.classList.remove('is-draft');
       clearTimeout(cardEl.__loadWatchdog);   // render completo: guardián de baja
 

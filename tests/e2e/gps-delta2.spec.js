@@ -113,14 +113,26 @@ test.describe('GPS · Δ% entre dos fechas', () => {
     await open(page);
     await elegirDosDias(page, [D1, D2]);
     const b = await barras(page);
-    // Una barra por jugador — no dos. Es el punto de todo el modo.
-    expect(b.labels).toHaveLength(3);
+    // Una barra por jugador — no dos. Es el punto de todo el modo. Y sólo los dos que se
+    // pueden comparar: el tercero no entrenó una de las fechas y sale del eje (ver más abajo).
+    expect(b.labels).toHaveLength(2);
     const val = Object.fromEntries(b.labels.map((l, i) => [l, b.data[i]]));
     const de = (ap) => val[Object.keys(val).find(k => k.includes(ap))];
     expect(de('Alfa')).toBe(25);      // 4000 → 5000
     expect(de('Beta')).toBe(-50);     // 6000 → 3000
-    // Sin dato en una de las dos fechas no hay diferencia que mostrar: barra vacía, no un cero.
-    expect(de('Gama')).toBeNull();
+  });
+
+  // Dejarlo en el eje con la barra vacía llenaba el gráfico de huecos que se leen como un cero;
+  // sacarlo sin decir nada haría creer que el jugador no existe. Se saca Y se avisa.
+  test('al que le falta una de las dos fechas sale del eje, pero se avisa quién', async ({ page }) => {
+    await open(page);
+    await elegirDosDias(page, [D1, D2]);
+    const b = await barras(page);
+    expect(b.labels.some(l => l.includes('Gama'))).toBe(false);
+    const nota = await page.evaluate(() =>
+      document.querySelector('.gp-c[data-card-id="card-d2"] .gp-delta2-note')?.textContent?.trim() || '');
+    expect(nota).toContain('Gama');
+    expect(nota).toMatch(/\b1\b/);              // dice cuántos quedaron fuera
   });
 
   test('el que sube va en verde y el que baja en rojo', async ({ page }) => {
