@@ -2453,16 +2453,15 @@ gpGearBtn?.addEventListener('click', e => {
     { label: tt('gps_analysis.metrics_catalog','Metrics catalog'), icon: 'ti-list',                   act: 'gpCatalogBtn' },
     { label: tt('gps_analysis.assign_rivals','Assign rivals & seasons') + (oc ? ` · ${tt('gps_analysis.n_need_season','{n} need a season',{n:oc})}` : ''),   icon: 'ti-ball-football',          act: oc ? 'rivals_outside' : 'rivals' },
     { label: tt('gps_analysis.pending_menu','GPS days without a session') + (pc ? ` · ${tt('gps_analysis.n_pending','{n} pending',{n:pc})}` : ''), icon: 'ti-calendar-plus', act: 'pending' },
+    { label: tt('gps_analysis.manual_gps','Manual data'), icon: 'ti-pencil-plus', act: 'gpManualBtn' },
     { sep: true },
-    { label: tt('gps_analysis.ctx_menu','Rehab / individual / top-up'), icon: 'ti-tag', act: 'context' },
-    { label: tt('gps_analysis.pctx_menu','Tag periods (drills / top-up)'), icon: 'ti-timeline-event', act: 'pcontext' },
+    { label: tt('gps_analysis.tag_menu','Rehab, individual and top-up'), icon: 'ti-tag', act: 'context' },
     { label: tt('gps_analysis.flagged_periods','Flagged periods') + (fc ? ` · ${tt('gps_analysis.n_need_review','{n} need review',{n:fc})}` : ''), icon: 'ti-flag', act: 'flagged' },
     { label: tt('gps_analysis.es_title','Clean up empty sessions'), icon: 'ti-trash', act: 'empty_sessions' },
   ], item => {
     if (item.act === 'flagged') _gpOpenFlaggedPanel();
     else if (item.act === 'pending') _gpOpenPendingPanel();
-    else if (item.act === 'context') _gpOpenContextPanel();
-    else if (item.act === 'pcontext') _gpOpenPeriodPanel();
+    else if (item.act === 'context') _gpOpenTaggingPanel('period');   // abre en la pestaña que se usa a diario
     else if (item.act === 'rivals') _gpOpenAssignRivals();
     else if (item.act === 'rivals_outside') _gpOpenAssignRivals({ onlyOutside: true });
     else if (item.act === 'empty_sessions') _gpOpenEmptySessions();
@@ -2840,14 +2839,49 @@ async function _gpFlagAction(clubId, body, ov, ids, mode) {
 const _CTX_VALUES = ['team', 'rehab', 'individual', 'topup'];
 function _ctxLabel(v) { return tt('gps_analysis.ctx_' + v, ({ team: 'Team', rehab: 'Rehab', individual: 'Individual', topup: 'Top-up' })[v] || v); }
 
-async function _gpOpenContextPanel() {
+/**
+ * Etiquetar qué es trabajo de equipo y qué no. Un solo panel con dos niveles, que antes eran dos
+ * entradas distintas del menú y se leían como repetidas:
+ *
+ *   · Por período  — cada TRAMO del entrenamiento (el calentamiento, el 8v8, el top-up del final).
+ *                    Es el que manda: los gráficos recortan por período.
+ *   · Por sesión   — el día ENTERO de un jugador. Sirve para el que sólo fue a hacer rehab.
+ *
+ * Arranca en «por período», que es el que se usa a diario.
+ */
+async function _gpOpenTaggingPanel(tab = 'period') {
   const clubId = window._gpClubId || await window.getClubId?.();
   const teamId = window._gpTeamId || null;
   if (!clubId) { showToast(tt('gps_analysis.no_club_selected', 'No club selected'), true); return; }
-  const ov = makeModal(tt('gps_analysis.ctx_title', 'Training context'),
-    `<div id="ctxBody" style="width:100%"><div style="padding:24px;color:var(--cm-fg-muted)">${tt('common.loading', 'Loading…')}</div></div>`);
-  const _m = ov.querySelector('.gp-modal'); if (_m) _m.style.width = 'min(96vw, 940px)';   // el modal base es 560px → ampliarlo
-  await _gpRenderContext(clubId, teamId, ov.querySelector('#ctxBody'), ov);
+  const _ultimo = await _gpLastPeriodDate(clubId);
+  _pctxFrom = _ultimo; _pctxTo = _ultimo;
+
+  const tabCss = 'padding:6px 12px;border:0;background:transparent;color:var(--cm-fg-muted);font:500 12.5px/1 var(--cm-font-sans);cursor:pointer;border-radius:7px';
+  const ov = makeModal(tt('gps_analysis.tag_title', 'Rehab, individual and top-up'), `
+    <div style="display:flex;gap:4px;background:var(--cm-bg-soft);border-radius:9px;padding:4px;margin-bottom:10px;width:max-content">
+      <button id="tagTabPeriod"  style="${tabCss}">${tt('gps_analysis.tag_tab_period', 'By period')}</button>
+      <button id="tagTabSession" style="${tabCss}">${tt('gps_analysis.tag_tab_session', 'By session')}</button>
+    </div>
+    <p class="gp-note" id="tagHint" style="margin:0 0 10px;color:var(--cm-fg-muted);font-size:12px"></p>
+    <div id="tagBody" style="width:100%"><div style="padding:24px;color:var(--cm-fg-muted)">${tt('common.loading', 'Loading…')}</div></div>`);
+  const _m = ov.querySelector('.gp-modal'); if (_m) _m.style.width = 'min(96vw, 940px)';
+
+  const body = ov.querySelector('#tagBody');
+  const bPer = ov.querySelector('#tagTabPeriod'), bSes = ov.querySelector('#tagTabSession');
+  const pintar = async (which) => {
+    const on = 'color:var(--cm-fg-strong);background:var(--cm-surface);font-weight:600;box-shadow:var(--cm-shadow-1)';
+    bPer.style.cssText = tabCss + (which === 'period'  ? ';' + on : '');
+    bSes.style.cssText = tabCss + (which === 'session' ? ';' + on : '');
+    ov.querySelector('#tagHint').textContent = which === 'period'
+      ? tt('gps_analysis.tag_hint_period', 'Each block of the session: the warm-up, the 8v8, the top-up at the end. This is what the charts use.')
+      : tt('gps_analysis.tag_hint_session', "A player's whole day — for someone who only came in to do rehab.");
+    body.innerHTML = `<div style="padding:24px;color:var(--cm-fg-muted)">${tt('common.loading', 'Loading…')}</div>`;
+    if (which === 'period') await _gpRenderPeriods(clubId, teamId, body, ov);
+    else                    await _gpRenderContext(clubId, teamId, body, ov);
+  };
+  bPer.addEventListener('click', () => pintar('period'));
+  bSes.addEventListener('click', () => pintar('session'));
+  await pintar(tab === 'session' ? 'session' : 'period');
 }
 
 async function _gpRenderContext(clubId, teamId, body, ov) {
@@ -2921,16 +2955,27 @@ async function _gpSetContext(clubId, id, ctx) {
 // de sesión (gps_reports) mezcla los dos; acá se marca el PERÍODO ("Rehab PISETH", "Top-up")
 // y en la media el período no-team se RESTA del total (Fase 2b). Grano: gps_period_reports.
 let _pctxFrom = null, _pctxTo = null;   // rango de fechas del panel de períodos (persiste entre re-renders)
-async function _gpOpenPeriodPanel() {
-  const clubId = window._gpClubId || await window.getClubId?.();
-  const teamId = window._gpTeamId || null;
-  if (!clubId) { showToast(tt('gps_analysis.no_club_selected', 'No club selected'), true); return; }
-  _pctxFrom = null; _pctxTo = null;   // reset al abrir → default últimos 60 días
-  const ov = makeModal(tt('gps_analysis.pctx_title', 'Period context'),
-    `<div id="pctxBody" style="width:100%"><div style="padding:24px;color:var(--cm-fg-muted)">${tt('common.loading', 'Loading…')}</div></div>`);
-  const _m = ov.querySelector('.gp-modal'); if (_m) _m.style.width = 'min(96vw, 940px)';   // el modal base es 560px → ampliarlo
-  await _gpRenderPeriods(clubId, teamId, ov.querySelector('#pctxBody'), ov);
+/** Último día del club con períodos GPS. Es el arranque natural del panel: se abre para
+ *  etiquetar lo que se acaba de descargar, no para revisar dos meses. */
+async function _gpLastPeriodDate(clubId) {
+  try {
+    // Las sesiones recientes primero, y la primera que tenga períodos gana. Ordenar por la fecha
+    // de la tabla embebida no sirve: PostgREST no ordena por columnas de un embed.
+    const { data: sess } = await window.sb.from('training_sessions')
+      .select('id, session_date').eq('club_id', clubId)
+      .order('session_date', { ascending: false }).limit(40);
+    if (!sess?.length) return null;
+    const { data: per } = await window.sb.from('gps_period_reports')
+      .select('session_id').eq('club_id', clubId).in('session_id', sess.map(x => x.id));
+    if (!per?.length) return null;
+    const conDatos = new Set(per.map(x => x.session_id));
+    return sess.find(x => conDatos.has(x.id))?.session_date || null;
+  } catch (_e) { return null; }
 }
+
+// Compatibilidad: cualquier llamador viejo abre el panel unificado en la pestaña de períodos.
+const _gpOpenPeriodPanel = () => _gpOpenTaggingPanel('period');
+const _gpOpenContextPanel = () => _gpOpenTaggingPanel('session');
 
 // Patrones POR DEFECTO — espejo de public.apply_gps_context_rule() (migración 130). Solo
 // informativos acá: los aplica el trigger cuando NINGUNA regla del club matchea. Para anular
