@@ -959,6 +959,22 @@
     _afterChange();
     return true;
   }
+  /**
+   * Elegir días sueltos desde fuera de la barra, con el mismo efecto que marcarlos en el panel:
+   * la cascada se recalcula y las cards se rehacen. `setValue` no sirve para fechas porque el
+   * estado de fecha no es una lista de valores sino {preset|rango|días}.
+   */
+  function setDateDays(list) {
+    const days = [...new Set((list || []).map(d => String(d).slice(0, 10)).filter(Boolean))]
+      .sort((a, b) => b.localeCompare(a));   // más nueva primero, igual que commitDate
+    drafts.date = new Set(days);
+    state.date = days.length
+      ? { preset: null, from: days[days.length - 1], to: days[0], days }
+      : { preset: null, from: null, to: null, days: [] };
+    _dateUserSet = true;
+    _afterChange();
+    return true;
+  }
   function commitDate(panel) {
     const presetBtn = panel.querySelector('.fb-preset.is-on');
     const days = Array.from(drafts.date || []).sort((a, b) => b.localeCompare(a));   // newest first
@@ -1836,6 +1852,7 @@
     getPlayerOptions() { return options.player.slice(); },   // [{ value:id, label }]
     onChange(fn) { listeners.add(fn); return () => listeners.delete(fn); },
     setValue,   // set programático (cross-filter) — mismo pipeline que un click de checkbox
+    setDateDays,   // días sueltos desde fuera (el estado de fecha no pasa por setValue)
     setPosGranularity,   // nivel de detalle de las posiciones (detallado · básico · grupo)
     setMetrics, // selector de métrica del dashboard ([] = cada card con la suya)
     clearAll: clearAll_,

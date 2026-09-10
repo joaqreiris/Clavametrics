@@ -14,32 +14,53 @@ const PROFILE = { id: 'user-1', club_id: CLUB_ID, first_name: 'T', last_name: 'U
 const CLUB = { id: CLUB_ID, name: 'Test FC', primary_color: '#3B82F6', logo_url: null };
 const daysAgo = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); };
 
-// Tres MD-3 (subiendo 4000 → 5000 → 6000) y un MD-1 en el medio, que NO se tiene que mezclar.
-const SES = [
-  { id: 's1', date: daysAgo(21), md: -3, td: 4000 },
-  { id: 's2', date: daysAgo(14), md: -3, td: 5000 },
-  { id: 's3', date: daysAgo(10), md: -1, td: 9000 },
-  { id: 's4', date: daysAgo(7),  md: -3, td: 6000 },
-];
-const SESSIONS = SES.map(s => ({ id: s.id, club_id: CLUB_ID, session_date: s.date, session_type: 'training',
-  team_id: null, microcycle_id: null, is_historical: false, match_day_offset: s.md }));
-const PLAYERS = [{ id: 'p1', club_id: CLUB_ID, first_name: 'A', last_name: 'Uno', number: 5, position: 'CB', positions: ['CB'], status: 'active' }];
-const REPORTS = SES.map(s => ({
-  player_id: 'p1', session_id: s.id, club_id: CLUB_ID, is_invalid: false, work_context: 'team',
-  total_distance: s.td, high_speed_distance: 500, very_high_speed_distance: 100, sprint_distance: 50,
-  sprint_count: 4, accelerations: 20, decelerations: 18, max_speed: 28, avg_speed: 6,
-  player_load: 300, hmld: 400, time_played: 90, distance_per_minute: 60,
-  players: { first_name: 'A', last_name: 'Uno', number: 5, position: 'CB', positions: ['CB'] },
-  training_sessions: { session_date: s.date, session_attributes: null, microcycle_id: null, team_id: null,
-    session_type: 'training', match_day_offset: s.md, season_id: null },
-}));
+// Escenario A — un jugador, tres MD-3 (subiendo 4000 → 5000 → 6000) y un MD-1 en el medio que NO
+// se tiene que mezclar. Escenario B — el de todas las semanas: DOS fechas del mismo MD y el eje
+// por jugador, para ver quién subió y quién bajó entre una y la otra.
+const ESC = {
+  porFecha: {
+    ses: [
+      { id: 's1', date: daysAgo(21), md: -3, td: { p1: 4000 } },
+      { id: 's2', date: daysAgo(14), md: -3, td: { p1: 5000 } },
+      { id: 's3', date: daysAgo(10), md: -1, td: { p1: 9000 } },
+      { id: 's4', date: daysAgo(7),  md: -3, td: { p1: 6000 } },
+    ],
+    players: [{ id: 'p1', first: 'A', last: 'Uno', num: 5, pos: 'CB' }],
+    dims: [{ id: 'session_date' }],
+  },
+  porJugador: {
+    // p1 sube (4000 → 5000 = +25%), p2 baja (6000 → 3000 = −50%): si comparara contra el total
+    // del día en vez de contra el mismo jugador, los dos darían lo mismo.
+    ses: [
+      { id: 's1', date: daysAgo(14), md: -4, td: { p1: 4000, p2: 6000 } },
+      { id: 's2', date: daysAgo(7),  md: -4, td: { p1: 5000, p2: 3000 } },
+    ],
+    players: [{ id: 'p1', first: 'A', last: 'Uno', num: 5, pos: 'CB' },
+              { id: 'p2', first: 'B', last: 'Dos', num: 6, pos: 'MF' }],
+    dims: [{ id: 'player' }, { id: 'session_date' }],
+  },
+};
 
-const CARD = [{ id: 'card-rel', position: 0, source: 'builder', size: 'lg', config: {
-  schema: 'gp.card/v1', title: 'Distancia por día', viz: 'bars', scope: { level: 'squad' },
-  metrics: [{ id: 'total_distance', agg: 'avg', rel: 'prev_occ' }],
-  dimensions: [{ id: 'session_date' }], range: { type: 'season' }, style: { color: '#15803D' } } }];
+async function open(page, esc = ESC.porFecha) {
+  const SES = esc.ses;
+  const SESSIONS = SES.map(s => ({ id: s.id, club_id: CLUB_ID, session_date: s.date, session_type: 'training',
+    team_id: null, microcycle_id: null, is_historical: false, match_day_offset: s.md }));
+  const PLAYERS = esc.players.map(p => ({ id: p.id, club_id: CLUB_ID, first_name: p.first, last_name: p.last,
+    number: p.num, position: p.pos, positions: [p.pos], status: 'active' }));
+  const REPORTS = SES.flatMap(s => esc.players.filter(p => s.td[p.id] != null).map(p => ({
+    player_id: p.id, session_id: s.id, club_id: CLUB_ID, is_invalid: false, work_context: 'team',
+    total_distance: s.td[p.id], high_speed_distance: 500, very_high_speed_distance: 100, sprint_distance: 50,
+    sprint_count: 4, accelerations: 20, decelerations: 18, max_speed: 28, avg_speed: 6,
+    player_load: 300, hmld: 400, time_played: 90, distance_per_minute: 60,
+    players: { first_name: p.first, last_name: p.last, number: p.num, position: p.pos, positions: [p.pos] },
+    training_sessions: { session_date: s.date, session_attributes: null, microcycle_id: null, team_id: null,
+      session_type: 'training', match_day_offset: s.md, season_id: null },
+  })));
+  const CARD = [{ id: 'card-rel', position: 0, source: 'builder', size: 'lg', config: {
+    schema: 'gp.card/v1', title: 'Distancia por día', viz: 'bars', scope: { level: 'squad' },
+    metrics: [{ id: 'total_distance', agg: 'avg', rel: 'prev_occ' }],
+    dimensions: esc.dims, range: { type: 'season' }, style: { color: '#15803D' } } }];
 
-async function open(page) {
   await page.route(`${SB}/rest/v1/**`, r => r.fulfill({ json: [], headers: { 'Content-Range': '0-0/0', 'Content-Type': 'application/json' } }));
   await page.route(`${SB}/auth/v1/**`, r => r.fulfill({ json: { access_token: 't', user: { id: 'user-1', email: 't@t.com' } } }));
   await page.route(`${SB}/rest/v1/profiles**`, r => r.fulfill({ json: [PROFILE] }));
@@ -84,7 +105,7 @@ const deltas = (page) => page.evaluate(() => {
 
 test.describe('GPS · Δ% vs la anterior', () => {
   test('cada fecha se compara con la anterior DEL MISMO MD', async ({ page }) => {
-    await open(page);
+    await open(page, ESC.porFecha);
     const d = await deltas(page);
     expect(d.labels).toHaveLength(4);          // 3 MD-3 + 1 MD-1
     // MD-3: 4000 → 5000 → 6000. El primero no tiene anterior; el 2º +25%; el 3º +20%.
@@ -93,5 +114,20 @@ test.describe('GPS · Δ% vs la anterior', () => {
     expect(d.pct[3]).toBe(20);
     // El MD-1 del medio (9000) NO se compara con ningún MD-3: es el único de su clase.
     expect(d.pct[2]).toBeNull();
+  });
+
+  // El caso de todas las semanas: dos fechas del mismo MD y el eje por jugador, para ver quién
+  // subió y quién bajó. Hace falta que la FECHA esté entre las dimensiones — sin ella el botón
+  // Δ% ni se ofrece, porque no habría con qué comparar cada barra.
+  test('con el eje por jugador, cada uno se compara consigo mismo', async ({ page }) => {
+    await open(page, ESC.porJugador);
+    const d = await deltas(page);
+    expect(d.labels).toHaveLength(4);           // 2 jugadores × 2 fechas
+    // El eje va por apellido, así que primero «Dos, B.» (p2) y después «Uno, A.» (p1).
+    // Primera fecha de cada jugador: no tiene anterior. Segunda: su propia variación.
+    expect(d.pct[0]).toBeNull();
+    expect(d.pct[1]).toBe(-50);                 // p2: 6000 → 3000
+    expect(d.pct[2]).toBeNull();
+    expect(d.pct[3]).toBe(25);                  // p1: 4000 → 5000
   });
 });

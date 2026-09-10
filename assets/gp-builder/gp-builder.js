@@ -450,10 +450,19 @@
 
   // Modos de variación disponibles según el eje X (bars): microcycle → vs MC anterior;
   // md_code / session_date → vs último MD igual + vs promedio MD. Vacío ⇒ el chip no aparece.
+  /** Los días sueltos elegidos en la barra de filtros (los que se comparan de a dos). */
+  function _fbPickedDays() {
+    try { return (window.gpFilterBar?.getState?.()?.date?.days || []).slice(); } catch (_e) { return []; }
+  }
   function _relModesFor(S) {
     if (!S || S.type !== 'bars') return [];
     const dimIds = (S.dimensions || []).map(d => d.id);
     const modes = [];
+    // Dos fechas elegidas y el eje por lo que sea (jugador, posición…): la barra pasa a SER la
+    // diferencia entre las dos. Es la lectura de «¿quién subió y quién bajó?» sin tener que meter
+    // la fecha como dimensión, que duplicaba las barras y volvía el gráfico ilegible.
+    // No pide dimensión temporal: justamente sirve para cuando NO la hay.
+    if (_fbPickedDays().length === 2 && !dimIds.includes('session_date')) modes.push('delta2');
     if (dimIds.includes('microcycle')) modes.push('prev_mc');
     if (dimIds.includes('md_code') || dimIds.includes('session_date')) {
       modes.push('last_md'); modes.push('avg_md');
@@ -480,9 +489,10 @@
       last_md: _tt('gps_analysis.builder_rel_last_md', 'Δ% vs last same MD'),
       avg_md:  _tt('gps_analysis.builder_rel_avg_md',  'Δ% vs MD average'),
       prev_occ: _tt('gps_analysis.builder_rel_prev_occ', 'Δ% vs the previous one'),
+      delta2:   _tt('gps_analysis.builder_rel_delta2', 'Δ% between the two dates'),
     };
     const ICO = { prev_mc: 'ti-calendar-stats', last_md: 'ti-history', avg_md: 'ti-chart-bar',
-                  prev_occ: 'ti-arrow-narrow-left' };
+                  prev_occ: 'ti-arrow-narrow-left', delta2: 'ti-arrows-diff' };
     const opt = (val, label, icon) => `<button class="rb-opt ${cur === val ? 'is-on' : ''}" data-rel-opt="${esc(val)}">
       <span class="ic"><i class="ti ${icon}"></i></span>
       <span class="tx"><span class="t">${esc(label)}</span></span>
@@ -495,6 +505,62 @@
       if (mm) mm.rel = o.dataset.relOpt || undefined;
       closePop(); ddSyncFromS();
     }));
+  }
+
+  /**
+   * Δ% entre las DOS fechas elegidas en el filtro. A diferencia de los otros modos, este no
+   * agrega una línea encima: REEMPLAZA el valor de la barra por el porcentaje, así queda una
+   * sola barra por jugador y se lee de un vistazo quién subió y quién bajó.
+   *
+   * Las dos fechas ya vienen en `rows` (el filtro las dejó pasar), así que no hace falta ir a
+   * buscar nada a la temporada: alcanza con re-agregar por (las dimensiones de la card × fecha)
+   * y cruzar los dos valores de cada grupo. El agg de la métrica se respeta —comparar un total
+   * contra un promedio daría un número sin sentido.
+   *
+   * Un jugador con datos en una sola de las dos fechas queda sin barra: no hay diferencia que
+   * calcular, y poner 0 o el valor absoluto mentiría.
+   */
+  async function _buildDelta2Series(config, rows, curSeries, ctx, sb, days) {
+    const [dOld, dNew] = [...days].map(d => String(d).slice(0, 10)).sort();
+    if (!dOld || !dNew || dOld === dNew) return curSeries;
+    const dimIds = (config.dimensions || []).map(d => d.id);
+    const { fetchExtraMetrics, aggregateSeries } = await _importResolver();
+
+    // Mismas dimensiones + la fecha al final: cada grupo queda partido en sus dos días.
+    const refConfig = { ...config, dimensions: [...dimIds, 'session_date'].map(id => ({ id })) };
+    const eav = await fetchExtraMetrics(rows, refConfig, catalogMap, _clubId, sb);
+    const byDate = aggregateSeries(rows, eav, refConfig, catalogMap);
+
+    // índice de métrica → Map(grupo sin la fecha → { fecha: valor }). Por índice y no por id:
+    // una misma métrica repetida con otro agg produce dos series con la misma etiqueta.
+    const idx = new Map();
+    byDate.forEach((sr, si) => {
+      const g = new Map();
+      for (const p of sr.points) {
+        const dv = p.dims || [p.x];
+        const gk = dv.slice(0, -1).join('¦');
+        const dt = String(dv[dv.length - 1] || '').slice(0, 10);
+        if (!g.has(gk)) g.set(gk, {});
+        g.get(gk)[dt] = p.y;
+      }
+      idx.set(si, g);
+    });
+
+    return curSeries.map((sr, si) => {
+      if (config.metrics?.[si]?.rel !== 'delta2' || !sr.points?.length) return sr;
+      const g = idx.get(si) || new Map();
+      const nm = catalogMap.get(sr.label)?.name || sr.name || sr.label;
+      return { ...sr, unit: '%', _delta2: true,
+        name: `${_tt('gps_analysis.builder_rel_delta2_short', 'Δ%')} · ${nm}`,
+        points: sr.points.map(p => {
+          const gk = (p.dims || [p.x]).join('¦');
+          const pair = g.get(gk) || {};
+          const a = pair[dOld], b = pair[dNew];
+          const raw = (a != null && a !== 0 && !isNaN(a) && b != null && !isNaN(b)) ? (b - a) / a * 100 : null;
+          const e = _capPct(raw);
+          return { ...p, y: e.v, _abs: p.y, _capped: e.capped, _from: a, _to: b };
+        }) };
+    });
   }
 
   /** Δ% vs MD (last_md / avg_md). A diferencia de la de MC, la referencia NO está en el
@@ -690,6 +756,9 @@
   function _subAgg(S) {
     if (!S || !S.metrics || !S.metrics[0]) return '';
     if (S.type === 'demand') return _tt('gps_analysis.sub_per_session', 'per session');
+    // Con la comparación entre dos fechas la barra ya no son metros sino el cambio: el
+    // encabezado tiene que decir eso y no «sum», que sería mentir sobre lo que se ve.
+    if (S.metrics.some(m => m && m.rel === 'delta2')) return _tt('gps_analysis.builder_rel_delta2_short', 'Δ%');
     return AGG[S.metrics[0].agg]?.short.toLowerCase() || '';
   }
 
@@ -3273,6 +3342,19 @@
       // ninguna métrica lo pide o si no hay dimensión de microciclo.
       series = _applyRelTransform(config, series);
 
+      // Δ% entre las dos fechas elegidas: no añade nada, convierte la barra en el porcentaje.
+      // Va antes que el «vs MD» porque los dos modos son excluyentes por métrica.
+      if (config.viz === 'bars' && (config.metrics || []).some(m => m.rel === 'delta2')) {
+        const _days = (FBcard?.date?.days || []).slice();
+        if (_days.length === 2) {
+          try {
+            const d2 = await _buildDelta2Series(config, rows, series, ctx, sb, _days);
+            if (stale()) return;
+            if (d2) series = d2;
+          } catch (e) { console.warn('gpb delta2 failed — degrading:', e); }
+        }
+      }
+
       // Modo relativo "vs MD" (Δ% vs último MD igual / vs promedio MD): trae la referencia
       // de la temporada y AÑADE una línea de % por métrica. Sólo bars, sin comparación mc.
       if (config.viz === 'bars' && config.comparison?.baseline !== 'mc'
@@ -4947,7 +5029,11 @@
         if (primaryMetricId == null) primaryMetricId = s.label;
         // Δ% activo en esta métrica → color por signo (o por banda si está configurada; misma
         // lógica que la etiqueta). Barra sin dato de cambio (primer MC) = color de la métrica.
-        const rel = relByBar[s.label];
+        // En delta2 la barra YA es el porcentaje: el signo sale de su propio valor, sin serie
+        // hermana de la que leerlo.
+        const rel = relByBar[s.label]
+          || (s._delta2 ? { pct: data.map(v => (v == null ? null : Number(v))),
+                            cap: s.points.map(p => !!p._capped) } : null);
         const bg = rel ? rel.pct.map(v => v == null ? col : (_relBandColor(v, config.style?.relBands) || (v >= 0 ? relUp : relDn))) : col;
         return { type: 'bar', label: s.name || s.label, unit: s.unit || '', data,
           order: 1,                                   // detrás de la línea del combo (ver order:0)
@@ -5080,9 +5166,24 @@
     const _lvl      = (i, L) => String(catDims[i][L] ?? '');
     // Desempate/orden natural sobre TODOS los niveles de la categoría, cada uno con el
     // criterio de su propia dimensión.
+    // Comparador del nivel 0. Si esa dimensión no tiene orden propio (rival, por ejemplo) pero
+    // la card SÍ es cronológica —porque otro nivel es la fecha—, se ordena por la fecha que
+    // viaja en la etiqueta. Así «Angkor Tiger · 2026-09-05» se ordena por el partido, no por
+    // la letra del rival.
+    const _chronoLbl = _cardSortKind(config) === 'chrono' && _dimSortKind(_dimIds[0]) === 'alpha';
+    const _cmp0 = _chronoLbl
+      ? (a, b) => {
+          const da = _dateInLabel(a), db = _dateInLabel(b);
+          if (da && db && da !== db) return da < db ? -1 : 1;
+          return _alphaCmp(a, b);
+        }
+      : _natCmpFor(_dimIds[0]);
     const _natAll = (a, b) => {
       const n = Math.max(catDims[a].length, catDims[b].length);
-      for (let L = 0; L < n; L++) { const c = _natCmpFor(_dimIds[L])(_lvl(a, L), _lvl(b, L)); if (c) return c; }
+      for (let L = 0; L < n; L++) {
+        const cmp = L === 0 ? _cmp0 : _natCmpFor(_dimIds[L]);
+        const c = cmp(_lvl(a, L), _lvl(b, L)); if (c) return c;
+      }
       return 0;
     };
     let order = null;
@@ -5098,7 +5199,7 @@
         // valor de grupo (nivel-1) = suma de la métrica primaria; se ordenan grupos, no barras sueltas.
         const gv = new Map();
         cats.forEach((_, i) => { const k = _lvl(i, 0); gv.set(k, (gv.get(k) || 0) + _val(i)); });
-        const nat0 = _natCmpFor(_dimIds[0]);
+        const nat0 = _cmp0;
         order = cats.map((_, i) => i).sort((a, b) => {
           let d = 0;
           switch (_sortKey) {
@@ -5230,6 +5331,22 @@
     if (dimId === 'position') return 'line';
     return 'alpha';
   }
+  /**
+   * Orden natural de una CARD, mirando todas sus dimensiones y no sólo la primera.
+   * Una card agrupada por «rival × fecha» tiene el tiempo en el eje —las etiquetas son
+   * «Angkor Tiger · 2026-09-05»— pero mandaba la primera dimensión: quedaba en A→Z y no había
+   * forma de ordenarla por fecha, que es como se lee un historial de partidos.
+   */
+  function _cardSortKind(config) {
+    const dims = (config && config.dimensions || []).map(d => d && d.id).filter(Boolean);
+    if (!dims.length) return 'alpha';
+    const k0 = _dimSortKind(dims[0]);
+    if (k0 !== 'alpha') return k0;
+    // La primera no ordena, pero alguna otra sí manda el tiempo → cronológico.
+    return dims.slice(1).some(id => _dimSortKind(id) === 'chrono') ? 'chrono' : 'alpha';
+  }
+  // Fecha ISO dentro de una etiqueta compuesta («Angkor Tiger · 2026-09-05» → 2026-09-05).
+  const _dateInLabel = v => (String(v ?? '').match(/\d{4}-\d{2}-\d{2}/) || [null])[0];
   /** Comparador "natural" (ascendente) de una dimensión, sobre su valor de display. */
   function _natCmpFor(dimId) {
     if (dimId === 'md_code')    return (a, b) => (_mdOrd(a) - _mdOrd(b)) || _alphaCmp(a, b);
@@ -5251,7 +5368,7 @@
     if (by === 'label')    return dir === 'desc' ? 'alpha_desc' : 'alpha';
     if (by === 'natural')  return dir === 'desc' ? 'nat_desc' : 'nat';
     const dim0 = (config && config.dimensions || [])[0];
-    return _dimSortKind(dim0 && dim0.id) === 'alpha' ? 'orig' : 'nat';
+    return _cardSortKind(config) === 'alpha' ? 'orig' : 'nat';
   }
   /** Modo → objeto persistible en config.sort (null = default). */
   function _sortObjOf(key) {
@@ -5267,7 +5384,7 @@
   }
   /** Opciones del menú para una card, con la etiqueta del "natural" según su dimensión. */
   function _barSortModes(config) {
-    const kind = _dimSortKind(((config && config.dimensions || [])[0] || {}).id);
+    const kind = _cardSortKind(config);
     const nat  = kind === 'chrono'
       ? { asc: [_tt('gps_analysis.builder_sort_chrono',     'Chronological'),           'ti-calendar'],
           desc:[_tt('gps_analysis.builder_sort_chrono_rev', 'Chronological (reverse)'), 'ti-calendar'] }
