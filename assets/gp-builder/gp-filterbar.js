@@ -225,8 +225,12 @@
     state.position = [];
     _applyPosGranularity();
     _syncGranButtons();
-    renderList('position');
+    // El orden importa: _afterChange() recalcula la cascada con las posiciones YA proyectadas.
+    // Pintar la lista antes la filtraba contra el cache del nivel anterior —que tiene los códigos
+    // viejos (LB, CM)— y de las nuevas (FB, MF, CB, ST) sólo sobrevivían las que se escriben
+    // igual en los dos niveles. Ese era el «elijo Basic y me desaparecen posiciones».
     _afterChange();
+    renderList('position');
   }
   function _syncGranButtons() {
     root?.querySelectorAll('.fb-drop[data-key="position"] [data-gran]').forEach(b =>
@@ -378,6 +382,9 @@
       posGranularity: state.posGranularity,
       date:          { ...state.date },
       activeCount: activeCount(),
+      // Cuántas filas GPS tiene cargadas la barra. 0 = todavía no llegaron (o el club no tiene
+      // datos): sin filas la cascada no corre y ningún filtro recorta nada.
+      rowCount:      _rows.length,
     };
   }
   // Aplicar automático: cada clic en una opción coalesce con los siguientes en una
