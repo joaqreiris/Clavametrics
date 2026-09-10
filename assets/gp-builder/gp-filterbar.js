@@ -385,6 +385,8 @@
       // Cuántas filas GPS tiene cargadas la barra. 0 = todavía no llegaron (o el club no tiene
       // datos): sin filas la cascada no corre y ningún filtro recorta nada.
       rowCount:      _rows.length,
+      // Si todavía no se restauró lo guardado, la barra no escribe (ver persist).
+      restored:      _restored,
     };
   }
   // Aplicar automático: cada clic en una opción coalesce con los siguientes en una
@@ -420,14 +422,28 @@
   }
 
   // ── Persistencia por usuario + dashboard_id (localStorage) ──────────────
+  // La clave sale del data-view de la pestaña, que está en el HTML desde el primer render y no
+  // cambia nunca ('ind', 'grp', … y 'db-<uuid>' para los dashboards del usuario).
+  //
+  // Antes se usaba el data-dashboard-id, que enhancePredefinedTabs cuelga de la pestaña DESPUÉS
+  // de traer los dashboards de la base. Para cuando el usuario tocaba un filtro ya estaba (se
+  // guardaba con el uuid), pero cuando la barra restauraba todavía no (se leía con el data-view):
+  // guardaba en un lado y leía en otro, así que los filtros se perdían en cada F5.
   function dashId() {
-    return document.querySelector('#sections .gp-sec.is-on')?.dataset.dashboardId
+    return document.querySelector('#sections .gp-sec.is-on')?.dataset.view
         || document.querySelector('.gp-view.is-on')?.dataset.view
         || 'default';
   }
   function storeKey() { return `cm_gpfilters_${window._gpUserId || '?'}_${dashId()}`; }
 
+  // Guardar antes de haber leído destruye lo guardado: cualquier fireNow() temprano —el de una
+  // card que montó primero, el reload del cambio de equipo— escribía el estado VACÍO encima de
+  // los filtros del usuario, y cuando restore() llegaba ya no quedaba nada que restaurar. Por eso
+  // los filtros se perdían en cada F5. Hasta que restore() no corre, persist() no escribe.
+  let _restored = false;
+  let _restoredFor = null;   // dashboard cuyos filtros ya se restauraron
   function persist() {
+    if (!_restored) return;
     try {
       localStorage.setItem(storeKey(), JSON.stringify({
         md_code: state.md_code, player: state.player, position: state.position,
@@ -450,8 +466,21 @@
     state.visibleFilters = _defaultVisible();
     state.metrics = [];
   }
-  /** Carga los filtros guardados del dashboard activo (sin disparar fire). */
+  /** Carga los filtros guardados del dashboard activo (sin disparar fire).
+   *  Una sola vez por dashboard: el boot tiene dos caminos que llaman acá y cada llamada
+   *  empieza reseteando el estado, así que una segunda pasada tardía le borraba al usuario el
+   *  filtro que acababa de poner — y con persist() detrás, también el guardado. */
   function restore() {
+    // Con la tira de pestañas en el DOM pero ninguna marcada todavía, dashId() daría 'default':
+    // se restauraría con una clave provisional y, al llegar la pestaña real, restore() correría
+    // otra vez y volvería a resetear el estado — borrando el filtro que el usuario ya hubiera
+    // puesto. Mejor no restaurar todavía; el boot vuelve a pasar por acá.
+    const _tabs = document.getElementById('sections');
+    if (_tabs && !_tabs.querySelector('.gp-sec.is-on')) return;
+    const _id = dashId();
+    if (_restoredFor === _id) return;
+    _restoredFor = _id;
+    _restored = true;   // desde acá persist() puede escribir: ya se leyó lo que había
     resetStateSilent();
     _dateUserSet = false;
     try {
@@ -1684,6 +1713,11 @@
     ['md_code','player','position','microcycle','rival','session_type','work_context'].forEach(k => {
       if (!Array.isArray(state[k]) || !state[k].length) return;
       const valid = new Set((options[k] || []).map(o => String(o.value)));
+      // Una lista de opciones VACÍA no quiere decir «ese valor ya no existe», quiere decir que
+      // esta carga no trajo nada —la query falló, o corrió antes de que se resolviera el club—.
+      // Podar contra ella borraba los filtros guardados del usuario y los persistía borrados: un
+      // solo tropiezo de red y perdía su selección para siempre.
+      if (!valid.size) return;
       const before = state[k].length;
       state[k] = state[k].filter(v => valid.has(String(v)));
       if (state[k].length !== before) _pruned = true;
