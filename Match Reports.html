@@ -161,8 +161,7 @@
   .mr-kpi-bar .them { background:var(--cm-neutral); opacity:0.45; }
 
   /* Two-col grid */
-  .mr-grid { display:grid; grid-template-columns:1.5fr 1fr; gap:14px; }
-  @media (max-width:1100px) { .mr-grid { grid-template-columns:1fr; } .mr-kpis { grid-template-columns:repeat(2,1fr); } }
+  @media (max-width:1100px) { .mr-kpis { grid-template-columns:repeat(2,1fr); } }
 
   .mr-card { background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-4); box-shadow:var(--cm-shadow-1); }
   .mr-card-h { display:flex; align-items:center; gap:10px; padding:14px 16px; border-bottom:1px solid var(--cm-border-soft); }
@@ -359,7 +358,8 @@
   .ts-head .nm.r { text-align:right; }
   .ts-head .nm small { display:block; margin-top:2px; font:500 10.5px/1 var(--cm-font-mono); color:var(--cm-fg-faint); }
   .ts-head .vs { font:500 10px/1 var(--cm-font-mono); letter-spacing:.08em; text-transform:uppercase; color:var(--cm-fg-faint); }
-  .ts-rows { padding:4px 14px 12px; }
+  .ts-rows { padding:4px 14px 12px; display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:0 28px; }
+  @media (max-width:820px){ .ts-rows { grid-template-columns:1fr; } }
   .ts-row { padding:9px 0; border-bottom:1px solid var(--cm-border-soft); }
   .ts-row:last-child { border-bottom:0; }
   .ts-top { display:grid; grid-template-columns:auto 1fr auto; gap:8px; align-items:baseline; margin-bottom:5px; }
@@ -413,7 +413,9 @@
   .ts-sec[open] > summary::before { transform:rotate(90deg); }
   .ts-sec > summary:hover { color:var(--cm-fg); }
   .ts-sec > summary .n { margin-left:auto; font:500 10.5px/1 var(--cm-font-mono); color:var(--cm-fg-faint); }
-  .ts-grid { padding:2px 14px 12px; }
+  .ts-grid { padding:2px 14px 12px; display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:0 28px; }
+  @media (max-width:1100px){ .ts-grid { grid-template-columns:repeat(2, minmax(0,1fr)); } }
+  @media (max-width:700px){ .ts-grid { grid-template-columns:1fr; } }
   .ts-gr { display:grid; grid-template-columns:auto 1fr auto; gap:8px; align-items:baseline; padding:5px 0; border-bottom:1px solid var(--cm-border-soft); }
   .ts-gr:last-child { border-bottom:0; }
   .ts-gr .v { font:600 12.5px/1 var(--cm-font-mono); color:var(--cm-fg-strong); font-variant-numeric:tabular-nums; }
@@ -666,83 +668,30 @@
         <div id="mrKpiBody" style="padding:20px 16px;text-align:center;color:var(--cm-fg-faint);font:var(--cm-body-sm)" data-i18n="match_reports.team_kpis_not_available_yet">Team KPIs — not available yet</div>
       </div>
 
-      <!-- Two-col -->
-      <div class="mr-grid">
+      <!-- ORDEN DE LA PÁGINA
 
-        <!-- LEFT: player table -->
-        <div class="mr-card">
-          <div class="mr-card-h">
-            <h3 data-i18n="match_reports.player_report">Player report</h3>
-            <span class="sub" id="mrPlayerSub"></span>
-            <!-- Los tres botones que había acá (ordenar, columnas, exportar) no estaban
-                 conectados a nada. En su lugar va la edición de estadísticas, que es lo
-                 único que la tabla necesita poder hacer: sin cargar las tarjetas por
-                 jugador, el contador de sanciones acumuladas no tiene con qué contar. -->
-            <div class="right" id="mrPlayerTools"></div>
-          </div>
+           El informe es de PARTIDO. El GPS es contexto de carga física: importa, pero
+           no es la respuesta a "qué pasó el domingo" — y sin embargo era lo primero y
+           lo más grande, mientras la comparación contra el rival vivía apretada en una
+           columna angosta al costado.
 
-          <div class="mr-tabs">
-            <button class="mr-tab is-on"><i class="ti ti-list-details"></i><span data-i18n="common.all">All</span></button>
-            <button class="mr-tab"><i class="ti ti-shield"></i><span data-i18n="match_reports.starters">Starters</span></button>
-            <button class="mr-tab"><i class="ti ti-arrows-exchange"></i><span data-i18n="match_reports.subs">Subs</span></button>
-          </div>
+           Ahora baja en orden de importancia: qué pasó en el partido, cómo viene el
+           equipo, quién arrastra sanciones, y al final cuánto corrió cada uno. -->
 
-          <!-- Las columnas se arman en loadGPS(): sólo aparecen las que tienen algún
-               dato en este partido. Un informe sin estadísticas por jugador cargadas
-               mostraba media tabla en guiones. -->
-          <div class="tscroll-x">
-            <table class="mr-table">
-              <thead><tr id="mrPlayerHead"></tr></thead>
-              <tbody id="mrPlayerBody"></tbody>
-            </table>
-          </div>
+      <!-- 1. Qué pasó en el partido — filled from team_match_stats (Wyscout team export).
+              Vacía hasta que alguien importe: no hay contra qué comparar cuando sólo se
+              cargó el lado propio a mano. -->
+      <div class="mr-card" id="mrTeamStatsCard" style="margin-bottom:14px">
+        <div class="mr-card-h">
+          <h3 data-i18n="match_reports.match_stats">Match stats</h3>
+          <span class="sub" id="mrTeamStatsSub"></span>
         </div>
-
-        <!-- RIGHT: shot map + heatmap + stat compare -->
-        <div style="display:flex;flex-direction:column;gap:14px">
-
-          <!-- Accumulated sanctions: who is close to missing a match. Filled by
-               renderSanctions() from card_accumulations; empty when nobody is near. -->
-          <div class="mr-card" id="mrSanctionsCard" style="display:none;margin-bottom:14px">
-            <div class="mr-card-h">
-              <h3 data-i18n="match_reports.sanctions_title">Accumulated sanctions</h3>
-              <span class="sub" id="mrSanctionsLeague"></span>
-            </div>
-            <div id="mrSanctionsBody" style="padding:10px 14px"></div>
-          </div>
-
-          <!-- Mapa de tiros y mapa de calor: ocultos.
-
-               Las dos necesitan coordenadas y ninguna de las fuentes que hay las tiene.
-               El Excel de equipo de Wyscout llega agregado por tercios, no por punto; el
-               XML de eventos no trae una sola coordenada (seis campos por instancia:
-               ID, start, end, code, label, text). No es que falte conectarlas: no hay
-               dato con qué dibujarlas, y una card que dice "not available yet" para
-               siempre es ruido.
-
-               El modelo del mapa de tiros SÍ existe — `public.match_shots`, con x_pct,
-               y_pct, minute, outcome y xg — pero nadie la llena. Si algún día entra un
-               proveedor con eventos posicionales, o se cargan a mano, esto se
-               reactiva y la tabla ya está esperando. -->
-
-          <!-- Match stats compare — filled from team_match_stats (Wyscout team export).
-               Stays hidden until someone imports it; there is nothing to compare
-               against when only our own side was ever entered by hand. -->
-          <div class="mr-card" id="mrTeamStatsCard">
-            <div class="mr-card-h">
-              <h3 data-i18n="match_reports.match_stats">Match stats</h3>
-              <span class="sub" id="mrTeamStatsSub"></span>
-            </div>
-            <div id="mrTeamStatsBody"></div>
-          </div>
-
-        </div>
+        <div id="mrTeamStatsBody"></div>
       </div>
 
-      <!-- Season trend — how the team is trending across every match that has team stats.
-           One metric at a time, picked from the select; the current match is marked on
-           the line. Hidden until there are at least two matches to compare. -->
-      <div class="mr-card" id="mrTrendCard" style="margin-top:14px;display:none">
+      <!-- 2. Cómo viene el equipo. Una métrica en el gráfico, todas en la tabla de
+              abajo. Escondida hasta que haya dos partidos con qué comparar. -->
+      <div class="mr-card" id="mrTrendCard" style="margin-bottom:14px;display:none">
         <div class="mr-card-h">
           <h3 data-i18n="match_reports.trend_title">Team trend</h3>
           <span class="sub" id="mrTrendSub"></span>
@@ -753,11 +702,67 @@
         <div id="mrTrendBody"></div>
       </div>
 
-      <!-- Match timeline — no match-events model yet -->
-      <div class="mr-card" style="margin-top:14px">
-        <div class="mr-card-h"><h3 data-i18n="match_reports.match_timeline">Match timeline</h3></div>
-        <div style="padding:28px 16px;text-align:center;color:var(--cm-fg-faint);font:var(--cm-body-sm)" data-i18n="match_reports.not_available_yet">Not available yet</div>
+      <!-- 3. Quién está cerca de perderse un partido. La llena renderSanctions() desde
+              card_accumulations; si no hay nadie en riesgo, no aparece. -->
+      <div class="mr-card" id="mrSanctionsCard" style="display:none;margin-bottom:14px">
+        <div class="mr-card-h">
+          <h3 data-i18n="match_reports.sanctions_title">Accumulated sanctions</h3>
+          <span class="sub" id="mrSanctionsLeague"></span>
+        </div>
+        <div id="mrSanctionsBody" style="padding:10px 14px"></div>
       </div>
+
+      <!-- 4. Y al final, jugador por jugador: lo que cada uno hizo y cuánto corrió.
+              Acá también se cargan a mano las tarjetas, que ningún export identifica. -->
+      <div class="mr-card">
+        <div class="mr-card-h">
+          <h3 data-i18n="match_reports.player_report">Player report</h3>
+          <span class="sub" id="mrPlayerSub"></span>
+          <!-- Los tres botones que había acá (ordenar, columnas, exportar) no estaban
+               conectados a nada. En su lugar va la edición de estadísticas, que es lo
+               único que la tabla necesita poder hacer: sin cargar las tarjetas por
+               jugador, el contador de sanciones acumuladas no tiene con qué contar. -->
+          <div class="right" id="mrPlayerTools"></div>
+        </div>
+
+        <div class="mr-tabs">
+          <button class="mr-tab is-on"><i class="ti ti-list-details"></i><span data-i18n="common.all">All</span></button>
+          <button class="mr-tab"><i class="ti ti-shield"></i><span data-i18n="match_reports.starters">Starters</span></button>
+          <button class="mr-tab"><i class="ti ti-arrows-exchange"></i><span data-i18n="match_reports.subs">Subs</span></button>
+        </div>
+
+        <!-- Las columnas se arman en loadGPS(): sólo aparecen las que tienen algún
+             dato en este partido. Un informe sin estadísticas por jugador cargadas
+             mostraba media tabla en guiones. -->
+        <div class="tscroll-x">
+          <table class="mr-table">
+            <thead><tr id="mrPlayerHead"></tr></thead>
+            <tbody id="mrPlayerBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Mapa de tiros y mapa de calor: ocultos.
+
+           Las dos necesitan coordenadas y ninguna de las fuentes que hay las tiene.
+           El Excel de equipo de Wyscout llega agregado por tercios, no por punto; el
+           XML de eventos no trae una sola coordenada (seis campos por instancia:
+           ID, start, end, code, label, text). No es que falte conectarlas: no hay
+           dato con qué dibujarlas, y una card que dice "not available yet" para
+           siempre es ruido.
+
+           El modelo del mapa de tiros SÍ existe — `public.match_shots`, con x_pct,
+           y_pct, minute, outcome y xg — pero nadie la llena. Si algún día entra un
+           proveedor con eventos posicionales, o se cargan a mano, esto se
+           reactiva y la tabla ya está esperando. -->
+
+      <!-- Cronología del partido: oculta, por ahora.
+
+           A diferencia del mapa de tiros, acá SÍ hay materia prima: el XML de eventos
+           de Wyscout trae el segundo de cada jugada y las marcas de inicio y fin de
+           cada tiempo, que alcanzan para pasarlo a minuto de partido. Lo que falta es
+           dónde guardarla — hoy el XML se lee para contar eventos por jugador y no
+           persiste la secuencia. Mientras tanto, una card vacía es ruido. -->
 
     </section>
   </main>
@@ -1509,9 +1514,11 @@
         const counts = mine.map(s => s[k.key]).filter(x => x != null).every(x => Number.isInteger(Number(x)));
         const amount = counts ? String(Math.round(Math.abs(d) * 10) / 10).replace('.', ',')
                               : W.format(k.key, Math.abs(d));
-        delta = `<span class="kpi-d ${flat ? '' : (better ? 'up' : 'down')}">${
-          flat ? '=' : (d > 0 ? '↑' : '↓')} ${esc(amount)} ${
-          esc(tt('match_reports.kpi_vs_avg', 'vs avg'))}</span>`;
+        // Sin diferencia no hay cantidad que mostrar: "= 0 vs promedio" es ruido.
+        delta = flat
+          ? `<span class="kpi-d">= ${esc(tt('match_reports.kpi_at_avg', 'your average'))}</span>`
+          : `<span class="kpi-d ${better ? 'up' : 'down'}">${d > 0 ? '↑' : '↓'} ${esc(amount)} ${
+              esc(tt('match_reports.kpi_vs_avg', 'vs avg'))}</span>`;
       }
       return `<div class="kpi">
         <div class="kpi-l">${esc(k.label)}</div>
