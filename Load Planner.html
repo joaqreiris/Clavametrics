@@ -639,9 +639,17 @@ async function loadMatchRefs(){
   const {sids,sidDate}=await _sessIds([...set]);
   if(!sids.length){ applyManual(); return; }
   const cols=METRICS.join(',');
-  const rows=await window.cmFetchAll(()=>window.sb.from('gps_reports')
-    .select(`player_id,session_id,${cols},time_played`)
+  const _sel=`player_id,session_id,${cols},time_played`;
+  let rows=await window.cmFetchAll(()=>window.sb.from('gps_reports')
+    .select(_sel)
     .eq('club_id',CLUB).in('player_id',pids).eq('is_invalid',false).in('session_id',sids),{label:'lp-matchrefs'}).catch(e=>{ console.warn('[lp] matchrefs',e); return []; });
+  // Recorte por contexto (Modelo B, docs/gps-work-context.md): una referencia de PARTIDO mide el
+  // partido. El top-up / rehab del día se descuenta de la fila, y al que solo hizo top-up (no jugó)
+  // se lo saca — si no, entraba como partido flojo y tiraba la referencia para abajo.
+  try{
+    const _m=await import('./lib/gp-card/resolver.js');
+    rows=await _m.applyCtxToRows(window.sb,{clubId:CLUB},sids,['team'],pids,rows||[],_sel);
+  }catch(e){ console.warn('[lp] ctx scope no aplicado',e&&e.message||e); }
   const by={};
   (rows||[]).forEach(r=>{ (by[r.player_id]=by[r.player_id]||[]).push(Object.assign({},r,{_d:sidDate[r.session_id],_tp:+(r.time_played||0)})); });
   // count only match days that actually have GPS for this roster — a fixture with no data
