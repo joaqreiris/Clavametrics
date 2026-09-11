@@ -1062,28 +1062,24 @@
           <!-- Classic "Setup" pane removed — the D&D pane (data-pane="dd") is the setup now.
                The "Setup" tab routes to it; the "Style" tab reuses the pane below. -->
           <div class="pane" data-pane="style">
+            <!-- ORDEN: colores -> qué se lee -> lo propio del tipo -> referencias -> la card.
+                 Antes el panel seguía el orden en que se fue construyendo, así que las opciones
+                 de un mismo tipo caían salteadas entre bloques de otros tipos (las de scatter en
+                 cuatro posiciones distintas, con las de box en medio). Al sumar una opción nueva,
+                 ponerla en SU grupo, no al final del panel. -->
+            <div class="es-sec">
+              <div class="lab" data-i18n="gps_analysis.builder_style_colors">Colors</div>
             <div class="es-sec">
               <div class="lab" data-i18n="gps_analysis.builder_accent_color">Accent color</div>
               <div class="es-swatches" id="gpbColors"></div>
-            </div>
-            <div class="es-sec" data-only="kpi,gauge">
-              <div class="lab" data-i18n="gps_analysis.builder_icon">Reference icon</div>
-              <div class="es-swatches" id="gpbIcons"></div>
             </div>
             <div class="es-sec" data-only="bars,line">
               <div class="lab" data-i18n="gps_analysis.builder_series_colors">Series colors</div>
               <div id="gpbSeriesColors"></div>
             </div>
-            <div class="es-sec">
-              <div class="lab" data-i18n="gps_analysis.builder_card_size">Card size</div>
-              <div class="es-seg" id="gpbSize">
-                <button data-size="sm">S</button>
-                <button class="is-on" data-size="md">M</button>
-                <button data-size="lg">L</button>
-                <button data-size="full" data-i18n="gps_analysis.builder_size_full">Full</button>
-              </div>
             </div>
             <div class="es-sec">
+              <div class="lab" data-i18n="gps_analysis.builder_style_readout">What the chart shows</div>
               <div class="es-toggle" data-only="bars,line,scatter,radar,box,demand">
                 <span class="tx"><span class="t" data-i18n="gps_analysis.builder_axes">Axes</span><span class="s" data-i18n="gps_analysis.builder_axes_sub">Show axis lines &amp; labels</span></span>
                 <button class="es-sw-t is-on" data-toggle="axes"></button>
@@ -1095,6 +1091,36 @@
               <div class="es-toggle" data-only="bars,line,scatter,radar,ranking">
                 <span class="tx"><span class="t" data-i18n="gps_analysis.builder_data_labels">Data labels</span><span class="s" data-i18n="gps_analysis.builder_data_labels_sub">Show values on chart</span></span>
                 <button class="es-sw-t" data-toggle="labels"></button>
+              </div>
+              <div class="es-toggle" data-only="kpi,gauge">
+                <span class="tx"><span class="t" data-i18n="gps_analysis.builder_subtitle">Subtitle</span><span class="s" data-i18n="gps_analysis.builder_subtitle_sub">Show the agg · scope line</span></span>
+                <button class="es-sw-t is-on" data-toggle="showSub"></button>
+              </div>
+            </div>
+            <div class="es-sec" data-only="kpi,gauge,bars,line,scatter,box">
+              <div class="lab" data-i18n="gps_analysis.builder_style_thistype">For this chart type</div>
+            <div class="es-sec" data-only="kpi,gauge">
+              <div class="lab" data-i18n="gps_analysis.builder_icon">Reference icon</div>
+              <div class="es-swatches" id="gpbIcons"></div>
+            </div>
+              <div class="es-toggle is-stack" data-only="gauge">
+                <span class="tx"><span class="t" data-i18n="gps_analysis.gauge_mode">Gauge mode</span></span>
+                <div class="es-seg" id="gpbGaugeMode">
+                  <button data-gmode="value" class="is-on" data-i18n="gps_analysis.gauge_mode_value">Value</button>
+                  <button data-gmode="acwr" data-i18n="gps_analysis.gauge_mode_acwr">ACWR</button>
+                </div>
+              </div>
+              <div class="es-toggle" data-only="line">
+                <span class="tx"><span class="t" data-i18n="gps_analysis.builder_points">Points</span><span class="s" data-i18n="gps_analysis.builder_points_sub">Mark each vertex (line)</span></span>
+                <button class="es-sw-t is-on" data-toggle="points"></button>
+              </div>
+              <div class="es-toggle" data-only="line">
+                <span class="tx"><span class="t" data-i18n="gps_analysis.builder_area_fill">Area fill</span><span class="s" data-i18n="gps_analysis.builder_area_fill_sub">Soft fill under the line</span></span>
+                <button class="es-sw-t" data-toggle="area"></button>
+              </div>
+              <div class="es-toggle" data-only="bars">
+                <span class="tx"><span class="t" data-i18n="gps_analysis.builder_combo_line">Join the line</span><span class="s" data-i18n="gps_analysis.builder_combo_line_sub">Off: only the dots of the line metric</span></span>
+                <button class="es-sw-t is-on" data-toggle="comboLine"></button>
               </div>
               <div class="es-toggle is-stack" data-only="scatter">
                 <span class="tx"><span class="t" data-i18n="gps_analysis.builder_label_content">Label content</span><span class="s" data-i18n="gps_analysis.builder_label_content_sub">Text beside each point</span></span>
@@ -1113,6 +1139,14 @@
                 <span class="tx"><span class="t" data-i18n="gps_analysis.builder_rich_tooltip">Rich tooltip</span><span class="s" data-i18n="gps_analysis.builder_rich_tooltip_sub">Show a mini trend on hover</span></span>
                 <button class="es-sw-t is-on" data-toggle="richTooltip"></button>
               </div>
+              <div class="es-toggle is-stack" data-only="scatter">
+                <span class="tx"><span class="t" data-i18n="gps_analysis.builder_quadrants">Quadrants</span><span class="s" data-i18n="gps_analysis.builder_quadrants_sub">Reference cross + a label per corner</span></span>
+                <div class="es-seg" id="gpbQuadMode">
+                  <button data-qmode="off" data-i18n="gps_analysis.builder_quadrants_off">None</button>
+                  <button data-qmode="mean" class="is-on" data-i18n="gps_analysis.builder_quadrants_mean">Mean</button>
+                  <button data-qmode="median" data-i18n="gps_analysis.builder_quadrants_median">Median</button>
+                </div>
+              </div>
               <div class="es-toggle is-stack" data-only="box">
                 <span class="tx"><span class="t" data-i18n="gps_analysis.builder_box_out">Values outside</span><span class="s" data-i18n="gps_analysis.builder_box_out_sub">What to show for whoever falls outside the whiskers</span></span>
                 <div class="es-seg" id="gpbBoxOut">
@@ -1125,37 +1159,6 @@
                 <span class="tx"><span class="t" data-i18n="gps_analysis.builder_box_out_hi">Highlight them</span><span class="s" data-i18n="gps_analysis.builder_box_out_hi_sub">Alert colour instead of the box colour</span></span>
                 <button class="es-sw-t is-on" data-toggle="boxOutHi"></button>
               </div>
-              <div class="es-toggle is-stack" data-only="scatter">
-                <span class="tx"><span class="t" data-i18n="gps_analysis.builder_quadrants">Quadrants</span><span class="s" data-i18n="gps_analysis.builder_quadrants_sub">Reference cross + a label per corner</span></span>
-                <div class="es-seg" id="gpbQuadMode">
-                  <button data-qmode="off" data-i18n="gps_analysis.builder_quadrants_off">None</button>
-                  <button data-qmode="mean" class="is-on" data-i18n="gps_analysis.builder_quadrants_mean">Mean</button>
-                  <button data-qmode="median" data-i18n="gps_analysis.builder_quadrants_median">Median</button>
-                </div>
-              </div>
-              <div class="es-toggle is-stack" data-only="gauge">
-                <span class="tx"><span class="t" data-i18n="gps_analysis.gauge_mode">Gauge mode</span></span>
-                <div class="es-seg" id="gpbGaugeMode">
-                  <button data-gmode="value" class="is-on" data-i18n="gps_analysis.gauge_mode_value">Value</button>
-                  <button data-gmode="acwr" data-i18n="gps_analysis.gauge_mode_acwr">ACWR</button>
-                </div>
-              </div>
-              <div class="es-toggle" data-only="kpi,gauge">
-                <span class="tx"><span class="t" data-i18n="gps_analysis.builder_subtitle">Subtitle</span><span class="s" data-i18n="gps_analysis.builder_subtitle_sub">Show the agg · scope line</span></span>
-                <button class="es-sw-t is-on" data-toggle="showSub"></button>
-              </div>
-              <div class="es-toggle" data-only="line">
-                <span class="tx"><span class="t" data-i18n="gps_analysis.builder_points">Points</span><span class="s" data-i18n="gps_analysis.builder_points_sub">Mark each vertex (line)</span></span>
-                <button class="es-sw-t is-on" data-toggle="points"></button>
-              </div>
-              <div class="es-toggle" data-only="bars">
-                <span class="tx"><span class="t" data-i18n="gps_analysis.builder_combo_line">Join the line</span><span class="s" data-i18n="gps_analysis.builder_combo_line_sub">Off: only the dots of the line metric</span></span>
-                <button class="es-sw-t is-on" data-toggle="comboLine"></button>
-              </div>
-              <div class="es-toggle" data-only="line">
-                <span class="tx"><span class="t" data-i18n="gps_analysis.builder_area_fill">Area fill</span><span class="s" data-i18n="gps_analysis.builder_area_fill_sub">Soft fill under the line</span></span>
-                <button class="es-sw-t" data-toggle="area"></button>
-              </div>
             </div>
             <div class="es-sec" data-only="bars,scatter">
               <div class="lab" data-i18n="gps_analysis.builder_reference_lines">Reference lines</div>
@@ -1164,9 +1167,16 @@
                 <i class="ti ti-plus" style="font-size:13px"></i><span data-i18n="gps_analysis.builder_add_reference_line">Add line</span>
               </button>
             </div>
-            <!-- Title/subtitle format (Paso 3a + 3b). data-only is a HARDCODED type list: if you add a
-                 new viz type that shows a title/subtitle, add it here too. KPI and single GAUGE format
-                 their body .l/.sb via gpApplyHeaderFormat; the rest format the .gp-c-h header spans. -->
+            <div class="es-sec">
+              <div class="lab" data-i18n="gps_analysis.builder_style_card">The card</div>
+              <div class="lab" data-i18n="gps_analysis.builder_card_size">Card size</div>
+              <div class="es-seg" id="gpbSize">
+                <button data-size="sm">S</button>
+                <button class="is-on" data-size="md">M</button>
+                <button data-size="lg">L</button>
+                <button data-size="full" data-i18n="gps_analysis.builder_size_full">Full</button>
+              </div>
+            </div>
             <div class="es-sec" data-only="bars,line,scatter,radar,ranking,table,heatmap,kpi,gauge,box">
               <div class="lab" data-i18n="gps_analysis.builder_header_format">Title &amp; subtitle</div>
               ${_fmtBlockHTML('title', 'builder_header_title', 'Title')}

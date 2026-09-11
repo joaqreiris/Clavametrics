@@ -78,3 +78,54 @@ test.describe('GPS · el panel de estilo no ofrece botones muertos', () => {
     expect(t).not.toContain('legend');
   });
 });
+
+// ── Orden del panel ────────────────────────────────────────────────────────────
+// El panel seguía el orden en que se fue construyendo: las opciones de scatter caían en cuatro
+// posiciones salteadas, con las de box plot en el medio, y el tamaño de la card entre los colores
+// y los ejes. Ahora va por grupos. Lo que estos tests cuidan es lo que se rompe al mover bloques:
+// que no quede un título de grupo sin nada debajo, y que las de un tipo no vuelvan a dispersarse.
+
+/** Títulos de grupo VISIBLES del panel de estilo, en orden. */
+const gruposDe = async (page, tipo) => {
+  await page.locator(`[data-type="${tipo}"]`).first().click();
+  await page.waitForTimeout(250);
+  await page.locator('[data-tab="style"]').first().click();
+  await page.waitForTimeout(250);
+  return page.evaluate(() => [...document.querySelectorAll('.pane[data-pane="style"] .es-sec')]
+    .filter(sec => sec.offsetParent !== null)
+    .map(sec => sec.querySelector('.lab')?.textContent?.trim() || '')
+    .filter(Boolean));
+};
+
+test.describe('GPS · el panel de estilo va por grupos', () => {
+  test('de los colores a la card, en ese orden', async ({ page }) => {
+    await open(page);
+    const g = await gruposDe(page, 'bars');
+    const i = (re) => g.findIndex(x => re.test(x));
+    const colores = i(/colors|colores/i), lee = i(/what the chart|qué se lee/i),
+          tipo = i(/this chart type|de este tipo/i), card = i(/the card|la card/i);
+    expect(colores, 'falta el grupo de colores').toBeGreaterThanOrEqual(0);
+    expect(colores).toBeLessThan(lee);
+    expect(lee).toBeLessThan(tipo);
+    expect(tipo).toBeLessThan(card);
+  });
+
+  test('las de scatter quedan juntas en un solo bloque', async ({ page }) => {
+    await open(page);
+    await gruposDe(page, 'scatter');
+    const n = await page.evaluate(() => {
+      const sec = [...document.querySelectorAll('.pane[data-pane="style"] .es-sec')]
+        .find(s => /this chart type|de este tipo/i.test(s.querySelector('.lab')?.textContent || ''));
+      return sec ? [...sec.querySelectorAll('.es-toggle')].filter(t => t.offsetParent !== null).length : -1;
+    });
+    // contenido de etiqueta, fotos, tooltip y cuadrantes: las cuatro, sin nada de otro tipo en medio
+    expect(n).toBe(4);
+  });
+
+  test('un tipo sin opciones propias no muestra el grupo vacío', async ({ page }) => {
+    await open(page);
+    const g = await gruposDe(page, 'radar');   // radar no tiene ninguna opción suya
+    expect(g.some(t => /this chart type|de este tipo/i.test(t))).toBe(false);
+  });
+});
+
