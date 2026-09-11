@@ -399,14 +399,12 @@
     const refs = [...new Set((exIds || []).map(id => _gxCache[id]).filter(g => g && g.media_type === 'image' && g.media_ref && !(g.media_ref in _gymImg)).map(g => g.media_ref))];
     if (refs.length) { const urls = await window.cmSignedUrls('gym-exercise-media', refs); Object.keys(urls).forEach(p => { _gymImg[p] = urls[p]; }); }
   }
+  // El criterio vive en assets/media-embed.js — uno solo para toda la app.
+  // Se traduce a la forma que usa esta página: { embed, yt, file }.
   function videoEmbed(url) {
-    const u = String(url || '').trim(); if (!u) return null;
-    let m = u.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([\w-]{11})/);
-    if (m) return { embed: 'https://www.youtube.com/embed/' + m[1] + '?autoplay=1&mute=1&rel=0&playsinline=1', yt: m[1] };
-    m = u.match(/vimeo\.com\/(?:video\/)?(\d+)/);
-    if (m) return { embed: 'https://player.vimeo.com/video/' + m[1] + '?autoplay=1&muted=1' };
-    if (/\.(mp4|webm|ogg|mov)(\?|$)/i.test(u)) return { embed: u, file: true };
-    return null;
+    const v = window.cmVideoEmbed ? window.cmVideoEmbed(url) : null;
+    if (!v) return null;
+    return { embed: v.src, yt: v.provider === 'youtube' ? v.id : null, file: v.kind === 'file' };
   }
   // Media de un ejercicio de gym: preferimos VIDEO si hay; si no, imagen.
   function gymMediaFor(exId) {

@@ -142,6 +142,10 @@
     background:var(--cm-fg-strong); color:var(--cm-bg);
     border-radius:0;
     display:none; align-items:center; gap:10px;
+    /* Con una sola fila, los textos en español y portugués —más largos que en
+       inglés— sacaban la barra de la pantalla y le daban scroll horizontal a
+       toda la página, hasta en escritorio. Que baje de línea antes que empujar. */
+    flex-wrap:wrap; row-gap:8px; min-width:0;
     z-index:40;
     border-bottom:1px solid var(--cm-border);
   }
@@ -153,6 +157,7 @@
     height:28px; padding:0 10px; border-radius:6px;
     font:600 12px/1 var(--cm-font-sans);
     border:1px solid; cursor:pointer;
+    white-space:nowrap; flex-shrink:0;
   }
   .av-bulk-btn .dot { width:7px; height:7px; border-radius:50%; }
   .av-bulk-btn.av { background:rgba(34,197,94,0.18); color:#86EFAC; border-color:rgba(34,197,94,0.30); }

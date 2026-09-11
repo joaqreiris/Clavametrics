@@ -635,6 +635,62 @@ body.cm::before {
 }
 
 /* ============================================================
+   TOPBAR — que nunca empuje la página.
+
+   Los hijos de un contenedor flex nacen con min-width:auto, que les impide
+   encogerse por debajo de su contenido: con eso puesto, el flex-shrink:1 que
+   ya tenían no hacía nada y la barra crecía hasta sacar scroll horizontal a
+   TODA la página (medido: 390px de ancho contra 754px de contenido).
+
+   min-width:0 desbloquea el encogido; el breadcrumb recorta con puntos
+   suspensivos y la fila de acciones se desliza sola en vez de empujar.
+   ============================================================ */
+.hub-topbar, .cm-topbar { min-width: 0; }
+.hub-topbar > *, .cm-topbar > * { min-width: 0; }
+
+/* El texto largo cede primero: es lo único recortable sin perder función. */
+.hub-crumb, .cm-crumb { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Los botones no se deforman ni se parten: el que cede es el texto de al lado.
+   Nada de overflow aquí — el panel de notificaciones (.cm-np) cuelga DENTRO de
+   esta fila, y un contexto de scroll lo recortaría en las 35 páginas que lo
+   tienen. */
+.hub-topbar .actions, .cm-topbar-actions { flex-shrink: 0; }
+.hub-topbar .actions > *, .cm-topbar-actions > * { flex-shrink: 0; }
+
+/* ============================================================
+   MEDIA — marco de proporción fija para video embebido.
+   Un solo marco para toda la app: antes cada página tenía su copia
+   (.sl-lb-video, .dp-vid-frame, .gl-video-frame, .vd-player…) y se iban
+   separando. El hijo se estira al marco y NUNCA lo desborda, de ahí el
+   object-fit: un video vertical entra con bandas en vez de recortarse.
+   La proporción se cambia por caso con --cm-media-ratio.
+   ============================================================ */
+.cm-media {
+  position: relative;
+  width: 100%;
+  aspect-ratio: var(--cm-media-ratio, 16 / 9);
+  border-radius: var(--cm-r-4);
+  overflow: hidden;
+  background: #000;
+  border: 1px solid var(--cm-border);
+}
+.cm-media > iframe,
+.cm-media > video,
+.cm-media > img {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  /* contain, no cover: encajar sin recortar. En <video> es el valor por
+     defecto, pero los marcos heredados traían cover y comían los bordes. */
+  object-fit: contain;
+  background: #000;
+}
+
+/* ============================================================
    GLOBAL PRINT — clean, light, legible regardless of theme.
    One block, all pages. Hides app shell + chrome, neutralizes
    dark mode, remaps surface/text/border tokens to light values.

@@ -449,15 +449,8 @@ function _dpAllTasks(){ return [ ...(_dpFieldExercises||[]), ...((window._dpActI
 function dpVideoEmbed(url){
   const u = String(url || '').trim();
   if (!u) return null;
-  let m = u.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([\w-]{11})/);
-  if (m) return `https://www.youtube.com/embed/${m[1]}?autoplay=1&mute=1&rel=0&playsinline=1`;
-  m = u.match(/vimeo\.com\/(?:video\/)?(\d+)/);
-  if (m) return `https://player.vimeo.com/video/${m[1]}?autoplay=1&muted=1`;
-  m = u.match(/drive\.google\.com\/(?:file\/d\/|open\?id=|uc\?id=)([\w-]+)/);
-  if (m) return `https://drive.google.com/file/d/${m[1]}/preview`;
-  if (/dropbox\.com/.test(u)) return u.replace('www.dropbox.com', 'dl.dropboxusercontent.com').replace(/[?&]dl=0/, '');
-  if (/\.(mp4|webm|ogg|mov)(\?|$)/i.test(u)) return u;   // direct file → <iframe> plays it
-  return null;
+  // El criterio vive en assets/media-embed.js — uno solo para toda la app.
+  return window.cmVideoEmbed ? window.cmVideoEmbed(u) : null;
 }
 // Find a session_exercise (field / activation / goalkeeper) by its id.
 function dpFindTask(seid){
@@ -484,9 +477,11 @@ function dpOpenVideo(ev, seid){
   const v = dpTaskVideo(dpFindTask(seid));
   if (!v) return;
   document.getElementById('dpVidTitle').textContent = v.name || tt('daily_planning.exercise_video','Exercise video');
-  document.getElementById('dpVidBody').innerHTML = v.embed
-    ? `<div class="dp-vid-frame"><iframe src="${_dpEsc(_dpSafeUrl(v.embed))}" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div>`
-    : `<a class="cm-btn is-outline is-sm" href="${_dpEsc(_dpSafeUrl(v.url))}" target="_blank" rel="noopener"><i class="ti ti-external-link" style="font-size:14px"></i>${tt('daily_planning.open_video','Open video')}</a>`;
+  // <iframe> para proveedores, <video> para archivos: Safari no escala un
+  // archivo servido dentro de un iframe y lo pinta cortado (ver media-embed.js).
+  const frame = (v.embed && window.cmVideoHtml) ? window.cmVideoHtml(v.url, { className: 'dp-vid-frame' }) : '';
+  document.getElementById('dpVidBody').innerHTML = frame
+    || `<a class="cm-btn is-outline is-sm" href="${_dpEsc(_dpSafeUrl(v.url))}" target="_blank" rel="noopener"><i class="ti ti-external-link" style="font-size:14px"></i>${tt('daily_planning.open_video','Open video')}</a>`;
   document.getElementById('dpVidBackdrop').style.display = 'flex';
 }
 function dpCloseVideo(){
@@ -785,7 +780,7 @@ async function dpLoadTactical(dateStr) {
     // sale de ahí, no de una lista fija. Si falla, el chip igual se muestra.
     const [{ data, error }, catsRes] = await Promise.all([
       window.sb.from('tactical_objectives')
-        .select('id,category,title,done')
+        .select('id,category,title,done,priority')
         .eq('club_id', _dpClubId).eq('team_id', _dpTeamId).eq('date', dateStr)
         .order('position').order('created_at'),
       window.cmTacticalCats ? window.cmTacticalCats.load(_dpClubId, _dpTeamId) : Promise.resolve(null),
@@ -801,12 +796,19 @@ async function dpLoadTactical(dateStr) {
     const link = document.getElementById('dpTacticalLink');
     if (link) { link.href = 'Tactical Planning.html?date=' + dateStr; link.style.display = canEditTac ? '' : 'none'; }
     const box = document.getElementById('dpTacticalChips');
-    const rows = data || [];
+    // Los principales primero: son los que sostienen la sesión. Los secundarios
+    // se ven igual, pero en segundo plano (punto hueco).
+    const isMainObj = o => !window.cmTacticalCats || window.cmTacticalCats.isMain(o);
+    const rows = (data || []).slice().sort((a, b) => (isMainObj(a) ? 0 : 1) - (isMainObj(b) ? 0 : 1));
     if (!rows.length) {
       box.innerHTML = '<span style="font:500 12px var(--cm-font-sans);color:var(--cm-fg-muted)" data-i18n="daily_planning.no_tactical">No tactical objectives for this day.</span>';
       if (window.CM_I18N && CM_I18N.applyTo) CM_I18N.applyTo(box);
     } else {
-      box.innerHTML = rows.map(o => `<button type="button" class="dp-tacchip${o.done ? ' done' : ''}${canEditTac ? '' : ' is-ro'}" data-id="${esc(o.id)}" title="${esc(o.title)}"><span class="dot" style="background:${catColor(o.category)}"></span><span class="t">${esc(o.title)}</span><i class="ti ti-check"></i></button>`).join('');
+      box.innerHTML = rows.map(o => {
+        const sec = !isMainObj(o);
+        const col = catColor(o.category);
+        return `<button type="button" class="dp-tacchip${o.done ? ' done' : ''}${sec ? ' is-sec' : ''}${canEditTac ? '' : ' is-ro'}" data-id="${esc(o.id)}" title="${esc(o.title)}" style="--sc:${col}"><span class="dot" style="background:${col}"></span><span class="t">${esc(o.title)}</span><i class="ti ti-check"></i></button>`;
+      }).join('');
       if (canEditTac) box.querySelectorAll('.dp-tacchip').forEach(b => b.addEventListener('click', async () => {
         const row = rows.find(r => r.id === b.getAttribute('data-id')); if (!row) return;
         row.done = !row.done;

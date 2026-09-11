@@ -271,7 +271,8 @@
     background:var(--cm-surface);
     border:1px solid var(--cm-border);
     border-radius:var(--cm-r-5);
-    overflow:hidden;
+    /* auto, no hidden: si no, la tabla se corta sin poder verla entera. */
+    overflow-x:auto; overflow-y:hidden;
     box-shadow:var(--cm-shadow-1);
   }
   .pp-compare table { width:100%; border-collapse:collapse; }
@@ -366,7 +367,12 @@
   /* ── Sticky action footer ─────────────────────────────── */
   .pp-foot {
     position:sticky; bottom:0;
-    margin:24px -28px -120px;
+    /* El sangrado lateral negativo venía de cuando esto vivía DENTRO de
+       .pp-page (padding 28px). Cuelga de .hub-main, que no tiene padding: los
+       -28px no compensaban nada y sacaban la barra 28px por cada lado, con
+       scroll horizontal en toda la página. El padding interno mantiene el
+       contenido alineado con el de .pp-page. */
+    margin:24px 0 -120px;
     padding:14px 28px;
     background:color-mix(in srgb, var(--cm-bg) 96%, transparent);
     backdrop-filter:saturate(160%) blur(12px);
