@@ -35,7 +35,22 @@ async function mockHub(page, overrides = {}) {
 
 async function gotoHub(page, overrides = {}) {
   await injectSession(page);
+  // Las tarjetas del Hub se eligen: el usuario arma su tira y la selección vive en localStorage.
+  // El set por defecto ya no trae «squad_size», así que hay que pedirla — igual que haría alguien
+  // que la quiere ver. Antes venía de fábrica y el test la daba por sentada.
+  await page.addInitScript(() => {
+    try { localStorage.setItem('cm_hub_kpis',
+      JSON.stringify(['squad_size', 'acwr', 'wellness', 'injuries'])); } catch { /* sin storage */ }
+  });
   await mockHub(page, overrides);
+  // La selección también viaja en el perfil (profiles.settings.hub_kpis) y, cuando llega, pisa la
+  // de localStorage. Sin ella, la tira volvía al set de fábrica y la tarjeta de plantel se ocultaba
+  // justo después de aparecer.
+  await page.route(`${SB}/rest/v1/profiles**`, route => {
+    const acc = route.request().headers()['accept'] || '';
+    const p = { ...PROFILE, settings: { hub_kpis: ['squad_size', 'acwr', 'wellness', 'injuries'] } };
+    return route.fulfill({ json: acc.includes('pgrst.object') ? p : [p] });
+  });
   await page.goto('/Hub.html');
   await page.waitForSelector('#kpiSquad', { timeout: 10_000 });
 }

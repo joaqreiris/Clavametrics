@@ -64,10 +64,23 @@ export async function mockBase(page) {
   await page.route(`${SB}/auth/v1/**`, route =>
     route.fulfill({ json: { access_token: 'test-token', user: { id: 'user-1', email: 'test@test.com' } } })
   );
-  await page.route(`${SB}/rest/v1/profiles**`, route =>
-    route.fulfill({ json: [PROFILE] })
+  // Red de contención: lo que la página consulte y el spec no atienda responde vacío en vez de
+  // salir a la red real (que contesta 401 y deja secciones enteras sin dibujar). Va PRIMERO: en
+  // Playwright gana la última ruta registrada, así que las de abajo —y las del propio spec— la
+  // pisan. Sin esto, cada tabla nueva que la app empieza a consultar apaga los specs viejos.
+  await page.route(`${SB}/rest/v1/**`, route =>
+    route.fulfill({ json: [], headers: { 'Content-Range': '0-0/0', 'Content-Type': 'application/json' } })
   );
-  await page.route(`${SB}/rest/v1/clubs**`, route =>
-    route.fulfill({ json: [CLUB] })
-  );
+  await page.route(`${SB}/rpc/**`, route => route.fulfill({ json: [] }));
+
+  // .single() / .maybeSingle() piden el objeto SOLO (Accept: …pgrst.object+json) y devolver un
+  // array les da error. getClubId() resuelve el club con .single() sobre profiles, así que con el
+  // array quedaba en null — y sin club, media app no consulta nada y se dibuja vacía. Era lo que
+  // tenía en rojo a Squad, Hub, Injuries y compañía.
+  const uno = (obj) => (route) => {
+    const acc = route.request().headers()['accept'] || '';
+    return route.fulfill({ json: acc.includes('pgrst.object') ? obj : [obj] });
+  };
+  await page.route(`${SB}/rest/v1/profiles**`, uno(PROFILE));
+  await page.route(`${SB}/rest/v1/clubs**`, uno(CLUB));
 }
