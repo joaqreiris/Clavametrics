@@ -36,7 +36,11 @@ async function open(page) {
   await page.goto('/GPS Analysis.html');
   await page.waitForSelector('.gp-fbar-drops', { timeout: 15_000 });
   await page.evaluate((cid) => { window._gpClubId = cid; window._gpUserId = 'user-1'; }, CLUB_ID);
-  await page.waitForTimeout(1500);
+  // restore() empieza reseteando el estado, así que tocar un filtro antes de que llegue es una
+  // carrera que el usuario real no corre: él espera a que la página cargue.
+  await expect.poll(async () => page.evaluate(() =>
+    window.gpFilterBar?.getState?.().restored === true), { timeout: 20_000 }).toBe(true);
+  await page.waitForTimeout(600);
 }
 
 /** Filtros que se ven en la barra (los ocultos llevan .fb-hidden). */

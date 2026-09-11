@@ -254,7 +254,7 @@ function _openXmatchMetricsEditor(card, anchor) {
       const isOn = active.has(m.key);
       const row  = document.createElement('div');
       row.className = 'gp-popover-item';
-      row.style.cssText = 'display:flex;align-items:center;gap:8px;-webkit-user-select:none'; user-select:none';
+      row.style.cssText = 'display:flex;align-items:center;gap:8px;-webkit-user-select:none;user-select:none';
       row.innerHTML = `
         <span style="width:13px;height:13px;border-radius:3px;border:1.5px solid var(--cm-border-soft);background:${isOn ? 'var(--cm-accent)' : 'transparent'};display:inline-flex;align-items:center;justify-content:center;flex-shrink:0">
           ${isOn ? '<i class="ti ti-check" style="font-size:9px;color:#fff"></i>' : ''}

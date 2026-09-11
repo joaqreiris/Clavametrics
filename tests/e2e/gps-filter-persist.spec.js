@@ -109,7 +109,11 @@ test.describe('GPS · los filtros sobreviven al reload', () => {
     await page.waitForSelector('.gp-fbar-drops', { timeout: 15_000 });
     await page.evaluate((cid) => { window._gpClubId = cid; window._gpUserId = 'user-1'; }, CLUB_ID);
     await conFilas(page);
-    await page.waitForTimeout(1200);
+    // El que trae el filtro de vuelta es restore(), y llega cuando llega: mirar el estado antes
+    // de que corra es leer una barra que todavía no cargó nada.
+    await expect.poll(async () => page.evaluate(() =>
+      window.gpFilterBar?.getState?.().restored === true), { timeout: 20_000 }).toBe(true);
+    await page.waitForTimeout(600);
     expect((await page.evaluate(() => window.gpFilterBar.getState())).playerIds).toEqual(['p2']);
   });
 

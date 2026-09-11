@@ -197,14 +197,21 @@ const cardDec = (decimals) => ([{ id: 'card-combo', position: 0, source: 'builde
   dimensions: [{ id: 'player' }], range: { type: 'last30' },
   style: { color: '#2563EB', ...(decimals == null ? {} : { decimals }) } } }]);
 
-/** Lo que muestra el tooltip del primer punto. */
-const textoTooltip = (page) => page.evaluate(() => {
-  const cv = document.querySelector('.gp-view.is-on .gp-c[data-card-id="card-combo"] canvas');
-  const ch = cv && window.Chart.getChart(cv);
-  const ds = ch.data.datasets[0];
-  const cb = ch.options.plugins.tooltip.callbacks.label;
-  return cb({ dataset: ds, parsed: { y: 4328.5 } });
-});
+/** Lo que muestra el tooltip del primer punto. Espera a que el chart esté montado: bajo carga
+ *  el canvas aparece antes que sus datasets, y leerlos a medio armar hace fallar el test sin que
+ *  haya nada roto. */
+const textoTooltip = async (page) => {
+  await expect.poll(async () => page.evaluate(() => {
+    const cv = document.querySelector('.gp-view.is-on .gp-c[data-card-id="card-combo"] canvas');
+    const ch = cv && window.Chart.getChart(cv);
+    return !!(ch && ch.data.datasets[0] && ch.options.plugins?.tooltip?.callbacks?.label);
+  }), { timeout: 20_000 }).toBe(true);
+  return page.evaluate(() => {
+    const cv = document.querySelector('.gp-view.is-on .gp-c[data-card-id="card-combo"] canvas');
+    const ch = window.Chart.getChart(cv);
+    return ch.options.plugins.tooltip.callbacks.label({ dataset: ch.data.datasets[0], parsed: { y: 4328.5 } });
+  });
+};
 
 test.describe('GPS · decimales', () => {
   test('el gráfico respeta los decimales que el catálogo le puso a la métrica', async ({ page }) => {
