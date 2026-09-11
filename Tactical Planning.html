@@ -52,7 +52,7 @@
   .tp-card-h{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--cm-border)}
   .tp-card-h h3{margin:0;font:600 13px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong);display:flex;align-items:center;gap:8px}
   .tp-card-h h3 .ti{font-size:16px;color:var(--cm-fg-muted)}
-  .tp-card-h .right{margin-left:auto;display:flex;align-items:center;gap:8px}
+  .tp-card-h .right{margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
   .tp-card-b{padding:14px 16px}
 
   /* month pager */
@@ -72,6 +72,10 @@
   .tp-cell-chip .t{overflow:hidden;text-overflow:ellipsis}
   .tp-cell-chip.done .t{color:var(--cm-fg-muted);text-decoration:line-through}
   .tp-cell-chip.done .dot{opacity:.45}
+  /* Secundario: el mismo color de su categoría, pero hueco y en gris — de un
+     vistazo se ve cuál es el objetivo que sostiene el día y cuál acompaña. */
+  .tp-cell-chip.sec .t{color:var(--cm-fg-muted);font-weight:500}
+  .tp-cell-chip.sec .dot{background:transparent!important;box-shadow:inset 0 0 0 1.5px var(--sc)}
   .tp-cell-more{font:600 10px/1 var(--cm-font-mono);color:var(--cm-fg-faint);margin-top:3px}
   .tp-cell-md{font:600 9px/1 var(--cm-font-mono);letter-spacing:.04em;color:var(--cm-fg-faint)}
   .tp-cell-match{display:inline-flex;align-items:center;gap:4px;font:700 9.5px/1 var(--cm-font-mono);color:var(--cm-danger);background:var(--cm-danger-bg);border-radius:4px;padding:2px 5px;margin-top:2px;max-width:100%;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
@@ -129,7 +133,17 @@
   .tp-daylink{display:inline-flex;align-items:center;gap:6px;font:600 12px/1 var(--cm-font-sans);color:var(--cm-accent);text-decoration:none;margin-bottom:12px}
   .tp-daylink:hover{text-decoration:underline}
   .tp-obj-list{display:flex;flex-direction:column;gap:8px;margin-bottom:14px}
+  /* El día se lee en dos bloques: primero lo que lo sostiene, después lo que acompaña. */
+  .tp-obj-gh{display:flex;align-items:center;gap:7px;font:600 10px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted);margin:2px 0 -2px}
+  .tp-obj-gh:not(:first-child){margin-top:8px}
+  .tp-obj-gh .n{font-family:var(--cm-font-mono);color:var(--cm-fg-faint)}
+  .tp-obj-gh .ti{font-size:13px}
+  .tp-obj-nomain{display:flex;align-items:center;gap:7px;padding:8px 11px;border:1px dashed var(--cm-warning-bd);background:var(--cm-warning-bg);color:var(--cm-warning);border-radius:10px;font:500 11.5px/1.35 var(--cm-font-sans)}
+  .tp-obj-nomain .ti{font-size:14px;flex:none}
   .tp-obj{display:flex;gap:10px;border:1px solid var(--cm-border);border-radius:11px;padding:10px 12px;background:var(--cm-surface)}
+  .tp-obj.sec{background:var(--cm-bg-soft);padding:8px 12px}
+  .tp-obj.sec .cbar{opacity:.45;width:3px}
+  .tp-obj.sec .ttl{font-size:12.5px;font-weight:500}
   .tp-obj .cbar{width:4px;border-radius:99px;flex:none;align-self:stretch}
   .tp-obj .main{flex:1;min-width:0}
   .tp-obj .cat{font:600 9.5px/1 var(--cm-font-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--cm-fg-muted)}
@@ -291,6 +305,10 @@
         <div class="tp-card-h">
           <h3><i class="ti ti-chart-pie"></i><span data-i18n="tactical.stats_title">Global picture</span></h3>
           <div class="right">
+            <div class="tp-seg" id="tpScopeSeg">
+              <button data-s="weighted" class="on" data-i18n="tactical.scope_weighted">Main + secondary</button>
+              <button data-s="main" data-i18n="tactical.scope_main">Main only</button>
+            </div>
             <div class="tp-seg" id="tpDoneSeg">
               <button data-f="all" class="on" data-i18n="tactical.filter_all">All planned</button>
               <button data-f="done" data-i18n="tactical.filter_done">Worked on</button>
@@ -381,6 +399,11 @@
       <div class="tp-obj-list" id="tpObjList"></div>
       <div class="tp-form">
         <div class="fl" id="tpFormTitle"><i class="ti ti-plus"></i><span data-i18n="tactical.add_objective">Add objective</span></div>
+        <!-- Lo primero que se decide de un objetivo: si sostiene la sesión o la acompaña. -->
+        <div class="tp-seg" id="tpFormPrio" style="margin-bottom:10px">
+          <button data-p="main" class="on" data-i18n="tactical.prio_main_one">Main</button>
+          <button data-p="secondary" data-i18n="tactical.prio_secondary_one">Secondary</button>
+        </div>
         <div class="tp-seg" id="tpFormMode" style="margin-bottom:10px;display:none">
           <button data-m="catalog" data-i18n="tactical.from_catalog">From the catalog</button>
           <button data-m="free" data-i18n="tactical.free_text">Free text</button>
@@ -434,6 +457,19 @@ function catsWith(keys){
   return out;
 }
 
+// ── Principales y secundarios ────────────────────────────────────────
+// El principal es lo que sostiene la sesión; el secundario acompaña. Se ordena
+// y se pesa desde lib/tactical-cats.js (un principal = tres secundarios), y en
+// los gráficos se puede dejar fuera a los secundarios del todo.
+const isMain = r => TAC.isMain(r);
+const wOf = r => TAC.weight(r);
+// Principales primero y, dentro de cada bloque, el orden con el que se cargaron.
+const byPrio = (a, b) => (TAC.prioRank(a) - TAC.prioRank(b)) || (a.position - b.position)
+  || String(a.created_at || '').localeCompare(String(b.created_at || ''));
+// `weighted` = todo, con el secundario valiendo un tercio. `main` = el gráfico
+// mira solo lo que sostuvo las sesiones.
+const scopeRows = rows => _tpScope === 'main' ? rows.filter(isMain) : rows;
+
 let _tpClubId = null, _tpProfile = null, _tpTeamId = null;
 let _tpYear = 0, _tpMonth = 0;              // visible month (0-based month)
 let _tpObjs = [];                            // objectives of the visible month
@@ -441,9 +477,10 @@ let _tpMcs = [];                             // microcycles overlapping the visi
 let _tpSessDates = new Set();                // dates with a planned training session
 let _tpMatches = {};                         // date -> opponent
 let _tpRange = 'month', _tpOnlyDone = false;
+let _tpScope = 'weighted';                   // gráficos: principales ponderados + secundarios | solo principales
 let _tpBreak = 'objective';                  // desglose del gráfico mensual: objetivo | subobjetivo
 let _tpSeason = null;                        // {start_date,end_date} | null
-let _tpModalDay = null, _tpEditId = null, _tpFormCat = 'offensive';
+let _tpModalDay = null, _tpEditId = null, _tpFormCat = 'offensive', _tpFormPrio = 'main';
 let _tpCatalog = [];                         // catálogo objetivos + subobjetivos (2 niveles, por equipo)
 let _tpFormMode = 'free', _tpCatFormCat = 'offensive';
 let _tpSwatchFor = null;                     // categoría con la paleta de colores abierta
@@ -467,7 +504,10 @@ function mdLabelFor(ds){
 
 function tpMissingTable(err){
   if (!err) return false;
-  if (err.code === '42P01' || err.code === 'PGRST205' || /tactical_/.test(err.message || '') && /does not exist|find the table|schema cache/i.test(err.message || '')) {
+  // 42703/PGRST204: la tabla está pero le falta una columna nueva (p. ej. priority).
+  // Es el mismo problema del usuario —hay SQL sin aplicar— y el mismo aviso.
+  if (err.code === '42P01' || err.code === 'PGRST205' || err.code === '42703' || err.code === 'PGRST204'
+      || /tactical_/.test(err.message || '') && /does not exist|find the table|schema cache/i.test(err.message || '')) {
     _tpTableMissing = true;
     document.getElementById('tpSqlBanner').style.display = 'block';
     return true;
@@ -480,7 +520,7 @@ async function tpLoadMonth(){
   const first = ymd(_tpYear, _tpMonth, 1);
   const last  = ymd(_tpYear, _tpMonth, new Date(_tpYear, _tpMonth + 1, 0).getDate());
   const [objsR, mcsR, sessR, evR] = await Promise.all([
-    window.sb.from('tactical_objectives').select('id,date,category,title,notes,done,position')
+    window.sb.from('tactical_objectives').select('id,date,category,title,notes,done,position,priority,created_at')
       .eq('club_id', _tpClubId).eq('team_id', _tpTeamId).gte('date', first).lte('date', last)
       .order('date').order('position').order('created_at'),
     window.sb.from('microcycles').select('id,start_date,end_date,match_date,md_overrides,team_id')
@@ -529,7 +569,7 @@ async function tpLoadStats(){
     // title + catalog_* son lo que permite desglosar por objetivo y por subobjetivo:
     // title es el snapshot (sobrevive a que el catálogo cambie) y los catalog_* dan la
     // agrupación estable cuando el objetivo del día salió del catálogo.
-    const r = await window.sb.from('tactical_objectives').select('date,category,done,title,catalog_objective_id,catalog_sub_id')
+    const r = await window.sb.from('tactical_objectives').select('date,category,done,title,priority,catalog_objective_id,catalog_sub_id')
       .eq('club_id', _tpClubId).eq('team_id', _tpTeamId).gte('date', from).lte('date', to).limit(5000);
     if (r.error) { tpMissingTable(r.error); }
     rows = r.data || [];
@@ -547,6 +587,8 @@ function tpRenderMonth(){
   const today = window.cmToday();
   const byDay = {};
   _tpObjs.forEach(o => { (byDay[o.date] = byDay[o.date] || []).push(o); });
+  // Si el día no entra entero en la celda, lo que se recorta es lo secundario.
+  Object.values(byDay).forEach(list => list.sort(byPrio));
 
   const dows = [0,1,2,3,4,5,6].map(i => new Date(2024, 0, 7 + i).toLocaleDateString(ttLocale(), { weekday: 'short' }));   // 2024-01-07 fue domingo
 
@@ -567,7 +609,9 @@ function tpRenderMonth(){
     const objs = byDay[ds] || [];
     let chips = '';
     objs.slice(0, 3).forEach(o => {
-      chips += `<div class="tp-cell-chip${o.done ? ' done' : ''}" title="${esc(o.title)}"><span class="dot" style="background:${catColor(o.category)}"></span><span class="t">${esc(o.title)}</span></div>`;
+      const sec = !isMain(o);
+      const tip = sec ? `${tt('tactical.prio_secondary_one','Secondary')} · ${o.title}` : o.title;
+      chips += `<div class="tp-cell-chip${o.done ? ' done' : ''}${sec ? ' sec' : ''}" title="${esc(tip)}" style="--sc:${catColor(o.category)}"><span class="dot" style="background:${catColor(o.category)}"></span><span class="t">${esc(o.title)}</span></div>`;
     });
     if (objs.length > 3) chips += `<div class="tp-cell-more">+${objs.length - 3}</div>`;
     if (_tpMatches[ds] != null) chips = `<div class="tp-cell-match"><i class="ti ti-ball-football" style="font-size:10px"></i>${esc(_tpMatches[ds] || tt('tactical.match','Match'))}</div>` + chips;
@@ -587,43 +631,70 @@ function tpRenderMonth(){
 
 // ── stats render ─────────────────────────────────────────────────────
 function tpRenderStats(body, rows, from, to){
-  const use = _tpOnlyDone ? rows.filter(r => r.done) : rows;
+  // El alcance se aplica ANTES que nada: en "solo principales" el secundario no
+  // existe para ningún número de esta tarjeta, ni siquiera para el % de trabajado.
+  const base = scopeRows(rows);
+  const use = _tpOnlyDone ? base.filter(r => r.done) : base;
   const rangeTxt = `${fmtShort(from)} – ${fmtShort(to)}`;
   if (!use.length) {
     body.innerHTML = `<div class="tp-empty"><i class="ti ti-target"></i>${esc(tt('tactical.empty_stats','No objectives in this range yet.'))}<div style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-faint);margin-top:6px">${esc(rangeTxt)}</div></div>`;
     return;
   }
-  const total = use.length;
-  const doneCt = rows.filter(r => r.done).length;
+  const weighted = _tpScope !== 'main';
+  const nMain = use.filter(isMain).length, nSec = use.length - nMain;
+  const doneCt = base.filter(r => r.done).length;
   const cats = catsWith(use.map(r => r.category));
-  const byCat = {}; cats.forEach(c => byCat[c.key] = 0);
+  // Dos lecturas de lo mismo: `byCat` es lo que manda en los repartos (un
+  // secundario vale un tercio) y `cnt` es cuántos objetivos hubo de verdad —
+  // el % no se explica solo, y la leyenda tiene que poder mostrar los dos.
+  const byCat = {}, cnt = {};
+  cats.forEach(c => { byCat[c.key] = 0; cnt[c.key] = { m: 0, s: 0 }; });
   const days = new Set();
-  use.forEach(r => { if (byCat[r.category] == null) byCat[r.category] = 0; byCat[r.category]++; days.add(r.date); });
+  use.forEach(r => {
+    if (byCat[r.category] == null) { byCat[r.category] = 0; cnt[r.category] = { m: 0, s: 0 }; }
+    byCat[r.category] += wOf(r);
+    cnt[r.category][isMain(r) ? 'm' : 's']++;
+    days.add(r.date);
+  });
+  const total = cats.reduce((s, c) => s + byCat[c.key], 0);
   const topCat = cats.map(c => c.key).sort((a, b) => byCat[b] - byCat[a])[0];
   const pct = n => total ? Math.round(n * 100 / total) : 0;
+  // "7 ppal · 3 sec" — en "solo principales" no hay nada que desdoblar.
+  const split = c => weighted && cnt[c].s
+    ? `${cnt[c].m} ${tt('tactical.prio_short_main','main')} · ${cnt[c].s} ${tt('tactical.prio_short_sec','sec.')}`
+    : String(cnt[c].m + cnt[c].s);
 
-  // weekly buckets (Monday-first), covering the whole range
+  // weekly buckets (Monday-first), covering the whole range. Aquí se cuentan
+  // objetivos, no peso: el eje tiene que seguir siendo "cuántos" (entero), y la
+  // jerarquía se ve en el tono de cada segmento.
   const weeks = [];
   for (let w = mondayOf(from); w <= to; w = addDays(w, 7)) weeks.push(w);
-  const wk = {}; weeks.forEach(w => { wk[w] = {}; cats.forEach(c => wk[w][c.key] = 0); });
-  use.forEach(r => { const w = mondayOf(r.date); if (wk[w]) wk[w][r.category] = (wk[w][r.category] || 0) + 1; });
+  const wk = {}; weeks.forEach(w => { wk[w] = {}; cats.forEach(c => wk[w][c.key] = { m: 0, s: 0 }); });
+  use.forEach(r => {
+    const w = mondayOf(r.date);
+    if (!wk[w]) return;
+    if (!wk[w][r.category]) wk[w][r.category] = { m: 0, s: 0 };
+    wk[w][r.category][isMain(r) ? 'm' : 's']++;
+  });
+  const wkTot = (w, c) => wk[w][c].m + wk[w][c].s;
 
   // KPI strip
   let html = `<div class="tp-kpis">
-    <div class="tp-kpi"><div class="k">${esc(tt('tactical.kpi_total','Objectives'))}</div><div class="v">${total}</div></div>
-    <div class="tp-kpi"><div class="k">${esc(tt('tactical.kpi_done','Worked on'))}</div><div class="v">${doneCt} <small>· ${rows.length ? Math.round(doneCt * 100 / rows.length) : 0}%</small></div></div>
+    <div class="tp-kpi"><div class="k">${esc(tt('tactical.kpi_total','Objectives'))}</div><div class="v">${use.length}${weighted && nSec ? ` <small>· ${nMain} ${esc(tt('tactical.prio_short_main','main'))} · ${nSec} ${esc(tt('tactical.prio_short_sec','sec.'))}</small>` : ''}</div></div>
+    <div class="tp-kpi"><div class="k">${esc(tt('tactical.kpi_done','Worked on'))}</div><div class="v">${doneCt} <small>· ${base.length ? Math.round(doneCt * 100 / base.length) : 0}%</small></div></div>
     <div class="tp-kpi"><div class="k">${esc(tt('tactical.kpi_days','Days with tactical work'))}</div><div class="v">${days.size}</div></div>
     <div class="tp-kpi"><div class="k">${esc(tt('tactical.kpi_top','Main category'))}</div><div class="v" style="font-size:15px"><span class="cdot" style="background:${catColor(topCat)}"></span>${esc(catLabel(topCat))} <small>${pct(byCat[topCat])}%</small></div></div>
   </div>`;
 
   // distribution — part-to-whole stacked bar + legend (values live in the legend)
   html += `<div class="tp-sec"><p class="tp-sec-t">${esc(tt('tactical.dist_title','Category distribution'))} <span style="letter-spacing:0;text-transform:none;color:var(--cm-fg-faint)">· ${esc(rangeTxt)}</span></p>`;
+  html += tpWeightHint(weighted && nSec > 0);
   html += `<div class="tp-dist">`;
-  cats.forEach(c => { if (byCat[c.key] > 0) html += `<span style="flex-grow:${byCat[c.key]};background:${catColor(c.key)}" title="${esc(catLabel(c.key))}: ${byCat[c.key]} (${pct(byCat[c.key])}%)"></span>`; });
+  cats.forEach(c => { if (byCat[c.key] > 0) html += `<span style="flex-grow:${byCat[c.key]};background:${catColor(c.key)}" title="${esc(catLabel(c.key))}: ${pct(byCat[c.key])}% (${esc(split(c.key))})"></span>`; });
   html += `</div><div class="tp-legend">`;
   cats.forEach(c => {
     if (!byCat[c.key]) return;
-    html += `<div class="li"><span class="dot" style="background:${catColor(c.key)}"></span>${esc(catLabel(c.key))} <b>${pct(byCat[c.key])}%</b> <small>(${byCat[c.key]})</small></div>`;
+    html += `<div class="li"><span class="dot" style="background:${catColor(c.key)}"></span>${esc(catLabel(c.key))} <b>${pct(byCat[c.key])}%</b> <small>(${esc(split(c.key))})</small></div>`;
   });
   html += `</div></div>`;
 
@@ -632,22 +703,25 @@ function tpRenderStats(body, rows, from, to){
   html += tpBreakSection(use, months, rangeTxt);
 
   // weekly evolution — stacked columns, SVG, theme-aware
-  html += `<div class="tp-sec"><p class="tp-sec-t">${esc(tt('tactical.weekly_title','Contents per week'))}</p><div class="tp-week-scroll">${tpWeeklySvg(weeks, wk, cats)}</div></div>`;
+  html += `<div class="tp-sec"><p class="tp-sec-t">${esc(tt('tactical.weekly_title','Contents per week'))}${weighted && nSec ? ` <span style="letter-spacing:0;text-transform:none;color:var(--cm-fg-faint)">· ${esc(tt('tactical.weekly_sec_note','secondary objectives in the lighter shade'))}</span>` : ''}</p><div class="tp-week-scroll">${tpWeeklySvg(weeks, wk, cats)}</div></div>`;
 
   // table twin (accessibility)
   html += `<div class="tp-sec"><details class="tp-details"><summary>${esc(tt('tactical.table_toggle','View as table'))}</summary><div class="tp-tbl-scroll"><table class="tp-tbl"><thead><tr><th>${esc(tt('tactical.week','Week'))}</th>`;
   cats.forEach(c => { html += `<th>${esc(catLabel(c.key))}</th>`; });
   html += `<th>${esc(tt('tactical.total','Total'))}</th></tr></thead><tbody>`;
+  // "3 (+2)" = tres principales y dos secundarios. La gemela en tabla dice lo
+  // mismo que las columnas, incluida la jerarquía que allá va por tono.
+  const cell = v => !v.m && !v.s ? '—' : `${v.m}${v.s ? ` (+${v.s})` : ''}`;
   weeks.forEach(w => {
-    const t = cats.reduce((s, c) => s + wk[w][c.key], 0);
+    const t = cats.reduce((s, c) => s + wkTot(w, c.key), 0);
     if (!t) return;
     html += `<tr><td>${esc(fmtShort(w))}</td>`;
-    cats.forEach(c => { html += `<td>${wk[w][c.key] || '—'}</td>`; });
+    cats.forEach(c => { html += `<td>${cell(wk[w][c.key])}</td>`; });
     html += `<td>${t}</td></tr>`;
   });
   html += `<tr><td>${esc(tt('tactical.total','Total'))}</td>`;
-  cats.forEach(c => { html += `<td>${byCat[c.key] || '—'}</td>`; });
-  html += `<td>${total}</td></tr></tbody></table></div></details></div>`;
+  cats.forEach(c => { html += `<td>${cell(cnt[c.key])}</td>`; });
+  html += `<td>${use.length}</td></tr></tbody></table></div></details></div>`;
 
   body.innerHTML = html;
   // El desglose repinta con los MISMOS datos ya traídos: cambiar de objetivo a
@@ -656,6 +730,13 @@ function tpRenderStats(body, rows, from, to){
     _tpBreak = b.getAttribute('data-b');
     tpRenderStats(body, rows, from, to);
   }));
+}
+
+// Un reparto en % nunca se explica solo: si un secundario no cuenta lo mismo que
+// un principal, hay que decirlo donde se lee el número, no en una ayuda aparte.
+function tpWeightHint(show){
+  if (!show) return '';
+  return `<p style="margin:-4px 0 10px;font:500 11px/1.4 var(--cm-font-sans);color:var(--cm-fg-faint)"><i class="ti ti-scale" style="font-size:12px"></i> ${esc(tt('tactical.weight_hint','Each main objective counts as one; each secondary one, as a third.'))}</p>`;
 }
 
 // ── desglose por objetivo / subobjetivo, en % de cada mes ────────────
@@ -710,24 +791,28 @@ function tpShade(catKey, i){
 
 const TP_BREAK_MAX = 12;   // más de esto en la leyenda no se lee: el resto va a "Otros"
 
+// `total`/`m` llevan PESO (un secundario cuenta un tercio): es lo que reparte el
+// 100% de cada mes. `count`/`mc` llevan objetivos contados de a uno, que es lo
+// que se muestra entre paréntesis — el % y "cuántos fueron" no son lo mismo.
 function tpBreakData(use, months){
   const map = new Map();
   use.forEach(r => {
     const it = tpBreakItem(r);
     let e = map.get(it.key);
-    if (!e) { e = { key: it.key, name: it.name, cat: it.cat, total: 0, m: {} }; months.forEach(k => e.m[k] = 0); map.set(it.key, e); }
-    e.total++;
+    if (!e) { e = { key: it.key, name: it.name, cat: it.cat, total: 0, count: 0, m: {}, mc: {} }; months.forEach(k => { e.m[k] = 0; e.mc[k] = 0; }); map.set(it.key, e); }
+    e.total += wOf(r);
+    e.count++;
     const mk = String(r.date).slice(0, 7);
-    if (e.m[mk] != null) e.m[mk]++;
+    if (e.m[mk] != null) { e.m[mk] += wOf(r); e.mc[mk]++; }
   });
   let items = [...map.values()];
   if (items.length > TP_BREAK_MAX) {
     const byTotal = items.slice().sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
     const keep = byTotal.slice(0, TP_BREAK_MAX - 1);
     const rest = byTotal.slice(TP_BREAK_MAX - 1);
-    const other = { key: '_other', name: tt('tactical.break_other','Others'), cat: null, total: 0, m: {}, isOther: true };
-    months.forEach(k => other.m[k] = 0);
-    rest.forEach(r => { other.total += r.total; months.forEach(k => other.m[k] += r.m[k]); });
+    const other = { key: '_other', name: tt('tactical.break_other','Others'), cat: null, total: 0, count: 0, m: {}, mc: {}, isOther: true };
+    months.forEach(k => { other.m[k] = 0; other.mc[k] = 0; });
+    rest.forEach(r => { other.total += r.total; other.count += r.count; months.forEach(k => { other.m[k] += r.m[k]; other.mc[k] += r.mc[k]; }); });
     other.n = rest.length;
     items = keep.concat([other]);
   }
@@ -745,7 +830,9 @@ function tpBreakData(use, months){
 function tpBreakSection(use, months, rangeTxt){
   const items = tpBreakData(use, months);
   const monTot = {}; months.forEach(k => monTot[k] = items.reduce((s, it) => s + it.m[k], 0));
+  const monCnt = {}; months.forEach(k => monCnt[k] = items.reduce((s, it) => s + it.mc[k], 0));
   const total = items.reduce((s, it) => s + it.total, 0);
+  const count = items.reduce((s, it) => s + it.count, 0);
   const pct = (n, d) => d ? Math.round(n * 100 / d) : 0;
   const seg = `<div class="tp-seg tp-seg-inline" id="tpBreakSeg">
     <button data-b="objective" class="${_tpBreak === 'objective' ? 'on' : ''}">${esc(tt('tactical.break_objectives','Objectives'))}</button>
@@ -754,9 +841,11 @@ function tpBreakSection(use, months, rangeTxt){
   let h = `<div class="tp-sec"><div class="tp-sec-head"><p class="tp-sec-t" style="margin:0">${esc(tt('tactical.break_title','Share of each objective per month'))} <span style="letter-spacing:0;text-transform:none;color:var(--cm-fg-faint)">· ${esc(rangeTxt)}</span></p>${seg}</div>`;
   if (!items.length) return h + `<div class="tp-empty" style="padding:16px 8px">${esc(tt('tactical.empty_stats','No objectives in this range yet.'))}</div></div>`;
 
+  // La aclaración del peso ya está arriba, en el primer gráfico de la tarjeta:
+  // repetirla acá la vuelve ruido, se leen las dos de un vistazo.
   h += `<div class="tp-week-scroll">${tpMonthlyPctSvg(months, items, monTot)}</div>`;
   h += `<div class="tp-legend">` + items.map(it =>
-    `<div class="li"><span class="dot" style="background:${it.color}"></span>${esc(it.name)}${it.isOther && it.n ? ` <small>(${it.n})</small>` : ''} <b>${pct(it.total, total)}%</b> <small>(${it.total})</small></div>`
+    `<div class="li"><span class="dot" style="background:${it.color}"></span>${esc(it.name)}${it.isOther && it.n ? ` <small>(${it.n})</small>` : ''} <b>${pct(it.total, total)}%</b> <small>(${it.count})</small></div>`
   ).join('') + `</div>`;
 
   // gemela en tabla: el % exacto de cada objetivo en cada mes
@@ -769,8 +858,8 @@ function tpBreakSection(use, months, rangeTxt){
     h += `<td>${pct(it.total, total)}%</td></tr>`;
   });
   h += `<tr><td>${esc(tt('tactical.total','Total'))}</td>`;
-  months.forEach(k => { h += `<td>${monTot[k] || '—'}</td>`; });
-  h += `<td>${total}</td></tr></tbody></table></div></details></div>`;
+  months.forEach(k => { h += `<td>${monCnt[k] || '—'}</td>`; });
+  h += `<td>${count}</td></tr></tbody></table></div></details></div>`;
   return h;
 }
 
@@ -794,17 +883,19 @@ function tpMonthlyPctSvg(months, items, monTot){
       s += `<rect x="${x}" y="${yPix(100)}" width="${BW}" height="${PLOT_H}" fill="var(--cm-bg-sunk)" rx="4"/>`;
       s += `<text x="${x + BW / 2}" y="${PADT + PLOT_H / 2}" text-anchor="middle" font-family="var(--cm-font-mono)" font-size="10" fill="var(--cm-fg-faint)">—</text>`;
     } else {
-      let acc = 0, drawn = 0;
-      items.forEach(it => {
+      let acc = 0;
+      // El último segmento visible es el que lleva la punta redondeada. Se sabe
+      // por posición, no sumando: con pesos fraccionarios (un tercio) la suma
+      // nunca da exactamente el total y la columna quedaba sin terminar.
+      const vis = items.filter(it => it.m[mk] > 0);
+      vis.forEach((it, vi) => {
         const v = it.m[mk];
-        if (!v) return;
-        drawn += v;
         const p = v * 100 / tot;
         const y0 = yPix(acc), y1 = yPix(acc + p);
         const gap = acc > 0 ? 2 : 0;
-        const isTop = drawn === tot;
+        const isTop = vi === vis.length - 1;
         const h = Math.max(1, y0 - gap - y1);
-        const ttl = `<title>${esc(fmtMonth(mk))} · ${esc(it.name)}: ${Math.round(p)}% (${v})</title>`;
+        const ttl = `<title>${esc(fmtMonth(mk))} · ${esc(it.name)}: ${Math.round(p)}% (${it.mc[mk]})</title>`;
         if (isTop && h >= 4) {
           const r = Math.min(4, BW / 2);
           s += `<path class="seg" d="M${x},${y0 - gap} L${x},${y1 + r} Q${x},${y1} ${x + r},${y1} L${x + BW - r},${y1} Q${x + BW},${y1} ${x + BW},${y1 + r} L${x + BW},${y0 - gap} Z" fill="${it.color}">${ttl}</path>`;
@@ -831,7 +922,19 @@ function tpWeeklySvg(weeks, wk, cats){
   const BW = 20, GAP = 16, PADL = 34, PADR = 8, PLOT_H = 150, PADT = 8, XLBL = 22;
   const W = PADL + weeks.length * (BW + GAP) + PADR;
   const H = PADT + PLOT_H + XLBL;
-  const maxT = Math.max(1, ...weeks.map(w => cats.reduce((s, c) => s + wk[w][c.key], 0)));
+  const wkTot = (w, c) => wk[w][c].m + wk[w][c].s;
+  // Cada categoría se parte en dos: lo principal en su color y lo secundario en
+  // el mismo color aclarado. Se sigue leyendo "esta semana fue defensiva", y
+  // encima se ve cuánto de eso sostuvo las sesiones y cuánto solo acompañó.
+  const segsOf = w => {
+    const out = [];
+    cats.forEach(c => {
+      if (wk[w][c.key].m) out.push({ v: wk[w][c.key].m, fill: catColor(c.key), lbl: catLabel(c.key), p: tt('tactical.prio_main_one','Main') });
+      if (wk[w][c.key].s) out.push({ v: wk[w][c.key].s, fill: `color-mix(in srgb, ${catColor(c.key)} 40%, var(--cm-surface))`, lbl: catLabel(c.key), p: tt('tactical.prio_secondary_one','Secondary') });
+    });
+    return out;
+  };
+  const maxT = Math.max(1, ...weeks.map(w => cats.reduce((s, c) => s + wkTot(w, c.key), 0)));
   const yMax = Math.max(2, Math.ceil(maxT / 2) * 2);
   const yPix = v => PADT + PLOT_H - (v / yMax) * PLOT_H;
   let s = `<svg class="tp-week-svg" width="${Math.max(W, 320)}" height="${H}" viewBox="0 0 ${Math.max(W, 320)} ${H}" role="img" style="display:block">`;
@@ -846,25 +949,21 @@ function tpWeeklySvg(weeks, wk, cats){
   weeks.forEach((w, i) => {
     const x = PADL + i * (BW + GAP) + GAP / 2;
     let acc = 0;
-    const totalW = cats.reduce((t, c) => t + wk[w][c.key], 0);
-    let drawn = 0;
-    cats.forEach(c => {
-      const v = wk[w][c.key];
-      if (!v) return;
-      drawn += v;
-      const y0 = yPix(acc), y1 = yPix(acc + v);
+    const segs = segsOf(w);
+    segs.forEach((sg, si) => {
+      const y0 = yPix(acc), y1 = yPix(acc + sg.v);
       const gap = acc > 0 ? 2 : 0;                       // 2px surface gap between segments
       const h = Math.max(1, y0 - y1 - gap);
       const yTop = y1;
-      const isTop = drawn === totalW;
-      const ttl = `<title>${esc(fmtShort(w))} · ${esc(catLabel(c.key))}: ${v}</title>`;
+      const isTop = si === segs.length - 1;
+      const ttl = `<title>${esc(fmtShort(w))} · ${esc(sg.lbl)} (${esc(sg.p)}): ${sg.v}</title>`;
       if (isTop && h >= 4) {
         const r = Math.min(4, BW / 2);
-        s += `<path class="seg" d="M${x},${y0 - gap} L${x},${yTop + r} Q${x},${yTop} ${x + r},${yTop} L${x + BW - r},${yTop} Q${x + BW},${yTop} ${x + BW},${yTop + r} L${x + BW},${y0 - gap} Z" fill="${catColor(c.key)}">${ttl}</path>`;
+        s += `<path class="seg" d="M${x},${y0 - gap} L${x},${yTop + r} Q${x},${yTop} ${x + r},${yTop} L${x + BW - r},${yTop} Q${x + BW},${yTop} ${x + BW},${yTop + r} L${x + BW},${y0 - gap} Z" fill="${sg.fill}">${ttl}</path>`;
       } else {
-        s += `<rect class="seg" x="${x}" y="${yTop}" width="${BW}" height="${Math.max(1, y0 - gap - yTop)}" fill="${catColor(c.key)}">${ttl}</rect>`;
+        s += `<rect class="seg" x="${x}" y="${yTop}" width="${BW}" height="${Math.max(1, y0 - gap - yTop)}" fill="${sg.fill}">${ttl}</rect>`;
       }
-      acc += v;
+      acc += sg.v;
     });
     if (i % lblEvery === 0) {
       s += `<text x="${x + BW / 2}" y="${H - 7}" text-anchor="middle" font-family="var(--cm-font-mono)" font-size="9" fill="var(--cm-fg-muted)">${esc(fmtShort(w))}</text>`;
@@ -1221,15 +1320,12 @@ function tpOpenDay(ds){
 }
 function tpCloseModal(){ document.getElementById('tpModalBack').classList.remove('open'); _tpModalDay = null; _tpEditId = null; }
 
-function tpRenderModalList(){
-  const list = document.getElementById('tpObjList');
-  const objs = _tpObjs.filter(o => o.date === _tpModalDay);
-  if (!objs.length) {
-    list.innerHTML = `<div class="tp-empty" style="padding:16px 8px"><i class="ti ti-target" style="font-size:22px;margin-bottom:5px"></i>${esc(tt('tactical.no_objectives','No objectives for this day yet. Add the first one below.'))}</div>`;
-    return;
-  }
-  list.innerHTML = objs.map(o => `
-    <div class="tp-obj${o.done ? ' done' : ''}">
+// La estrella no es decoración: es el interruptor entre "sostiene la sesión" y
+// "acompaña". Cambiar de bloque un objetivo es un clic, no volver a escribirlo.
+function tpObjRow(o){
+  const sec = !isMain(o);
+  return `
+    <div class="tp-obj${o.done ? ' done' : ''}${sec ? ' sec' : ''}">
       <span class="cbar" style="background:${catColor(o.category)}"></span>
       <div class="main">
         <div class="cat">${esc(catLabel(o.category))}</div>
@@ -1239,14 +1335,36 @@ function tpRenderModalList(){
       <div class="acts">
         <button class="tp-obj-check" data-act="done" data-id="${o.id}" title="${esc(o.done ? tt('tactical.mark_undone','Mark as pending') : tt('tactical.mark_done','Mark as worked on'))}"><i class="ti ti-check"></i></button>
         <div class="row">
+          <button class="mini" data-act="prio" data-id="${o.id}" title="${esc(sec ? tt('tactical.prio_to_main','Make it a main objective') : tt('tactical.prio_to_secondary','Make it a secondary objective'))}"><i class="ti ti-star${sec ? '' : '-filled'}"></i></button>
           <button class="mini" data-act="edit" data-id="${o.id}" title="${esc(tt('common.edit','Edit'))}"><i class="ti ti-pencil"></i></button>
           <button class="mini del" data-act="del" data-id="${o.id}" title="${esc(tt('common.delete','Delete'))}"><i class="ti ti-trash"></i></button>
         </div>
       </div>
-    </div>`).join('');
+    </div>`;
+}
+
+function tpRenderModalList(){
+  const list = document.getElementById('tpObjList');
+  const objs = _tpObjs.filter(o => o.date === _tpModalDay).sort(byPrio);
+  if (!objs.length) {
+    list.innerHTML = `<div class="tp-empty" style="padding:16px 8px"><i class="ti ti-target" style="font-size:22px;margin-bottom:5px"></i>${esc(tt('tactical.no_objectives','No objectives for this day yet. Add the first one below.'))}</div>`;
+    return;
+  }
+  const mains = objs.filter(isMain), secs = objs.filter(o => !isMain(o));
+  // El bloque principal se muestra SIEMPRE, aunque esté vacío: un día con puros
+  // secundarios es un día sin nada que lo sostenga, y eso hay que verlo.
+  let h = `<div class="tp-obj-gh"><i class="ti ti-star-filled"></i>${esc(tt('tactical.prio_main','Main objectives'))}${mains.length ? ` <span class="n">${mains.length}</span>` : ''}</div>`;
+  h += mains.length
+    ? mains.map(tpObjRow).join('')
+    : `<div class="tp-obj-nomain"><i class="ti ti-alert-triangle"></i><span>${esc(tt('tactical.no_main','This day has no main objective — it is the one that holds the session together.'))}</span></div>`;
+  if (secs.length) {
+    h += `<div class="tp-obj-gh"><i class="ti ti-star"></i>${esc(tt('tactical.prio_secondary','Secondary objectives'))} <span class="n">${secs.length}</span></div>` + secs.map(tpObjRow).join('');
+  }
+  list.innerHTML = h;
   list.querySelectorAll('button[data-act]').forEach(b => b.addEventListener('click', () => {
     const id = b.getAttribute('data-id'), act = b.getAttribute('data-act');
     if (act === 'done') tpToggleDone(id);
+    else if (act === 'prio') tpTogglePrio(id);
     else if (act === 'edit') tpStartEdit(id);
     else if (act === 'del') tpDeleteObj(id);
   }));
@@ -1260,9 +1378,19 @@ function tpRenderCatPick(){
   el.querySelectorAll('button').forEach(b => b.addEventListener('click', () => { _tpFormCat = b.getAttribute('data-cat'); tpRenderCatPick(); }));
 }
 
+// El segmento Principal | Secundario del formulario del día.
+function tpApplyFormPrio(){
+  document.getElementById('tpFormPrio').querySelectorAll('button')
+    .forEach(b => b.classList.toggle('on', b.getAttribute('data-p') === _tpFormPrio));
+}
+
 function tpResetForm(){
   _tpEditId = null;
   _tpFormCat = _tpCats.length ? _tpCats[0].key : 'other';
+  // Se vuelve a "principal" en cada alta: cargar dos secundarios seguidos es
+  // raro, y dejar el formulario en secundario sin querer sí se paga caro.
+  _tpFormPrio = 'main';
+  tpApplyFormPrio();
   document.getElementById('tpObjTitle').value = '';
   document.getElementById('tpObjNotes').value = '';
   document.getElementById('tpFormCancel').style.display = 'none';
@@ -1312,6 +1440,8 @@ function tpStartEdit(id){
   if (!o) return;
   _tpEditId = id;
   _tpFormCat = o.category;
+  _tpFormPrio = isMain(o) ? 'main' : 'secondary';
+  tpApplyFormPrio();
   document.getElementById('tpObjTitle').value = o.title;
   document.getElementById('tpObjNotes').value = o.notes || '';
   document.getElementById('tpFormCancel').style.display = '';
@@ -1344,18 +1474,18 @@ async function tpSubmitForm(){
   try {
     if (_tpEditId) {
       const { error } = await window.sb.from('tactical_objectives')
-        .update({ title, notes, category: _tpFormCat, updated_at: new Date().toISOString() }).eq('id', _tpEditId);
+        .update({ title, notes, category: _tpFormCat, priority: _tpFormPrio, updated_at: new Date().toISOString() }).eq('id', _tpEditId);
       if (error) throw error;
       const o = _tpObjs.find(x => x.id === _tpEditId);
-      if (o) { o.title = title; o.notes = notes; o.category = _tpFormCat; }
+      if (o) { o.title = title; o.notes = notes; o.category = _tpFormCat; o.priority = _tpFormPrio; }
     } else {
       const pos = _tpObjs.filter(o => o.date === _tpModalDay).length;
       const { data, error } = await window.sb.from('tactical_objectives')
-        .insert({ club_id: _tpClubId, team_id: _tpTeamId, date: _tpModalDay, category, title, notes, position: pos, created_by: _tpProfile?.id || null, catalog_objective_id: catObjId, catalog_sub_id: catSubId })
+        .insert({ club_id: _tpClubId, team_id: _tpTeamId, date: _tpModalDay, category, title, notes, priority: _tpFormPrio, position: pos, created_by: _tpProfile?.id || null, catalog_objective_id: catObjId, catalog_sub_id: catSubId })
         .select().single();
       if (error) throw error;
       _tpObjs.push(data);
-      _tpObjs.sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : (a.position - b.position));
+      _tpObjs.sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : byPrio(a, b));
     }
     tpResetForm();
     tpRenderModalList();
@@ -1374,6 +1504,22 @@ async function tpToggleDone(id){
   tpRenderModalList(); tpRenderMonth();
   const { error } = await window.sb.from('tactical_objectives').update({ done: nv, updated_at: new Date().toISOString() }).eq('id', id);
   if (error) { o.done = !nv; tpRenderModalList(); tpRenderMonth(); alert(error.message); return; }
+  tpLoadStats();
+}
+
+// Principal ⇄ secundario de un clic. Optimista como el check: el objetivo salta
+// de bloque en el acto y solo vuelve si la base lo rechaza.
+async function tpTogglePrio(id){
+  const o = _tpObjs.find(x => x.id === id);
+  if (!o) return;
+  const before = o.priority || 'main';
+  const nv = isMain(o) ? 'secondary' : 'main';
+  o.priority = nv;
+  tpRenderModalList(); tpRenderMonth();
+  const { error } = await window.sb.from('tactical_objectives')
+    .update({ priority: nv, updated_at: new Date().toISOString() }).eq('id', id);
+  if (error) { o.priority = before; tpRenderModalList(); tpRenderMonth(); alert(error.message); return; }
+  if (_tpEditId === id) { _tpFormPrio = nv; tpApplyFormPrio(); }
   tpLoadStats();
 }
 
@@ -1440,6 +1586,15 @@ async function tpInitTeams(){
     _tpRange = b.getAttribute('data-r');
     document.querySelectorAll('#tpRangeSeg button').forEach(x => x.classList.toggle('on', x === b));
     tpLoadStats();
+  }));
+  document.getElementById('tpScopeSeg').querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+    _tpScope = b.getAttribute('data-s');
+    document.querySelectorAll('#tpScopeSeg button').forEach(x => x.classList.toggle('on', x === b));
+    tpLoadStats();
+  }));
+  document.getElementById('tpFormPrio').querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+    _tpFormPrio = b.getAttribute('data-p');
+    tpApplyFormPrio();
   }));
   document.getElementById('tpDoneSeg').querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
     _tpOnlyDone = b.getAttribute('data-f') === 'done';

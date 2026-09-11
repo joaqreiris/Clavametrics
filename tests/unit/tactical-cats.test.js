@@ -133,3 +133,32 @@ describe('cmTacticalCats · colores y keys', () => {
     expect(api.orphan('set_pieces').name).toBe('Set pieces');
   });
 });
+
+describe('cmTacticalCats · principal vs. secundario', () => {
+  let api;
+  beforeEach(() => { api = boot([]).api; });
+
+  it('sin priority es principal: lo cargado antes de la división era el objetivo del día', () => {
+    expect(api.isMain({ title: 'Salida' })).toBe(true);
+    expect(api.isMain({ title: 'Salida', priority: null })).toBe(true);
+    expect(api.isMain({ title: 'Salida', priority: 'main' })).toBe(true);
+    expect(api.isMain({ title: 'Rondo', priority: 'secondary' })).toBe(false);
+  });
+
+  it('un principal pesa lo que tres secundarios', () => {
+    expect(api.weight({ priority: 'main' })).toBe(1);
+    expect(api.weight({ priority: 'secondary' }) * 3).toBeCloseTo(1, 10);
+    expect(api.weight({})).toBe(api.W_MAIN);
+  });
+
+  it('dos secundarios no pueden tapar al principal del día', () => {
+    const day = [{ priority: 'main' }, { priority: 'secondary' }, { priority: 'secondary' }];
+    const total = day.reduce((s, o) => s + api.weight(o), 0);
+    expect(Math.round(api.weight(day[0]) * 100 / total)).toBe(60);
+  });
+
+  it('los principales se leen primero', () => {
+    const day = [{ id: 'b', priority: 'secondary' }, { id: 'a', priority: 'main' }];
+    expect(day.sort((x, y) => api.prioRank(x) - api.prioRank(y)).map(o => o.id)).toEqual(['a', 'b']);
+  });
+});

@@ -2733,6 +2733,9 @@ create table if not exists public.tactical_objectives (
   title text not null,
   notes text,
   done boolean default false not null,
+  -- El día se sostiene sobre sus objetivos PRINCIPALES; los secundarios acompañan.
+  -- Todo lo cargado antes de esta división era "el objetivo del día" => 'main'.
+  priority text default 'main' not null,
   position integer default 0 not null,
   catalog_objective_id uuid,
   catalog_sub_id uuid,
@@ -2740,12 +2743,14 @@ create table if not exists public.tactical_objectives (
   created_at timestamp with time zone default now() not null,
   updated_at timestamp with time zone default now() not null,
   constraint tactical_objectives_pkey primary key (id),
+  constraint tactical_objectives_priority_check CHECK ((priority = ANY (ARRAY['main'::text, 'secondary'::text]))),
   -- ídem tactical_catalog: key libre, la lista la manda tactical_categories.
   constraint tactical_objectives_category_check CHECK ((length(btrim(category)) > 0)),
   constraint tactical_objectives_cat_obj_fk FOREIGN KEY (catalog_objective_id) REFERENCES public.tactical_catalog(id) ON DELETE SET NULL,
   constraint tactical_objectives_cat_sub_fk FOREIGN KEY (catalog_sub_id) REFERENCES public.tactical_catalog(id) ON DELETE SET NULL
 );
 CREATE INDEX idx_tactical_objectives_club_team_date ON public.tactical_objectives USING btree (club_id, team_id, date);
+CREATE INDEX idx_tactical_objectives_club_team_date_priority ON public.tactical_objectives USING btree (club_id, team_id, date, priority);
 alter table public.tactical_objectives enable row level security;
 create policy "tactical_objectives_scoped" on public.tactical_objectives as permissive for all to authenticated
   using (((club_id = get_user_club_id()) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))))
