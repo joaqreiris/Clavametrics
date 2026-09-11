@@ -562,7 +562,17 @@
     if (!window.duplicateDashboard || !window.sb) return;
     try {
       const newDash = await window.duplicateDashboard(dash.id, _clubId, _userId, window.sb);
-      _dashboards.push({ ...newDash, report_type: null, cards: [], created_by: _userId });
+      // Las cards YA están copiadas en la base; la copia en memoria tiene que decir lo mismo, o
+      // la pestaña nueva se anuncia con «0 cards» hasta el próximo F5.
+      _dashboards.push({ ...newDash, report_type: newDash.report_type ?? null,
+                         cards: (dash.cards || []).map(c => ({ ...c })),
+                         _cardCount: dash._cardCount ?? dash.cards?.length ?? 0,
+                         created_by: _userId, owner_id: _userId, is_shared: false });
+      // Y los filtros: viven aparte de las cards (localStorage por tablero), así que sin esto la
+      // copia quedaba con las mismas cards pero sin el recorte que las hacía decir algo.
+      const _vistaOrigen = document.querySelector(`#sections .gp-sec[data-dashboard-id="${dash.id}"]`)?.dataset.view
+                        || (dash.report_type ? REPORT_TYPE_TO_VIEW[dash.report_type] : `db-${dash.id}`);
+      window.gpFilterBar?.copyFiltersTo?.(_vistaOrigen, `db-${newDash.id}`);
       reRender();
       switchToView(`db-${newDash.id}`);
     } catch (e) {

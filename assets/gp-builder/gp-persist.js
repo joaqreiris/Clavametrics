@@ -423,11 +423,12 @@
       .single();
     if (sErr) throw new Error(`duplicateDashboard load: ${sErr.message}`);
 
-    const { data: srcCards } = await sb
+    const { data: srcCards, error: cLoadErr } = await sb
       .from('dashboard_cards')
       .select('config, size, position, source')
       .eq('dashboard_id', dashId)
       .order('position', { ascending: true });
+    if (cLoadErr) throw new Error(`duplicateDashboard load cards: ${cLoadErr.message}`);
 
     // create new dashboard right after the source
     const { data: last } = await sb
@@ -444,13 +445,16 @@
         club_id:    clubId,
         name:       src.name + ' copy',
         scope:      src.scope,
+        // El tipo viaja con la copia: sin él, duplicar «Player Week Report» daba un tablero
+        // suelto que ya no sabía qué era, y perdía el layout que trae su vista.
+        report_type: src.report_type ?? null,
         sort_order: (last?.sort_order ?? 0) + 1,
         owner_id:   userId || null,   // a copy is personal to whoever duplicated it
         is_shared:  false,
         team_id:    null,
         created_by: userId || null,
       })
-      .select('id, name')
+      .select('id, name, report_type')
       .single();
     if (dErr) throw new Error(`duplicateDashboard create: ${dErr.message}`);
 
@@ -463,7 +467,10 @@
         source:   c.source,
         created_by: userId || null,
       }));
-      await sb.from('dashboard_cards').insert(rows);
+      // Si esto falla, la copia queda VACÍA. Antes el error no se miraba: el tablero aparecía,
+      // sin una sola card y sin que nadie dijera por qué. Mejor romper y avisar.
+      const { error: cErr } = await sb.from('dashboard_cards').insert(rows);
+      if (cErr) throw new Error(`duplicateDashboard cards: ${cErr.message}`);
     }
     return newDash;
   };

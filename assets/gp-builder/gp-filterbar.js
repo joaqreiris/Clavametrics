@@ -1894,6 +1894,22 @@
     onChange(fn) { listeners.add(fn); return () => listeners.delete(fn); },
     setValue,   // set programático (cross-filter) — mismo pipeline que un click de checkbox
     setDateDays,   // días sueltos desde fuera (el estado de fecha no pasa por setValue)
+    /**
+     * Copia los filtros guardados de un tablero a otro. Los filtros viven en localStorage por
+     * usuario + tablero, así que al duplicar uno la copia arrancaba en blanco: mismas cards, pero
+     * sin el recorte que les daba sentido. Se llama con los data-view de origen y destino
+     * ('ind', 'db-<uuid>'…), que son las claves reales.
+     */
+    copyFiltersTo(desdeView, haciaView) {
+      try {
+        if (!desdeView || !haciaView || desdeView === haciaView) return false;
+        const k = v => `cm_gpfilters_${window._gpUserId || '?'}_${v}`;
+        const raw = localStorage.getItem(k(desdeView));
+        if (!raw) return false;          // el origen no tenía filtros: no hay nada que copiar
+        localStorage.setItem(k(haciaView), raw);
+        return true;
+      } catch (_e) { return false; }     // sin storage, la copia simplemente arranca limpia
+    },
     setPosGranularity,   // nivel de detalle de las posiciones (detallado · básico · grupo)
     setMetrics, // selector de métrica del dashboard ([] = cada card con la suya)
     clearAll: clearAll_,
