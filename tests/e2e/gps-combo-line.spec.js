@@ -146,3 +146,45 @@ test.describe('GPS · líneas de referencia en un gráfico de línea', () => {
   });
 });
 
+// Escala del eje a medida. Sin esto, dos cards de la misma métrica salen con escalas distintas
+// —cada una calculada sobre sus propios datos— y la misma altura significa cosas diferentes.
+const cardEscala = (yAxis) => ([{ id: 'card-combo', position: 0, source: 'builder', size: 'lg', config: {
+  schema: 'gp.card/v1', title: 'Evolución', viz: 'line', scope: { level: 'squad' },
+  metrics: [{ id: 'total_distance', agg: 'avg' }],
+  dimensions: [{ id: 'player' }], range: { type: 'last30' },
+  style: { color: '#2563EB', ...(yAxis ? { yAxis } : {}) } } }]);
+
+const ejeY = (page) => page.evaluate(() => {
+  const cv = document.querySelector('.gp-view.is-on .gp-c[data-card-id="card-combo"] canvas');
+  const ch = cv && window.Chart.getChart(cv);
+  return ch ? { min: ch.scales.y.min, max: ch.scales.y.max } : null;
+});
+
+test.describe('GPS · escala del eje a medida', () => {
+  test('sin pedir nada, arranca en cero como siempre', async ({ page }) => {
+    await open(page, cardEscala(null));
+    expect((await ejeY(page)).min).toBe(0);
+  });
+
+  test('un máximo fijo manda sobre el que calcularía sola', async ({ page }) => {
+    await open(page, cardEscala({ max: 20000, zero: true }));
+    expect((await ejeY(page)).max).toBeGreaterThanOrEqual(20000);
+  });
+
+  test('un mínimo fijo recorta por abajo', async ({ page }) => {
+    await open(page, cardEscala({ min: 3000, zero: true }));
+    expect((await ejeY(page)).min).toBe(3000);
+  });
+
+  test('apagar el cero deja que la escala se ajuste a los datos', async ({ page }) => {
+    await open(page, cardEscala({ zero: false }));
+    expect((await ejeY(page)).min).toBeGreaterThan(0);
+  });
+
+  test('un mínimo por encima del máximo se ignora en vez de dejar el cuadro vacío', async ({ page }) => {
+    await open(page, cardEscala({ min: 50000, max: 10000, zero: true }));
+    const y = await ejeY(page);
+    expect(y.min).toBeLessThan(y.max);
+  });
+});
+

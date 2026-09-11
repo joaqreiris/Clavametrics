@@ -844,7 +844,7 @@
       dimensions: (S.dimensions || []).map(d => ({ id:d.id, ...(d.label ? { label:d.label } : {}), ...(d.align ? { align:d.align } : {}), ...(d.role ? { role:d.role } : {}) })),
       range:      { type: S.range },
       comparison: cmpConfig(S),
-      style: { size:S.size, color:S.color, ...(S.icon ? { icon:S.icon } : {}), palette:S.palette, ...(_compactColors(S) ? { colors: _compactColors(S) } : {}), ...(S.relBands ? { relBands: S.relBands } : {}), axes:S.axes, legend:S.legend, dataLabels:S.labels, area:S.area, points:S.points, comboLine: S.comboLine !== false, quadrants: S.quadrants || 'mean', boxOut: S.boxOut || 'named', boxOutHi: S.boxOutHi !== false,
+      style: { size:S.size, color:S.color, ...(S.icon ? { icon:S.icon } : {}), palette:S.palette, ...(_compactColors(S) ? { colors: _compactColors(S) } : {}), ...(S.relBands ? { relBands: S.relBands } : {}), axes:S.axes, legend:S.legend, dataLabels:S.labels, area:S.area, points:S.points, comboLine: S.comboLine !== false, ..._yAxisStyle(S), quadrants: S.quadrants || 'mean', boxOut: S.boxOut || 'named', boxOutHi: S.boxOutHi !== false,
                orientation: S.horizontal ? 'horizontal' : 'vertical', stacked: !!S.stacked, scatterLabel: S.scatterLabel || 'name', scatterAvatars: !!S.scatterAvatars, richTooltip: S.richTooltip !== false, gaugeMode: S.gaugeMode || 'value', showSub: S.showSub !== false,
                // Title/subtitle format (Paso 3a). Compacted to only non-default props; absent when
                // unset → cards without formatting stay byte-identical to today.
@@ -1087,6 +1087,20 @@
                 <span class="tx"><span class="t" data-i18n="gps_analysis.builder_axes">Axes</span><span class="s" data-i18n="gps_analysis.builder_axes_sub">Show axis lines &amp; labels</span></span>
                 <button class="es-sw-t is-on" data-toggle="axes"></button>
               </div>
+              <!-- Escala del eje de valores. Vacío = automática, como siempre. Fijarla es lo que
+                   hace comparables dos cards de la misma métrica: sin esto cada una calcula su
+                   escala sobre sus propios datos y la misma altura significa cosas distintas. -->
+              <div class="es-toggle is-stack" data-only="bars,line">
+                <span class="tx"><span class="t" data-i18n="gps_analysis.builder_yscale">Value scale</span><span class="s" data-i18n="gps_analysis.builder_yscale_sub">Empty = automatic</span></span>
+                <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+                  <input type="number" id="gpbYMin" data-i18n-attr="placeholder:gps_analysis.builder_yscale_min" placeholder="Min" style="width:74px;padding:6px 8px;border:1px solid var(--cm-border);border-radius:6px;background:var(--cm-surface-2);color:var(--cm-fg);font:600 12px/1 var(--cm-font-mono);box-sizing:border-box">
+                  <input type="number" id="gpbYMax" data-i18n-attr="placeholder:gps_analysis.builder_yscale_max" placeholder="Max" style="width:74px;padding:6px 8px;border:1px solid var(--cm-border);border-radius:6px;background:var(--cm-surface-2);color:var(--cm-fg);font:600 12px/1 var(--cm-font-mono);box-sizing:border-box">
+                </div>
+              </div>
+              <div class="es-toggle" data-only="bars,line">
+                <span class="tx"><span class="t" data-i18n="gps_analysis.builder_yzero">Start at zero</span><span class="s" data-i18n="gps_analysis.builder_yzero_sub">Off: exaggerates the differences at the top</span></span>
+                <button class="es-sw-t is-on" data-toggle="yzero"></button>
+              </div>
               <div class="es-toggle" data-only="bars,line,scatter,radar">
                 <span class="tx"><span class="t" data-i18n="gps_analysis.builder_legend">Legend</span><span class="s" data-i18n="gps_analysis.builder_legend_sub">Show metric legend</span></span>
                 <button class="es-sw-t is-on" data-toggle="legend"></button>
@@ -1297,7 +1311,7 @@
     return { type:'bars', source:'session', metrics:[], dimensions:[], scope: _fbPidsNew.length === 1 ? 'player' : 'squad', scopeTouched:false, squadAgg:'pooled',
              compare:'none', compareMethod:'avg', compareStat:'median', compareOpts:{ topN:5, mdLookback:4 }, refWindow:{ type:'season' }, refMcId:null, range,
              size:'md', color:'#15803D', icon:null, palette:'pitch', colors:{}, title:'', titleCustom:false, axes:true, legend:true, labels:false, gaugeMode:'value', showSub:true,
-             points:true, area:false, comboLine:true, quadrants:'mean', boxOut:'named', boxOutHi:true, horizontal:false, stacked:false, sort:null, scatterLabel:'name', scatterAvatars:false, richTooltip:true, referenceLines:[],
+             points:true, area:false, comboLine:true, yzero:true, ymin:null, ymax:null, quadrants:'mean', boxOut:'named', boxOutHi:true, horizontal:false, stacked:false, sort:null, scatterLabel:'name', scatterAvatars:false, richTooltip:true, referenceLines:[],
              titleFormat:{}, subtitleFormat:{} };
   }
 
@@ -1787,6 +1801,8 @@
       S.stacked    = !!cfg.stacked;
       S.sort    = cfg.sort || null;
       S.colWidths = cfg.colWidths || null;   // anchos a medida de la tabla
+      const _ya = cfg.style?.yAxis || {};   // escala del eje a medida
+      S.ymin = _ya.min ?? null; S.ymax = _ya.max ?? null; S.yzero = _ya.zero !== false;
       S.referenceLines = Array.isArray(cfg.referenceLines) ? cfg.referenceLines.map(r => ({ ...r })) : [];
       S.title   = cfg.titleCustom ? (cfg.title || '') : '';   // no-custom → vacío: el auto se deriva fresco (no se congela)
       S.titleCustom = !!cfg.titleCustom;      // ausente en cards viejas → false → título auto
@@ -1830,6 +1846,8 @@
       S.stacked    = !!rawConfig.style?.stacked;
       S.sort    = rawConfig.sort || null;
       S.colWidths = rawConfig.colWidths || null;   // anchos a medida de la tabla
+      const _ya = rawConfig.style?.yAxis || {};   // escala del eje a medida
+      S.ymin = _ya.min ?? null; S.ymax = _ya.max ?? null; S.yzero = _ya.zero !== false;
       S.referenceLines = Array.isArray(rawConfig.referenceLines) ? rawConfig.referenceLines.map(r => ({ ...r })) : [];
       S.title   = rawConfig.titleCustom ? (rawConfig.title || '') : '';   // ver nota en el otro load: evita congelar el auto
       S.titleCustom = !!rawConfig.titleCustom;   // ausente en cards viejas → false → título auto
@@ -2078,6 +2096,21 @@
         b.classList.toggle('is-on', S[b.dataset.toggle]);
         renderCard();
       };
+    });
+
+    // Escala del eje: se aplica al soltar el foco o con Enter, no en cada tecla — redibujar la
+    // card mientras se escribe «1200» la haría saltar cuatro veces.
+    [['gpbYMin', 'ymin'], ['gpbYMax', 'ymax']].forEach(([id, key]) => {
+      const inp = document.getElementById(id);
+      if (!inp) return;
+      const aplicar = () => {
+        if (!S) return;
+        const v = inp.value.trim();
+        S[key] = v === '' ? null : Number(v);
+        renderCard();
+      };
+      inp.onchange = aplicar;
+      inp.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); inp.blur(); } };
     });
 
     // scatter label-content segmented control (Phase 3)
@@ -2516,6 +2549,8 @@
     panelEl.querySelectorAll('[data-toggle]').forEach(b =>
       b.classList.toggle('is-on', !!S[b.dataset.toggle])
     );
+    const _yi = (id, v) => { const e = document.getElementById(id); if (e) e.value = (v == null ? '' : v); };
+    _yi('gpbYMin', S.ymin); _yi('gpbYMax', S.ymax);
     document.getElementById('gpbScatterLabel')?.querySelectorAll('button').forEach(b =>
       b.classList.toggle('is-on', b.dataset.slabel === (S.scatterLabel || 'name'))
     );
@@ -4438,6 +4473,30 @@
     return String(+(+v).toFixed(2));
   }
   /** A "nice" axis: max with ~10% headroom, snapped to a 1/2/2.5/5 step × ticks. */
+  /**
+   * Escala del eje de valores a medida (config.style.yAxis). Sin esto, dos cards de la misma
+   * métrica salían con escalas distintas —cada una calculada sobre sus propios datos— y no se
+   * podían comparar de un vistazo.
+   *   min / max  → valores fijos; null = automático, como hasta ahora.
+   *   zero       → arrancar en cero. Por defecto sí; apagarlo amplía las diferencias de arriba,
+   *                que es lo que hace falta cuando todos los valores están apretados.
+   */
+  /** El trozo de `style` con la escala pedida en el panel. Sólo viaja si hay algo que decir. */
+  function _yAxisStyle(S) {
+    const num = v => (v === '' || v == null || !Number.isFinite(Number(v))) ? null : Number(v);
+    const min = num(S.ymin), max = num(S.ymax), zero = S.yzero !== false;
+    if (min == null && max == null && zero) return {};   // todo automático: no se guarda nada
+    return { yAxis: { ...(min != null ? { min } : {}), ...(max != null ? { max } : {}), zero } };
+  }
+
+  function _yAxis(config) {
+    const a = config?.style?.yAxis || {};
+    const num = v => (v === '' || v == null || !Number.isFinite(Number(v))) ? null : Number(v);
+    const min = num(a.min), max = num(a.max);
+    // Un mínimo por encima del máximo dejaría el cuadro vacío: gana el máximo y se ignora.
+    return { min: (min != null && max != null && min >= max) ? null : min, max, zero: a.zero !== false };
+  }
+
   function niceScale(maxVal, ticks) {
     if (!(maxVal > 0)) return { max: ticks, step: 1 };
     const raw = (maxVal * 1.1) / ticks;
@@ -5185,8 +5244,10 @@
     const dataMax = stacked
       ? Math.max(0, ...cats.map((_, ci) => barDs.reduce((sum, d) => sum + (d.data[ci] || 0), 0)))
       : Math.max(0, ...allBarVals);
+    const _yax = _yAxis(config);
     const maxVal = Math.max(dataMax, refMax);
-    const { max, step } = niceScale(maxVal, ticks);
+    let { max, step } = niceScale(maxVal, ticks);
+    if (_yax.max != null) ({ max, step } = niceScale(_yax.max, ticks));
 
     const baseH  = _BAR_SIZE_H[size] || 210;
     const height = horizontal ? Math.max(baseH, cats.length * 26 + 48) : baseH;   // grow for many horizontal bars
@@ -5321,6 +5382,7 @@
              mcUpCol: mcOn ? _cssVar('--cm-success', '#16A34A') : null,
              mcDnCol: mcOn ? _cssVar('--cm-danger',  '#DC2626') : null,
              horizontal, stacked, hasLine, max1, step1, min1, relBands: config.style?.relBands || null, referenceLines: refLines,
+             yMin: _yax.min, yZero: _yax.zero,
              grpDelta,
              height, color: accent };
   }
@@ -5593,7 +5655,9 @@
 
       const gridCol = 'rgba(148,163,184,0.18)';
       const valueScale = {
-        display: d.showAxes, beginAtZero: true, max: d.max, stacked: d.stacked,
+        display: d.showAxes, stacked: d.stacked,
+        ...(d.yMin != null ? { min: d.yMin } : { beginAtZero: d.yZero !== false }),
+        max: d.max,
         grid: { display: d.showAxes, color: gridCol, drawTicks: false },
         border: { display: false },
         ticks: { stepSize: d.step, font: { size: 10 }, color: '#9CA3AF', padding: 6, callback: v => kfmt(v) },
@@ -5744,7 +5808,7 @@
       viz: 'bars',
       dimensions: S.dimensions,
       comparison: cmpConfig(S),
-      style: { size: S.size, color: S.color, palette: S.palette, ...(_compactColors(S) ? { colors: _compactColors(S) } : {}), axes: S.axes, legend: S.legend, dataLabels: S.labels,
+      style: { size: S.size, color: S.color, palette: S.palette, ...(_compactColors(S) ? { colors: _compactColors(S) } : {}), axes: S.axes, legend: S.legend, dataLabels: S.labels, ..._yAxisStyle(S),
                orientation: S.horizontal ? 'horizontal' : 'vertical', stacked: !!S.stacked },
       ...(S.referenceLines?.length ? { referenceLines: S.referenceLines } : {}),
     };
@@ -5859,9 +5923,12 @@
       [ln.value, ln.value2].forEach(v => { if (Number.isFinite(v)) maxVal = Math.max(maxVal, v); });
     });
     const ticks  = size === 'sm' ? 4 : 5;
-    const { max, step } = niceScale(maxVal, ticks);
+    const _yax = _yAxis(config);
+    let { max, step } = niceScale(maxVal, ticks);
+    if (_yax.max != null) ({ max, step } = niceScale(_yax.max, ticks));
 
     return { cats, datasets, max, step, showAxes, showLeg, showLbl, referenceLines: refLines,
+             yMin: _yax.min, yZero: _yax.zero,
              height: _LINE_SIZE_H[size] || 220 };
   }
 
@@ -5943,7 +6010,8 @@
               border: { display: d.showAxes },
             },
             y: {
-              display: d.showAxes, beginAtZero: true, max: d.max,
+              display: d.showAxes, max: d.max,
+              ...(d.yMin != null ? { min: d.yMin } : { beginAtZero: d.yZero !== false }),
               grid: { display: d.showAxes, color: 'rgba(148,163,184,0.18)', drawTicks: false },
               border: { display: false },
               ticks: { stepSize: d.step, font: { size: 10 }, color: '#9CA3AF', padding: 6, callback: v => kfmt(v) },
@@ -5994,7 +6062,7 @@
       viz: 'line',
       dimensions: S.dimensions,
       comparison: cmpConfig(S),
-      style: { size: S.size, color: S.color, palette: S.palette, ...(_compactColors(S) ? { colors: _compactColors(S) } : {}), axes: S.axes, legend: S.legend, dataLabels: S.labels, area: S.area, points: S.points },
+      style: { size: S.size, color: S.color, palette: S.palette, ...(_compactColors(S) ? { colors: _compactColors(S) } : {}), axes: S.axes, legend: S.legend, dataLabels: S.labels, area: S.area, points: S.points , ..._yAxisStyle(S) },
       __example: true,
     };
     mountLineChart(body, cfg, series);
@@ -9965,6 +10033,8 @@
     S.stacked    = !!config.style?.stacked;
     S.sort    = config.sort || null;
     S.colWidths = config.colWidths || null;   // anchos a medida de la tabla
+    const _ya = config.style?.yAxis || {};   // escala del eje a medida
+    S.ymin = _ya.min ?? null; S.ymax = _ya.max ?? null; S.yzero = _ya.zero !== false;
     S.referenceLines = Array.isArray(config.referenceLines) ? config.referenceLines.map(r => ({ ...r })) : [];
     S.titleFormat    = config.style?.titleFormat    ? { ...config.style.titleFormat }    : {};
     S.subtitleFormat = config.style?.subtitleFormat ? { ...config.style.subtitleFormat } : {};
