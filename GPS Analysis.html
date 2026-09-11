@@ -522,6 +522,17 @@
   .ol-hm td.is-thresh .ol-hm-cell { font-weight:700; }
   .gp-zt th { padding:var(--cm-tbl-head-pad-y) 8px; font:600 var(--cm-tbl-head-fs)/1 var(--cm-font-sans); letter-spacing:0.06em; text-transform:uppercase; color:var(--cm-fg-muted); background:var(--cm-bg-soft); border-bottom:1px solid var(--cm-border); white-space:nowrap; text-align:right; }
   .gp-zt thead th { position:sticky; top:0; z-index:3; }                       /* keep column names on vertical scroll */
+  /* Agarre para estirar la columna. Va pegado al borde derecho del encabezado y se lleva el
+     click para que no dispare el ordenamiento. Sólo se ve al pasar por encima: una raya fija en
+     cada columna ensuciaría una tabla que ya tiene bordes. */
+  .gp-zt th .tf-rs { position:absolute; top:0; right:0; width:9px; height:100%; cursor:col-resize;
+                     touch-action:none; user-select:none; z-index:5; }
+  .gp-zt th .tf-rs::after { content:""; position:absolute; top:20%; bottom:20%; right:3px; width:2px;
+                            border-radius:1px; background:var(--cm-border); opacity:0; transition:opacity .12s; }
+  .gp-zt th:hover .tf-rs::after, .gp-zt th .tf-rs:hover::after { opacity:1; }
+  .gp-zt th .tf-rs:hover::after, .gp-zt.tf-resizing th .tf-rs.is-on::after { background:var(--cm-accent); opacity:1; }
+  .gp-zt.tf-resizing { cursor:col-resize; user-select:none; }
+  .gp-zt th { position:relative; }                                             /* ancla del agarre .tf-rs */
   .gp-zt th.pc, .gp-zt td.pc { text-align:left; position:sticky; left:0; background:var(--cm-surface); border-right:1px solid var(--cm-border-soft); min-width:132px; padding-left:12px; z-index:2; }
   .gp-zt thead th.pc { background:var(--cm-bg-soft); z-index:4; }
   /* Cross-filter: sólo la celda de dimensión con data-fid es clickeable (la escribe

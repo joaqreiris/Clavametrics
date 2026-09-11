@@ -854,6 +854,9 @@
       // { by:'natural'|'value'|'label'|'original', dir } que reordena las categorías
       // (ver _sortKeyOf). Persistido para que el orden sobreviva al reload.
       ...((S.type === 'table' || S.type === 'bars') && S.sort ? { sort: S.sort } : {}),
+      // Anchos a medida de la tabla: los pone el usuario arrastrando, no el editor, así que
+      // tienen que sobrevivir a reabrir la card en el builder.
+      ...(S.type === 'table' && S.colWidths && Object.keys(S.colWidths).length ? { colWidths: S.colWidths } : {}),
       // Reference lines (bars): manual horizontal/vertical rules. Persisted top-level and spread
       // conditionally (same pattern as `sort`) so a card without lines stays byte-identical to today.
       ...(S.referenceLines?.length ? { referenceLines: S.referenceLines.map(r => ({ ...r })) } : {}),
@@ -1160,7 +1163,7 @@
                 <button class="es-sw-t is-on" data-toggle="boxOutHi"></button>
               </div>
             </div>
-            <div class="es-sec" data-only="bars,scatter">
+            <div class="es-sec" data-only="bars,line,scatter">
               <div class="lab" data-i18n="gps_analysis.builder_reference_lines">Reference lines</div>
               <div id="gpbRefLines"></div>
               <button class="cm-btn is-outline is-sm" id="gpbAddRefLine" style="width:100%;justify-content:center;margin-top:2px">
@@ -1783,6 +1786,7 @@
       S.horizontal = !!cfg.horizontal;
       S.stacked    = !!cfg.stacked;
       S.sort    = cfg.sort || null;
+      S.colWidths = cfg.colWidths || null;   // anchos a medida de la tabla
       S.referenceLines = Array.isArray(cfg.referenceLines) ? cfg.referenceLines.map(r => ({ ...r })) : [];
       S.title   = cfg.titleCustom ? (cfg.title || '') : '';   // no-custom → vacío: el auto se deriva fresco (no se congela)
       S.titleCustom = !!cfg.titleCustom;      // ausente en cards viejas → false → título auto
@@ -1825,6 +1829,7 @@
       S.horizontal = rawConfig.style?.orientation === 'horizontal';
       S.stacked    = !!rawConfig.style?.stacked;
       S.sort    = rawConfig.sort || null;
+      S.colWidths = rawConfig.colWidths || null;   // anchos a medida de la tabla
       S.referenceLines = Array.isArray(rawConfig.referenceLines) ? rawConfig.referenceLines.map(r => ({ ...r })) : [];
       S.title   = rawConfig.titleCustom ? (rawConfig.title || '') : '';   // ver nota en el otro load: evita congelar el auto
       S.titleCustom = !!rawConfig.titleCustom;   // ausente en cards viejas → false → título auto
@@ -5842,11 +5847,22 @@
       };
     });
 
-    const maxVal = Math.max(0, ...datasets.flatMap(d => d.data.filter(v => v != null)));
+    // Líneas y bandas de referencia, igual que en barras. En una evolución temporal marcar un
+    // umbral es lo que más se pide, y hasta ahora sólo lo tenían barras y scatter.
+    const _allVals = datasets.filter(d => !d._dashed).flatMap(d => d.data.filter(v => v != null).map(Number));
+    const refLines = _sanitizeRefItems(config.referenceLines, () => _allVals);
+
+    let maxVal = Math.max(0, ...datasets.flatMap(d => d.data.filter(v => v != null)));
+    // Que una línea alta no quede fuera del dibujo: la escala crece para incluirla (y su otro
+    // extremo, si es una banda).
+    refLines.forEach(ln => {
+      [ln.value, ln.value2].forEach(v => { if (Number.isFinite(v)) maxVal = Math.max(maxVal, v); });
+    });
     const ticks  = size === 'sm' ? 4 : 5;
     const { max, step } = niceScale(maxVal, ticks);
 
-    return { cats, datasets, max, step, showAxes, showLeg, showLbl, height: _LINE_SIZE_H[size] || 220 };
+    return { cats, datasets, max, step, showAxes, showLeg, showLbl, referenceLines: refLines,
+             height: _LINE_SIZE_H[size] || 220 };
   }
 
   /** Mounts (or re-mounts) a Chart.js line chart into `body`. Same renderer for preview + saved card. */
@@ -5889,7 +5905,7 @@
       body.__chart = _newChart(body, canvas, {
         type: 'line',
         data: { labels: d.cats, datasets: d.datasets },
-        plugins: [_lineLabelPlugin],
+        plugins: [_lineLabelPlugin, _barRefLinesPlugin],   // el de barras es genérico: dibuja sobre el eje de valores
         options: {
           responsive: true, maintainAspectRatio: false,
           animation: { duration: 320 },
@@ -5917,6 +5933,7 @@
               },
             },
             gpbLineLabels: { show: d.showLbl },
+            gpbRefLines: { lines: d.referenceLines, horizontal: false },
           },
           scales: {
             x: {
@@ -7960,6 +7977,55 @@
    * the editor preview. `editable` (the builder draft) additionally shows the format
    * chip per measure column; live cards never expose format editing.
    */
+  // ── Ancho de columna a medida ──────────────────────────────────────────────────
+  // Se guarda en config.colWidths, por id de columna (el mismo que usa el ordenamiento). Sin
+  // table-layout:fixed el navegador toma el width del th como una sugerencia y lo estira si el
+  // contenido no entra, así que se fijan los tres: width, min y max.
+  const _TF_MIN_W = 56, _TF_MAX_W = 640;
+  function _colWidthAttr(config, sid) {
+    const w = config?.colWidths?.[sid];
+    if (!Number.isFinite(+w)) return '';
+    const px = Math.round(Math.min(_TF_MAX_W, Math.max(_TF_MIN_W, +w)));
+    return ` style="width:${px}px;min-width:${px}px;max-width:${px}px"`;
+  }
+
+  /** Arrastrar el borde derecho de un encabezado para estirar o achicar esa columna. */
+  function _wireColResize(body, config, opts = {}) {
+    const table = body.querySelector('.gp-zt');
+    if (!table) return;
+    table.addEventListener('pointerdown', (e) => {
+      const grip = e.target.closest('.tf-rs');
+      if (!grip) return;
+      e.preventDefault();      // sin esto el navegador arranca a seleccionar texto
+      e.stopPropagation();     // y el th no debe interpretarlo como «ordenar por esta columna»
+      const th = grip.closest('th');
+      const sid = grip.dataset.rs;
+      if (!th || !sid) return;
+      const x0 = e.clientX, w0 = th.getBoundingClientRect().width;
+      grip.classList.add('is-on');
+      table.classList.add('tf-resizing');
+      grip.setPointerCapture(e.pointerId);
+
+      const mover = (ev) => {
+        const w = Math.min(_TF_MAX_W, Math.max(_TF_MIN_W, Math.round(w0 + (ev.clientX - x0))));
+        th.style.width = th.style.minWidth = th.style.maxWidth = w + 'px';
+      };
+      const soltar = () => {
+        grip.removeEventListener('pointermove', mover);
+        grip.removeEventListener('pointerup', soltar);
+        grip.removeEventListener('pointercancel', soltar);
+        grip.classList.remove('is-on');
+        table.classList.remove('tf-resizing');
+        const w = Math.round(th.getBoundingClientRect().width);
+        config.colWidths = { ...(config.colWidths || {}), [sid]: w };
+        if (typeof opts.onResize === 'function') opts.onResize(config.colWidths);
+      };
+      grip.addEventListener('pointermove', mover);
+      grip.addEventListener('pointerup', soltar);
+      grip.addEventListener('pointercancel', soltar);
+    });
+  }
+
   function mountTableCard(body, config, series, opts = {}) {
     destroyBodyChart(body);
     const editable = !!opts.editable;
@@ -7993,7 +8059,7 @@
       // Column-options chip only when this header maps to a real dimension (not the legacy
       // single-identity fallback) so the pane has something to edit.
       const chip = (editable && dims[j]) ? `<span class="tf-fbtn" data-di="${j}" title="${_tt('gps_analysis.builder_column_options', 'Column options')}"><i class="ti ti-adjustments"></i></span>` : '';
-      return `<th class="${j === 0 ? 'pc' : 'dc'}${dt} tf-sortable tf-al-${al}${(editable && dims[j]) ? ' tf-h' : ''}" data-sort="${sid}" title="${esc(lbl)}">${esc(lbl)}${arrow(sid)}${chip}</th>`;
+      return `<th class="${j === 0 ? 'pc' : 'dc'}${dt} tf-sortable tf-al-${al}${(editable && dims[j]) ? ' tf-h' : ''}" data-sort="${sid}"${_colWidthAttr(config, sid)} title="${esc(lbl)}">${esc(lbl)}${arrow(sid)}${chip}<span class="tf-rs" data-rs="${sid}"></span></th>`;
     }).join('');
     const metHead = cols.map((c, i) => {
       // "met:<i>:<id>" — el índice distingue instancias de una misma métrica repetida
@@ -8002,7 +8068,7 @@
       const lbl  = c.f.label || c.s.name;                          // FULL name (no word-splitting); custom rename wins
       const al   = c.f.align || 'right';
       const chip = editable ? `<span class="tf-fbtn" data-mi="${i}" title="${_tt('gps_analysis.builder_column_options_format', 'Column options & format')}"><i class="ti ti-adjustments"></i></span>` : '';
-      return `<th class="tf-sortable tf-al-${al}${editable ? ' tf-h' : ''}" data-sort="${sid}" title="${esc(lbl)}">${esc(lbl)}${arrow(sid)}${chip}</th>`;
+      return `<th class="tf-sortable tf-al-${al}${editable ? ' tf-h' : ''}" data-sort="${sid}"${_colWidthAttr(config, sid)} title="${esc(lbl)}">${esc(lbl)}${arrow(sid)}${chip}<span class="tf-rs" data-rs="${sid}"></span></th>`;
     }).join('');
     const head = `<tr>${dimHead}${metHead}</tr>`;
 
@@ -8033,8 +8099,25 @@
     // el chip de formato (solo editor) hace su propio clic.
     body.querySelectorAll('th[data-sort]').forEach(th => th.addEventListener('click', e => {
       if (e.target.closest('.tf-fbtn')) return;   // format chip handles its own click
+      if (e.target.closest('.tf-rs')) return;     // el agarre de ancho no ordena
       _onTableSortClick(body, th.dataset.sort);
     }));
+    // Estirar columnas: en el borrador queda en S (el builder lo guarda al aplicar); en una card
+    // ya guardada se persiste sola, como el ordenamiento — el ancho es del usuario, no del editor.
+    _wireColResize(body, config, {
+      onResize: (cw) => {
+        const cardEl = body.closest('.gp-c');
+        if (!cardEl) return;
+        if (cardEl.__config) cardEl.__config.colWidths = cw;
+        if (cardEl.__cfg)    cardEl.__cfg.colWidths    = cw;
+        if (editable) { try { S.colWidths = cw; } catch (_e) {} return; }
+        const cardId = cardEl.dataset.cardId;
+        if (_isUuid(cardId) && typeof window.updateDashboardCard === 'function') {
+          window.updateDashboardCard(cardId, cardEl.__config || config, window.sb)
+            .catch(e => console.warn('gpb: ancho de columna no guardado:', e));
+        }
+      },
+    });
     if (editable) {
       body.querySelectorAll('.tf-fbtn[data-mi]').forEach(chip => chip.addEventListener('click', e => {
         e.stopPropagation(); openTfPane(+chip.dataset.mi, chip.closest('th'));
@@ -9881,6 +9964,7 @@
     S.horizontal = config.style?.orientation === 'horizontal';
     S.stacked    = !!config.style?.stacked;
     S.sort    = config.sort || null;
+    S.colWidths = config.colWidths || null;   // anchos a medida de la tabla
     S.referenceLines = Array.isArray(config.referenceLines) ? config.referenceLines.map(r => ({ ...r })) : [];
     S.titleFormat    = config.style?.titleFormat    ? { ...config.style.titleFormat }    : {};
     S.subtitleFormat = config.style?.subtitleFormat ? { ...config.style.subtitleFormat } : {};
