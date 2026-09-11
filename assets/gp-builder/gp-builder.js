@@ -781,6 +781,19 @@
   }
   // Metric's configured decimals (or null if unknown). Single source of truth for all viz.
   function decOfMetric(id) { const d = catalogMap.get(id)?.decimals; return Number.isFinite(d) ? d : null; }
+  /**
+   * Decimales con los que mostrar una métrica en ESTA card. Manda lo que el usuario pidió en la
+   * card; si no, lo que dice el catálogo.
+   *
+   * Barras, línea y radar venían redondeando a un decimal fijo, así que los decimales del
+   * catálogo —que el club configura por métrica— no llegaban al gráfico: una distancia con 0
+   * decimales se dibujaba igual «4.328,5». Ahora los respetan.
+   */
+  function _decFor(config, metricId) {
+    const own = config?.style?.decimals;
+    if (Number.isFinite(Number(own))) return Math.max(0, Math.min(4, Number(own) | 0));
+    return decOfMetric(metricId);
+  }
   function defaultAgg(kind) { return (kind === 'peak' || kind === 'calculated' || kind === 'avg') ? 'avg' : 'total'; }
   function isAggOk(agg, kind) { return kind !== 'peak' || (AGG[agg] && AGG[agg].peakOk); }
   function metIcon(m) { return (m && m.calculated) ? 'ti-math-function' : (CAT_ICON[m.group_name] || 'ti-chart-bar'); }
@@ -844,7 +857,7 @@
       dimensions: (S.dimensions || []).map(d => ({ id:d.id, ...(d.label ? { label:d.label } : {}), ...(d.align ? { align:d.align } : {}), ...(d.role ? { role:d.role } : {}) })),
       range:      { type: S.range },
       comparison: cmpConfig(S),
-      style: { size:S.size, color:S.color, ...(S.icon ? { icon:S.icon } : {}), palette:S.palette, ...(_compactColors(S) ? { colors: _compactColors(S) } : {}), ...(S.relBands ? { relBands: S.relBands } : {}), axes:S.axes, legend:S.legend, dataLabels:S.labels, area:S.area, points:S.points, comboLine: S.comboLine !== false, ..._yAxisStyle(S), quadrants: S.quadrants || 'mean', boxOut: S.boxOut || 'named', boxOutHi: S.boxOutHi !== false,
+      style: { size:S.size, color:S.color, ...(S.icon ? { icon:S.icon } : {}), palette:S.palette, ...(_compactColors(S) ? { colors: _compactColors(S) } : {}), ...(S.relBands ? { relBands: S.relBands } : {}), axes:S.axes, legend:S.legend, dataLabels:S.labels, area:S.area, points:S.points, comboLine: S.comboLine !== false, ..._yAxisStyle(S), ..._decStyle(S), quadrants: S.quadrants || 'mean', boxOut: S.boxOut || 'named', boxOutHi: S.boxOutHi !== false,
                orientation: S.horizontal ? 'horizontal' : 'vertical', stacked: !!S.stacked, scatterLabel: S.scatterLabel || 'name', scatterAvatars: !!S.scatterAvatars, richTooltip: S.richTooltip !== false, gaugeMode: S.gaugeMode || 'value', showSub: S.showSub !== false,
                // Title/subtitle format (Paso 3a). Compacted to only non-default props; absent when
                // unset → cards without formatting stay byte-identical to today.
@@ -1101,6 +1114,12 @@
                 <span class="tx"><span class="t" data-i18n="gps_analysis.builder_yzero">Start at zero</span><span class="s" data-i18n="gps_analysis.builder_yzero_sub">Off: exaggerates the differences at the top</span></span>
                 <button class="es-sw-t is-on" data-toggle="yzero"></button>
               </div>
+              <!-- Decimales. Vacío = los que el club le puso a cada métrica en el catálogo, que
+                   es lo normal; el campo es para la card que necesita otra cosa. -->
+              <div class="es-toggle is-stack" data-only="bars,line,radar">
+                <span class="tx"><span class="t" data-i18n="gps_analysis.builder_decimals">Decimals</span><span class="s" data-i18n="gps_analysis.builder_decimals_sub">Empty = as set per metric</span></span>
+                <input type="number" min="0" max="4" id="gpbDecimals" data-i18n-attr="placeholder:gps_analysis.builder_decimals_ph" placeholder="Auto" style="width:74px;padding:6px 8px;border:1px solid var(--cm-border);border-radius:6px;background:var(--cm-surface-2);color:var(--cm-fg);font:600 12px/1 var(--cm-font-mono);box-sizing:border-box">
+              </div>
               <div class="es-toggle" data-only="bars,line,scatter,radar">
                 <span class="tx"><span class="t" data-i18n="gps_analysis.builder_legend">Legend</span><span class="s" data-i18n="gps_analysis.builder_legend_sub">Show metric legend</span></span>
                 <button class="es-sw-t is-on" data-toggle="legend"></button>
@@ -1311,7 +1330,7 @@
     return { type:'bars', source:'session', metrics:[], dimensions:[], scope: _fbPidsNew.length === 1 ? 'player' : 'squad', scopeTouched:false, squadAgg:'pooled',
              compare:'none', compareMethod:'avg', compareStat:'median', compareOpts:{ topN:5, mdLookback:4 }, refWindow:{ type:'season' }, refMcId:null, range,
              size:'md', color:'#15803D', icon:null, palette:'pitch', colors:{}, title:'', titleCustom:false, axes:true, legend:true, labels:false, gaugeMode:'value', showSub:true,
-             points:true, area:false, comboLine:true, yzero:true, ymin:null, ymax:null, quadrants:'mean', boxOut:'named', boxOutHi:true, horizontal:false, stacked:false, sort:null, scatterLabel:'name', scatterAvatars:false, richTooltip:true, referenceLines:[],
+             points:true, area:false, comboLine:true, yzero:true, ymin:null, ymax:null, decimals:null, quadrants:'mean', boxOut:'named', boxOutHi:true, horizontal:false, stacked:false, sort:null, scatterLabel:'name', scatterAvatars:false, richTooltip:true, referenceLines:[],
              titleFormat:{}, subtitleFormat:{} };
   }
 
@@ -1802,7 +1821,9 @@
       S.sort    = cfg.sort || null;
       S.colWidths = cfg.colWidths || null;   // anchos a medida de la tabla
       const _ya = cfg.style?.yAxis || {};   // escala del eje a medida
+      const _yaDec = cfg.style?.decimals ?? null;
       S.ymin = _ya.min ?? null; S.ymax = _ya.max ?? null; S.yzero = _ya.zero !== false;
+      S.decimals = _yaDec;
       S.referenceLines = Array.isArray(cfg.referenceLines) ? cfg.referenceLines.map(r => ({ ...r })) : [];
       S.title   = cfg.titleCustom ? (cfg.title || '') : '';   // no-custom → vacío: el auto se deriva fresco (no se congela)
       S.titleCustom = !!cfg.titleCustom;      // ausente en cards viejas → false → título auto
@@ -1847,7 +1868,9 @@
       S.sort    = rawConfig.sort || null;
       S.colWidths = rawConfig.colWidths || null;   // anchos a medida de la tabla
       const _ya = rawConfig.style?.yAxis || {};   // escala del eje a medida
+      const _yaDec = rawConfig.style?.decimals ?? null;
       S.ymin = _ya.min ?? null; S.ymax = _ya.max ?? null; S.yzero = _ya.zero !== false;
+      S.decimals = _yaDec;
       S.referenceLines = Array.isArray(rawConfig.referenceLines) ? rawConfig.referenceLines.map(r => ({ ...r })) : [];
       S.title   = rawConfig.titleCustom ? (rawConfig.title || '') : '';   // ver nota en el otro load: evita congelar el auto
       S.titleCustom = !!rawConfig.titleCustom;   // ausente en cards viejas → false → título auto
@@ -2100,7 +2123,7 @@
 
     // Escala del eje: se aplica al soltar el foco o con Enter, no en cada tecla — redibujar la
     // card mientras se escribe «1200» la haría saltar cuatro veces.
-    [['gpbYMin', 'ymin'], ['gpbYMax', 'ymax']].forEach(([id, key]) => {
+    [['gpbYMin', 'ymin'], ['gpbYMax', 'ymax'], ['gpbDecimals', 'decimals']].forEach(([id, key]) => {
       const inp = document.getElementById(id);
       if (!inp) return;
       const aplicar = () => {
@@ -2550,7 +2573,7 @@
       b.classList.toggle('is-on', !!S[b.dataset.toggle])
     );
     const _yi = (id, v) => { const e = document.getElementById(id); if (e) e.value = (v == null ? '' : v); };
-    _yi('gpbYMin', S.ymin); _yi('gpbYMax', S.ymax);
+    _yi('gpbYMin', S.ymin); _yi('gpbYMax', S.ymax); _yi('gpbDecimals', S.decimals);
     document.getElementById('gpbScatterLabel')?.querySelectorAll('button').forEach(b =>
       b.classList.toggle('is-on', b.dataset.slabel === (S.scatterLabel || 'name'))
     );
@@ -4226,19 +4249,21 @@
     if ((config.dimensions || []).length > 0) {
       const axes  = ms.map(s => (s.name || s.label || '').split(' ').slice(0, 2).join(' '));
       const units = ms.map(s => s.unit || '');
+      const decs  = ms.map(s => _decFor(config, s.label));
       const order = [], seen = new Set();
       ms.forEach(s => s.points.forEach(p => { if (!seen.has(p.x)) { seen.add(p.x); order.push(p.x); } }));
       const axisMax = ms.map(s => Math.max(1, ...s.points.map(p => Math.abs(p.y) || 0)));
       const groups = order.map(g => {
         const real = ms.map(s => { const pt = s.points.find(p => p.x === g); return pt ? (pt.y || 0) : 0; });
         const gp   = real.map((v, i) => Math.round((v / axisMax[i]) * 100));
-        return { name: String(g), pct: gp, realLabels: real.map((v, i) => fmt(Math.round(v * 10) / 10) + (units[i] ? ' ' + units[i] : '')) };
+        return { name: String(g), pct: gp, realLabels: real.map((v, i) => fmtVal(v, decs[i]) + (units[i] ? ' ' + units[i] : '')) };
       });
       return { grouped: true, axes, groups, colors: barColors(config, groups.length), rMax: 100, color, showAxes, showLeg, showLbl };
     }
 
     const labels    = ms.map(s => (s.name || s.label || '').split(' ').slice(0, 2).join(' '));
     const units     = ms.map(s => s.unit || '');
+    const decs      = ms.map(s => _decFor(config, s.label));
     const realVals  = ms.map(s => s.points[0]?.y ?? 0);
     // rawRef = the REAL per-axis baseline (null when there's none for that metric → the
     // axis falls back to the player's own value = 100%). refHas flags a real reference so
@@ -4272,9 +4297,9 @@
       rangeLabels.push(`${fmt(Math.round(r.min * 10) / 10)}–${fmt(Math.round(r.max * 10) / 10)}${units[i] ? ' ' + units[i] : ''}`);
     });
     const clamped    = pctReal.map((p, i) => refHas[i] && p > DRAW_CAP);
-    const fmtVal     = (v, i) => fmt(Math.round(v * 10) / 10) + (units[i] ? ' ' + units[i] : '');
-    const realLabels = realVals.map(fmtVal);
-    const refLabels  = refs.map(fmtVal);
+    const fmtEje     = (v, i) => fmtVal(v, decs[i]) + (units[i] ? ' ' + units[i] : '');
+    const realLabels = realVals.map(fmtEje);
+    const refLabels  = refs.map(fmtEje);
     const _peak      = pct.length ? Math.max(...pct) : 0;
     const rMax       = Math.min(Math.max(120, Math.ceil(_peak / 30) * 30), DRAW_CAP + 20);
 
@@ -4482,6 +4507,13 @@
    *                que es lo que hace falta cuando todos los valores están apretados.
    */
   /** El trozo de `style` con la escala pedida en el panel. Sólo viaja si hay algo que decir. */
+  /** Decimales pedidos en el panel. Vacío = los del catálogo, que es el default. */
+  function _decStyle(S) {
+    const d = S.decimals;
+    return (d === '' || d == null || !Number.isFinite(Number(d))) ? {}
+      : { decimals: Math.max(0, Math.min(4, Number(d) | 0)) };
+  }
+
   function _yAxisStyle(S) {
     const num = v => (v === '' || v == null || !Number.isFinite(Number(v))) ? null : Number(v);
     const min = num(S.ymin), max = num(S.ymax), zero = S.yzero !== false;
@@ -4740,7 +4772,7 @@
             ctx.restore();
             return;
           }
-          const txt = fmt(Math.round(v * 10) / 10);
+          const txt = fmtVal(v, ds.dec);
           if (stacked) {
             // centre each segment, white for contrast; skip segments too small to fit
             const seg = horizontal ? Math.abs(bar.x - bar.base) : Math.abs(bar.base - bar.y);
@@ -5077,7 +5109,7 @@
       const names  = mcNames || { cur: 'Actual', ref: mcLabel(config.comparison?.refMcId) };
       const single = ss.length === 1;
       const mk = (s, label, key, col) => ({
-        type: 'bar', label, unit: s.unit || '',
+        type: 'bar', label, unit: s.unit || '', dec: _decFor(config, s.label),
         data: cats.map(c => { const p = s.points.find(q => q.x === c); return (p && p[key] != null) ? p[key] : null; }),
         backgroundColor: col, borderColor: col, borderWidth: 0, borderRadius: 4,
         borderSkipped: horizontal ? 'left' : 'bottom', maxBarThickness: 46, categoryPercentage: 0.7, barPercentage: 0.9,
@@ -5126,7 +5158,7 @@
           refMetricMap.set(s.label, { vals, valsByGrp, isLine: true, color: lc });
           // showLine:false = sólo los puntos (estilo Power BI), sin el trazo que los une.
           const joined = config.style?.comboLine !== false;
-          return { type: 'line', label: s.name || s.label, unit: s.unit || '', data,
+          return { type: 'line', label: s.name || s.label, unit: s.unit || '', dec: _decFor(config, s.label), data,
             yAxisID: 'y1', borderColor: lc, backgroundColor: 'transparent',
             // Sin trazo, borderWidth 0: así la leyenda muestra un PUNTO y no una raya de una
             // línea que no existe (el legend usa el borderWidth del dataset para el trazo).
@@ -5150,7 +5182,7 @@
           || (s._delta2 ? { pct: data.map(v => (v == null ? null : Number(v))),
                             cap: s.points.map(p => !!p._capped) } : null);
         const bg = rel ? rel.pct.map(v => v == null ? col : (_relBandColor(v, config.style?.relBands) || (v >= 0 ? relUp : relDn))) : col;
-        return { type: 'bar', label: s.name || s.label, unit: s.unit || '', data,
+        return { type: 'bar', label: s.name || s.label, unit: s.unit || '', dec: _decFor(config, s.label), data,
           order: 1,                                   // detrás de la línea del combo (ver order:0)
           backgroundColor: bg, borderColor: bg, borderWidth: 0,
           borderRadius: stacked ? 2 : 4, borderSkipped: horizontal ? 'left' : 'bottom',
@@ -5753,7 +5785,7 @@
                 ...((_nested || d.axisTail) ? { title: items => (items.length ? String(d.cats[items[0].dataIndex] ?? '') : '') } : {}),
                 label: ctx => {
                   const v = d.horizontal ? ctx.parsed.x : ctx.parsed.y;
-                  const base = `${ctx.dataset.label}: ${fmt(Math.round(v * 10) / 10)}${ctx.dataset.unit ? ' ' + ctx.dataset.unit : ''}`;
+                  const base = `${ctx.dataset.label}: ${fmtVal(v, ctx.dataset.dec)}${ctx.dataset.unit ? ' ' + ctx.dataset.unit : ''}`;
                   // MC grouped: append the diff% vs reference on the current series' bar.
                   if (d.isMcGrouped && d.mcDiffs) {
                     const diff = d.mcDiffs[ctx.dataIndex];
@@ -5808,7 +5840,7 @@
       viz: 'bars',
       dimensions: S.dimensions,
       comparison: cmpConfig(S),
-      style: { size: S.size, color: S.color, palette: S.palette, ...(_compactColors(S) ? { colors: _compactColors(S) } : {}), axes: S.axes, legend: S.legend, dataLabels: S.labels, ..._yAxisStyle(S),
+      style: { size: S.size, color: S.color, palette: S.palette, ...(_compactColors(S) ? { colors: _compactColors(S) } : {}), axes: S.axes, legend: S.legend, dataLabels: S.labels, ..._yAxisStyle(S), ..._decStyle(S),
                orientation: S.horizontal ? 'horizontal' : 'vertical', stacked: !!S.stacked },
       ...(S.referenceLines?.length ? { referenceLines: S.referenceLines } : {}),
     };
@@ -5861,7 +5893,7 @@
         meta.data.forEach((pt, i) => {
           const v = ds.data[i];
           if (v == null) return;
-          ctx.fillText(fmt(Math.round(v * 10) / 10), pt.x, pt.y - 6);
+          ctx.fillText(fmtVal(v, ds.dec), pt.x, pt.y - 6);
         });
       });
       ctx.restore();
@@ -5896,6 +5928,7 @@
       return {
         label: s.name || s.label,
         unit:  s.unit || '',
+        dec:   _decFor(config, s.label),
         data:  cats.map(c => { const p = s.points.find(q => q.x === c); return p ? p.y : null; }),
         borderColor: col,
         backgroundColor: (!isRef && showArea) ? col + '1F' : 'transparent',   // fill-opacity ~0.12
@@ -5996,7 +6029,7 @@
             tooltip: {
               callbacks: {
                 title: items => items.length ? String(items[0].label) : '',
-                label: ctx => `${ctx.dataset.label}: ${fmt(Math.round(ctx.parsed.y * 10) / 10)}${ctx.dataset.unit ? ' ' + ctx.dataset.unit : ''}`,
+                label: ctx => `${ctx.dataset.label}: ${fmtVal(ctx.parsed.y, ctx.dataset.dec)}${ctx.dataset.unit ? ' ' + ctx.dataset.unit : ''}`,
               },
             },
             gpbLineLabels: { show: d.showLbl },
@@ -6062,7 +6095,7 @@
       viz: 'line',
       dimensions: S.dimensions,
       comparison: cmpConfig(S),
-      style: { size: S.size, color: S.color, palette: S.palette, ...(_compactColors(S) ? { colors: _compactColors(S) } : {}), axes: S.axes, legend: S.legend, dataLabels: S.labels, area: S.area, points: S.points , ..._yAxisStyle(S) },
+      style: { size: S.size, color: S.color, palette: S.palette, ...(_compactColors(S) ? { colors: _compactColors(S) } : {}), axes: S.axes, legend: S.legend, dataLabels: S.labels, area: S.area, points: S.points , ..._yAxisStyle(S), ..._decStyle(S) },
       __example: true,
     };
     mountLineChart(body, cfg, series);
@@ -10034,7 +10067,9 @@
     S.sort    = config.sort || null;
     S.colWidths = config.colWidths || null;   // anchos a medida de la tabla
     const _ya = config.style?.yAxis || {};   // escala del eje a medida
+    const _yaDec = config.style?.decimals ?? null;
     S.ymin = _ya.min ?? null; S.ymax = _ya.max ?? null; S.yzero = _ya.zero !== false;
+      S.decimals = _yaDec;
     S.referenceLines = Array.isArray(config.referenceLines) ? config.referenceLines.map(r => ({ ...r })) : [];
     S.titleFormat    = config.style?.titleFormat    ? { ...config.style.titleFormat }    : {};
     S.subtitleFormat = config.style?.subtitleFormat ? { ...config.style.subtitleFormat } : {};

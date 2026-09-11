@@ -188,3 +188,40 @@ test.describe('GPS · escala del eje a medida', () => {
   });
 });
 
+// Los decimales del catálogo no llegaban al gráfico: barras, línea y radar redondeaban a uno
+// fijo, así que una distancia configurada con 0 decimales se dibujaba «4.328,5». Ahora respetan
+// lo que el club puso por métrica, y una card puede pedir otra cosa si lo necesita.
+const cardDec = (decimals) => ([{ id: 'card-combo', position: 0, source: 'builder', size: 'lg', config: {
+  schema: 'gp.card/v1', title: 'Distancia', viz: 'line', scope: { level: 'squad' },
+  metrics: [{ id: 'total_distance', agg: 'avg' }],
+  dimensions: [{ id: 'player' }], range: { type: 'last30' },
+  style: { color: '#2563EB', ...(decimals == null ? {} : { decimals }) } } }]);
+
+/** Lo que muestra el tooltip del primer punto. */
+const textoTooltip = (page) => page.evaluate(() => {
+  const cv = document.querySelector('.gp-view.is-on .gp-c[data-card-id="card-combo"] canvas');
+  const ch = cv && window.Chart.getChart(cv);
+  const ds = ch.data.datasets[0];
+  const cb = ch.options.plugins.tooltip.callbacks.label;
+  return cb({ dataset: ds, parsed: { y: 4328.5 } });
+});
+
+test.describe('GPS · decimales', () => {
+  test('el gráfico respeta los decimales que el catálogo le puso a la métrica', async ({ page }) => {
+    // total_distance viene del catálogo con 0 decimales (ver el mock de gps_metric_definitions).
+    await open(page, cardDec(null));
+    expect(await textoTooltip(page)).toContain('4,329');
+    expect(await textoTooltip(page)).not.toContain('4,328.5');
+  });
+
+  test('una card puede pedir más decimales que los de la métrica', async ({ page }) => {
+    await open(page, cardDec(2));
+    expect(await textoTooltip(page)).toContain('4,328.50');
+  });
+
+  test('y también ninguno', async ({ page }) => {
+    await open(page, cardDec(0));
+    expect(await textoTooltip(page)).toContain('4,329');
+  });
+});
+
