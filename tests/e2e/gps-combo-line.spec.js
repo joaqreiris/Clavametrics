@@ -107,3 +107,42 @@ test.describe('GPS · combo barras + línea', () => {
     await expect(sw).not.toHaveClass(/is-on/);
   });
 });
+
+// Las líneas de referencia existían sólo en barras y scatter. El plugin que las dibuja lee el eje
+// de valores y no sabe qué hay debajo, así que en un gráfico de línea funciona igual — lo que
+// faltaba era pasárselas y hacerles lugar en la escala, que es lo que se comprueba acá.
+const cardLinea = (refs) => ([{ id: 'card-combo', position: 0, source: 'builder', size: 'lg', config: {
+  schema: 'gp.card/v1', title: 'Evolución', viz: 'line', scope: { level: 'squad' },
+  metrics: [{ id: 'total_distance', agg: 'avg' }],
+  dimensions: [{ id: 'player' }], range: { type: 'last30' },
+  ...(refs ? { referenceLines: refs } : {}),
+  style: { color: '#2563EB' } } }]);
+
+const refsDelChart = (page) => page.evaluate(() => {
+  const cv = document.querySelector('.gp-view.is-on .gp-c[data-card-id="card-combo"] canvas');
+  const ch = cv && window.Chart.getChart(cv);
+  const o = ch && ch.options.plugins && ch.options.plugins.gpbRefLines;
+  return { lineas: (o && o.lines) || [], maxEje: ch ? ch.scales.y.max : null };
+});
+
+test.describe('GPS · líneas de referencia en un gráfico de línea', () => {
+  test('la referencia llega al dibujo con su valor', async ({ page }) => {
+    await open(page, cardLinea([{ id: 'r1', value: 4200, label: 'Umbral', color: '#DC2626', style: 'dashed', opacity: 1 }]));
+    const { lineas } = await refsDelChart(page);
+    expect(lineas).toHaveLength(1);
+    expect(lineas[0].value).toBe(4200);
+  });
+
+  test('una referencia por encima de todos los datos no queda fuera del cuadro', async ({ page }) => {
+    await open(page, cardLinea([{ id: 'r1', value: 99000, label: 'Techo', color: '#DC2626', style: 'solid', opacity: 1 }]));
+    const { maxEje } = await refsDelChart(page);
+    expect(maxEje).toBeGreaterThanOrEqual(99000);
+  });
+
+  test('sin referencias no dibuja ninguna', async ({ page }) => {
+    await open(page, cardLinea(null));
+    const { lineas } = await refsDelChart(page);
+    expect(lineas).toHaveLength(0);
+  });
+});
+

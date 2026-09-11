@@ -129,3 +129,36 @@ test.describe('GPS · el panel de estilo va por grupos', () => {
   });
 });
 
+// Las líneas de referencia sólo estaban en barras y scatter. En un gráfico de línea —la evolución
+// de una métrica— marcar un umbral es justo lo que más se pide, y era el hueco más barato de
+// tapar: el plugin que las dibuja lee el eje de valores, no sabe si debajo hay barras o una línea.
+test.describe('GPS · líneas de referencia', () => {
+  test('un gráfico de línea también las ofrece', async ({ page }) => {
+    await open(page);
+    await page.locator('[data-type="line"]').first().click();
+    await page.waitForTimeout(250);
+    await page.locator('[data-tab="style"]').first().click();
+    await page.waitForTimeout(250);
+    const visible = await page.evaluate(() => {
+      const sec = [...document.querySelectorAll('.pane[data-pane="style"] .es-sec')]
+        .find(s => /reference lines|líneas de referencia/i.test(s.querySelector('.lab')?.textContent || ''));
+      return !!sec && sec.offsetParent !== null;
+    });
+    expect(visible).toBe(true);
+  });
+
+  test('un radar no: no tiene eje de valores donde apoyarlas', async ({ page }) => {
+    await open(page);
+    await page.locator('[data-type="radar"]').first().click();
+    await page.waitForTimeout(250);
+    await page.locator('[data-tab="style"]').first().click();
+    await page.waitForTimeout(250);
+    const visible = await page.evaluate(() => {
+      const sec = [...document.querySelectorAll('.pane[data-pane="style"] .es-sec')]
+        .find(s => /reference lines|líneas de referencia/i.test(s.querySelector('.lab')?.textContent || ''));
+      return !!sec && sec.offsetParent !== null;
+    });
+    expect(visible).toBe(false);
+  });
+});
+
