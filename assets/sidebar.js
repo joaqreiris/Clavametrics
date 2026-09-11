@@ -64,7 +64,7 @@
 .cm-team-chip{display:flex;align-items:center;gap:5px;margin-top:5px;position:relative;background:var(--cm-side-item-active-bg);border:1px solid var(--cm-side-border);border-radius:6px;padding:0 7px;height:26px;transition:border-color .15s,background .15s}
 .cm-team-chip:hover{border-color:var(--cm-side-accent)}
 .cm-team-chip > .ti:first-child{font-size:13px;color:var(--cm-side-fg-muted);flex-shrink:0}
-.cm-team-chip select{flex:1;min-width:0;appearance:none;-webkit-appearance:none;background:transparent;border:none;outline:none;color:var(--cm-side-fg);font:600 12px/1 var(--cm-font-sans);cursor:pointer;padding:0;text-overflow:ellipsis}
+.cm-team-chip select{flex:1;min-width:0;-webkit-appearance:none; appearance:none;background:transparent;border:none;outline:none;color:var(--cm-side-fg);font:600 12px/1 var(--cm-font-sans);cursor:pointer;padding:0;text-overflow:ellipsis}
 .cm-team-chip select option{background:var(--cm-side-bg);color:var(--cm-side-fg)}
 .cm-team-chip-caret{font-size:12px;color:var(--cm-side-fg-muted);flex-shrink:0;pointer-events:none}
 .hub-nav{padding:8px 10px;flex:1}

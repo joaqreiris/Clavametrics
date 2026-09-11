@@ -71,7 +71,10 @@
   .nu-kpi-d.warn { color:var(--cm-warning); }
   .nu-kpi-d.down { color:var(--cm-danger); }
 
-  .nu-tabs { display:flex; gap:0; padding:0 14px; background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-4) var(--cm-r-4) 0 0; border-bottom:0; box-shadow:var(--cm-shadow-1); }
+  /* Sin overflow, las pestañas empujaban la página entera cuando no cabían. */
+  .nu-tabs { display:flex; gap:0; padding:0 14px; background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-4) var(--cm-r-4) 0 0; border-bottom:0; box-shadow:var(--cm-shadow-1); overflow-x:auto; scrollbar-width:none; }
+  .nu-tabs::-webkit-scrollbar { display:none; }
+  .nu-tab { flex-shrink:0; }
   .nu-tab { padding:0 16px; height:44px; border:0; background:transparent; color:var(--cm-fg-muted); font:500 13px/1 var(--cm-font-sans); cursor:pointer; display:inline-flex; align-items:center; gap:7px; border-bottom:2px solid transparent; margin-bottom:-1px; }
   .nu-tab:hover { color:var(--cm-fg); }
   .nu-tab.is-on { color:var(--cm-fg-strong); border-bottom-color:var(--cm-accent); font-weight:600; }
@@ -86,7 +89,7 @@
   .nu-roster { border-right:1px solid var(--cm-border); display:flex; flex-direction:column; }
   /* La columna de detalle estira el grid; sin tope, .nu-list nunca scrollea. Sticky + cap al viewport. */
   @media (min-width:1101px) {
-    .nu-roster { position:sticky; top:68px; align-self:start; max-height:calc(100vh - 84px); }
+    .nu-roster { position:sticky; top:68px; align-self:start; max-height:calc(100vh - 84px); max-height:calc(100dvh - 84px); }
   }
   @media (max-width:1100px) { .nu-list { max-height:45vh; } }
   .nu-rh { padding:12px 14px; border-bottom:1px solid var(--cm-border-soft); display:flex; align-items:center; gap:8px; }
@@ -628,7 +631,7 @@ const nuEsc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&
     if (document.getElementById('nuTargetModal')) return;
     const style = document.createElement('style');
     style.textContent = `
-      .nu-modal-ov{position:fixed;inset:0;background:rgba(15,23,42,.45);backdrop-filter:blur(2px);z-index:9000;display:none;align-items:flex-start;justify-content:center;padding:5vh 16px;overflow:auto}
+      .nu-modal-ov{position:fixed;inset:0;background:rgba(15,23,42,.45);-webkit-backdrop-filter:blur(2px); backdrop-filter:blur(2px);z-index:9000;display:none;align-items:flex-start;justify-content:center;padding:5vh 16px;overflow:auto}
       .nu-modal-ov.on{display:flex}
       .nu-modal{background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-4,12px);width:560px;max-width:100%;box-shadow:var(--cm-shadow-3,0 20px 50px rgba(0,0,0,.25))}
       .nu-modal-h{display:flex;align-items:center;gap:10px;padding:16px 18px;border-bottom:1px solid var(--cm-border-soft)}

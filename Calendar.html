@@ -48,7 +48,7 @@
   /* Shared shell ------------------------------------------- */
 
   /* Topbar */
-  .hub-topbar { display:flex; align-items:center; gap:14px; height:56px; padding:0 24px; border-bottom:1px solid var(--cm-border); background:color-mix(in srgb, var(--cm-bg) 92%, transparent); backdrop-filter:saturate(160%) blur(10px); position:sticky; top:0; z-index:50; }
+  .hub-topbar { display:flex; align-items:center; gap:14px; height:56px; padding:0 24px; border-bottom:1px solid var(--cm-border); background:color-mix(in srgb, var(--cm-bg) 92%, transparent); -webkit-backdrop-filter:saturate(160%) blur(10px); backdrop-filter:saturate(160%) blur(10px); position:sticky; top:0; z-index:50; }
   .hub-crumb { display:flex; align-items:center; gap:8px; color:var(--cm-fg-muted); font:var(--cm-body-sm); }
   .hub-crumb .ti { font-size:14px; }
   .hub-crumb .sep { color:var(--cm-fg-faint); }
@@ -898,7 +898,7 @@
   .cal-rail { display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:14px; width:auto; min-width:0; max-width:none; align-items:start; }
 
   /* === Month view · day summary popover === */
-  .cal-daypop-ov { position:fixed; inset:0; background:rgba(15,23,42,.45); backdrop-filter:blur(2px); z-index:9600; display:none; align-items:center; justify-content:center; padding:24px; }
+  .cal-daypop-ov { position:fixed; inset:0; background:rgba(15,23,42,.45); -webkit-backdrop-filter:blur(2px); backdrop-filter:blur(2px); z-index:9600; display:none; align-items:center; justify-content:center; padding:24px; }
   .cal-daypop-ov.is-open { display:flex; }
   .cal-daypop { background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:14px; width:420px; max-width:100%; max-height:80vh; display:flex; flex-direction:column; box-shadow:0 20px 50px rgba(0,0,0,.28); }
   .cal-daypop-h { display:flex; align-items:flex-start; gap:10px; padding:15px 18px 12px; border-bottom:1px solid var(--cm-border-soft); }
@@ -961,7 +961,7 @@
 
 
   /* Drag & drop */
-  .mc-evt[draggable="true"] { cursor: grab; user-select: none; }
+  .mc-evt[draggable="true"] { cursor: grab; -webkit-user-select:none; user-select:none; }
   .mc-evt[draggable="true"].is-dragging { opacity: 0.4; }
   .mc-evt.drag-over { background: var(--cm-accent-soft) !important; border-color: var(--cm-accent) !important; border-width: 1.5px; }
   .mc-evt-placeholder { height: 34px; border: 2px dashed var(--cm-accent); border-radius: 6px; background: color-mix(in srgb, var(--cm-accent) 8%, transparent); margin-bottom: 4px; pointer-events: none; }
@@ -1042,9 +1042,9 @@
   #tweaks-root { position: fixed; bottom: 16px; right: 16px; z-index: 1000; }
 
   /* Modal */
-  .sq-modal-backdrop { position:fixed;inset:0;background:rgba(8,10,12,.5);backdrop-filter:blur(4px);z-index:200;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity 160ms ease; }
+  .sq-modal-backdrop { position:fixed;inset:0;background:rgba(8,10,12,.5);-webkit-backdrop-filter:blur(4px); backdrop-filter:blur(4px);z-index:200;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity 160ms ease; }
   .sq-modal-backdrop.is-open { opacity:1;pointer-events:auto; }
-  .sq-modal { background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-5);box-shadow:0 24px 48px rgba(0,0,0,.18);width:520px;max-width:calc(100vw - 32px);max-height:calc(100vh - 64px);overflow-y:auto;display:flex;flex-direction:column;transform:translateY(8px);transition:transform 160ms ease; }
+  .sq-modal { background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-5);box-shadow:0 24px 48px rgba(0,0,0,.18);width:520px;max-width:calc(100vw - 32px);max-height:calc(100vh - 64px); max-height:calc(100dvh - 64px);overflow-y:auto;display:flex;flex-direction:column;transform:translateY(8px);transition:transform 160ms ease; }
   .sq-modal-backdrop.is-open .sq-modal { transform:translateY(0); }
   .sq-modal-head { display:flex;align-items:center;gap:12px;padding:18px 20px 16px;border-bottom:1px solid var(--cm-border); }
   .sq-modal-head h2 { font:600 16px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong);flex:1; }
@@ -1075,7 +1075,7 @@
   .cal-type-trigger-caret { font-size:15px; color:var(--cm-fg-faint); flex-shrink:0; }
 
   .cal-typepop-backdrop {
-    position:fixed; inset:0; background:rgba(8,10,12,.5); backdrop-filter:blur(4px);
+    position:fixed; inset:0; background:rgba(8,10,12,.5); -webkit-backdrop-filter:blur(4px); backdrop-filter:blur(4px);
     z-index:320; display:flex; align-items:center; justify-content:center;
     opacity:0; pointer-events:none; transition:opacity 150ms ease;
   }
@@ -1083,7 +1083,7 @@
   .cal-typepop {
     background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-5);
     box-shadow:0 24px 48px rgba(0,0,0,.22); width:640px; max-width:calc(100vw - 32px);
-    max-height:calc(100vh - 64px); overflow-y:auto; display:flex; flex-direction:column;
+    max-height:calc(100vh - 64px); max-height:calc(100dvh - 64px); overflow-y:auto; display:flex; flex-direction:column;
     transform:translateY(8px) scale(.99); transition:transform 150ms ease;
   }
   .cal-typepop-backdrop.is-open .cal-typepop { transform:translateY(0) scale(1); }
@@ -1235,7 +1235,7 @@
   .cal-epop-tasks-head {
     display:flex; align-items:center; gap:6px; padding:7px 12px 6px;
     cursor:pointer; font:500 11.5px/1 var(--cm-font-sans); color:var(--cm-fg-muted);
-    user-select:none;
+    -webkit-user-select:none; user-select:none;
   }
   .cal-epop-tasks-head:hover { color:var(--cm-fg); }
   .cal-epop-tasks-head .ti { font-size:12px; }
@@ -1640,9 +1640,9 @@
 
 <!-- ============ Day Sheet (send tomorrow's plan to players) ============ -->
 <style>
-  .ds-backdrop{position:fixed;inset:0;background:rgba(8,10,12,.55);backdrop-filter:blur(4px);z-index:220;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity 160ms ease;padding:24px}
+  .ds-backdrop{position:fixed;inset:0;background:rgba(8,10,12,.55);-webkit-backdrop-filter:blur(4px); backdrop-filter:blur(4px);z-index:220;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity 160ms ease;padding:24px}
   .ds-backdrop.is-open{opacity:1;pointer-events:auto}
-  .ds-modal{background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-5);box-shadow:0 24px 60px rgba(0,0,0,.28);width:1080px;max-width:100%;max-height:calc(100vh - 48px);display:flex;flex-direction:column;transform:translateY(8px);transition:transform 160ms ease;overflow:hidden}
+  .ds-modal{background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-5);box-shadow:0 24px 60px rgba(0,0,0,.28);width:1080px;max-width:100%;max-height:calc(100vh - 48px); max-height:calc(100dvh - 48px);display:flex;flex-direction:column;transform:translateY(8px);transition:transform 160ms ease;overflow:hidden}
   .ds-backdrop.is-open .ds-modal{transform:translateY(0)}
   .ds-head{display:flex;align-items:center;gap:12px;padding:15px 18px;border-bottom:1px solid var(--cm-border);flex:none}
   .ds-head h2{font:600 16px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong);margin:0;display:flex;align-items:center;gap:9px}

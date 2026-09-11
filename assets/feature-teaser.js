@@ -192,7 +192,7 @@
     s.id = 'cmft-style';
     s.textContent = [
       '#cmft-overlay{position:fixed;inset:0;z-index:9000;overflow:hidden;background:var(--cm-bg,#0f1115)}',
-      '#cmft-bg{position:absolute;inset:0;padding:32px;filter:blur(7px);opacity:.5;pointer-events:none;user-select:none;transform:scale(1.03)}',
+      '#cmft-bg{position:absolute;inset:0;padding:32px;filter:blur(7px);opacity:.5;pointer-events:none;-webkit-user-select:none; user-select:none;transform:scale(1.03)}',
       '#cmft-scrim{position:absolute;inset:0;background:radial-gradient(ellipse at center,transparent 0%,var(--cm-bg,#0f1115) 78%)}',
       '#cmft-card{position:relative;max-width:460px;margin:8vh auto 0;background:var(--cm-bg-elevated,var(--cm-surface,#fff));color:var(--cm-fg-strong,#0f1115);border:1px solid var(--cm-border,rgba(0,0,0,.1));border-radius:18px;box-shadow:0 30px 80px rgba(0,0,0,.4);padding:30px 30px 26px;text-align:center}',
       '#cmft-card .ic{width:56px;height:56px;border-radius:14px;margin:0 auto 16px;display:flex;align-items:center;justify-content:center;font-size:28px}',

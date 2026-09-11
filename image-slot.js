@@ -166,7 +166,7 @@
     // same left/top/width/height in frame-%, computed by _applyView(), so the
     // inside-mask crop and the outside-mask spill stay pixel-aligned.
     '.frame img{position:absolute;max-width:none;transform:translate(-50%,-50%);' +
-    '  -webkit-user-drag:none;user-select:none;touch-action:none}' +
+    '  -webkit-user-drag:none;-webkit-user-select:none; user-select:none;touch-action:none}' +
     // Reframe mode (double-click): the full image spills past the mask. The
     // spill layer is sized to the IMAGE bounds so its corners are where the
     // resize handles belong. The ghost <img> inside is translucent; the real
@@ -175,7 +175,7 @@
     '  cursor:grab;touch-action:none}' +
     ':host([data-panning]) .spill{cursor:grabbing}' +
     '.spill .ghost{position:absolute;inset:0;width:100%;height:100%;opacity:.35;' +
-    '  pointer-events:none;-webkit-user-drag:none;user-select:none;' +
+    '  pointer-events:none;-webkit-user-drag:none;-webkit-user-select:none; user-select:none;' +
     '  box-shadow:0 0 0 1px rgba(0,0,0,.2),0 12px 32px rgba(0,0,0,.2)}' +
     '.spill .handle{position:absolute;width:12px;height:12px;border-radius:50%;' +
     '  background:#fff;box-shadow:0 0 0 1.5px #c96442,0 1px 3px rgba(0,0,0,.3);' +
@@ -209,7 +209,7 @@
     '  white-space:nowrap}' +
     ':host([data-filled][data-editable]:hover) .ctl,:host([data-reframe]) .ctl' +
     '  {opacity:1;pointer-events:auto}' +
-    '.ctl button{appearance:none;border:0;border-radius:6px;padding:5px 10px;cursor:pointer;' +
+    '.ctl button{-webkit-appearance:none; appearance:none;border:0;border-radius:6px;padding:5px 10px;cursor:pointer;' +
     '  background:rgba(0,0,0,.65);color:#fff;font:11px/1 system-ui,-apple-system,sans-serif;' +
     '  backdrop-filter:blur(6px)}' +
     '.ctl button:hover{background:rgba(0,0,0,.8)}' +

@@ -4083,7 +4083,7 @@
         </div>
         <div class="pa-section">Pliegues cutáneos (mm)</div>
         <div id="sfFoldsArea"></div>
-        <div class="pa-section" style="cursor:pointer;display:flex;align-items:center;gap:6px;user-select:none" onclick="var b=document.getElementById('paAnthroAdvanced');var i=this.querySelector('i');if(b){var open=b.style.display==='none';b.style.display=open?'':'none';if(i)i.className=open?'ti ti-chevron-down':'ti ti-chevron-right';}"><i class="ti ti-chevron-right"></i> Antropometría avanzada (opcional)</div>
+        <div class="pa-section" style="cursor:pointer;display:flex;align-items:center;gap:6px;-webkit-user-select:none" onclick="var b=document.getElementById('paAnthroAdvanced'); user-select:none" onclick="var b=document.getElementById('paAnthroAdvanced');var i=this.querySelector('i');if(b){var open=b.style.display==='none';b.style.display=open?'':'none';if(i)i.className=open?'ti ti-chevron-down':'ti ti-chevron-right';}"><i class="ti ti-chevron-right"></i> Antropometría avanzada (opcional)</div>
         <div id="paAnthroAdvanced" style="display:none">
           <div class="ev-f2">
             <div class="ev-frow"><label class="ev-fl">Cintura <span style="font:400 10px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">(RFM)</span></label>

@@ -67,6 +67,15 @@
   gap: 18px;
   align-items: start;
 }
+/* El pliego mide 660px fijos porque así se exporta, y eso no se toca. Lo que
+   no entra en una tablet son las DOS columnas a la vez: con 340px para el
+   compositor, al pliego le quedaban 372 y sacaba 278px de scroll horizontal a
+   toda la página. En una sola columna entra entero. Si aun así no cabe, se
+   desliza dentro de su propia caja en vez de estirar la página. */
+@media (max-width: 1060px) {
+  .lu-body { grid-template-columns: 1fr; }
+  .lu-stage { align-self: stretch; max-width: 100%; overflow-x: auto; }
+}
 
 /* ─── Composer card (left) ─────────────────────────────── */
 .lu-composer {
@@ -76,7 +85,7 @@
   box-shadow: var(--cm-shadow-1);
   overflow: hidden;
   position: sticky; top: 72px;
-  max-height: calc(100vh - 92px);
+  max-height:calc(100vh - 92px); max-height:calc(100dvh - 92px);
   display: flex; flex-direction: column;
 }
 .lu-comp-head {
@@ -161,7 +170,7 @@
   padding: 6px 8px;
   border-radius: var(--cm-r-2);
   cursor: grab;
-  user-select: none;
+  -webkit-user-select:none; user-select:none;
   transition: background var(--cm-dur-1);
 }
 .lu-row:hover { background: var(--cm-bg-soft); }
@@ -454,7 +463,7 @@
   font: 700 15px/1 var(--cm-font-mono);
   color: var(--pst-fg);
   position: relative;
-  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter:blur(2px); backdrop-filter:blur(2px);
 }
 .pst-spot.is-captain .badge {
   border-color: var(--pst-accent);

@@ -130,7 +130,7 @@
     style.id = 'cm-trial-style';
     style.textContent = `
       #cm-trial-overlay{position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;
-        background:rgba(10,12,16,.45);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+        background:rgba(10,12,16,.45);-webkit-backdrop-filter:blur(8px); backdrop-filter:blur(8px);
         padding:24px;animation:cmTrialFade .2s ease-out;}
       @keyframes cmTrialFade{from{opacity:0}to{opacity:1}}
       #cm-trial-card{width:100%;max-width:420px;background:var(--cm-bg-elevated,var(--cm-surface,#fff));

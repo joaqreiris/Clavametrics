@@ -29,7 +29,7 @@
     display: flex; align-items: center; gap: 24px;
     height: 64px; padding: 0 32px;
     background: color-mix(in srgb, var(--cm-bg) 92%, transparent);
-    backdrop-filter: saturate(160%) blur(10px);
+    -webkit-backdrop-filter:saturate(160%) blur(10px); backdrop-filter:saturate(160%) blur(10px);
     border-bottom: 1px solid var(--cm-border);
   }
   .mk-brand { display:flex; align-items:center; gap:10px; }
@@ -48,6 +48,12 @@
   }
   .mk-links a:hover { color: var(--cm-fg); background: var(--cm-bg-soft); }
   .mk-links a.is-active { color: var(--cm-fg-strong); }
+  /* Misma regla que marketing.css: esta página tiene su propia copia de los
+     estilos .mk-* y se había quedado sin ella, así que la barra desbordaba. */
+  @media (max-width: 880px) {
+    .mk-nav { gap: 12px; padding: 0 18px; }
+    .mk-links, .mk-cta .signin { display: none; }
+  }
   .mk-cta { margin-left: auto; display:flex; align-items:center; gap: 10px; }
   .mk-cta .signin { font: 500 13.5px/1 var(--cm-font-sans); color: var(--cm-fg); text-decoration:none; padding: 8px 12px; }
   .mk-lang { display:inline-flex; align-items:center; gap:5px; height:30px; padding:0 9px; border-radius:var(--cm-r-3); border:1px solid var(--cm-border); background:transparent; font:500 12px/1 var(--cm-font-mono); color:var(--cm-fg-muted); cursor:pointer; }
@@ -248,7 +254,7 @@
   .pr-percat-row .pill.t-basic { color: #d4a14a; border-color: color-mix(in srgb, #d4a14a 35%, transparent); background: color-mix(in srgb, #d4a14a 10%, transparent); }
   .pr-percat-row .pill.t-pro { color: var(--cm-accent); border-color: color-mix(in srgb, var(--cm-accent) 35%, transparent); background: var(--cm-accent-soft); }
   .pr-percat-row .pill.t-full { color: #6366f1; border-color: color-mix(in srgb, #6366f1 35%, transparent); background: color-mix(in srgb, #6366f1 10%, transparent); }
-  .pr-percat-row .pill{cursor:pointer;user-select:none;transition:transform .1s ease}
+  .pr-percat-row .pill{cursor:pointer;-webkit-user-select:none; user-select:none;transition:transform .1s ease}
   .pr-percat-row .pill:hover{transform:translateY(-1px);filter:brightness(.97)}
   .pr-mix-hint{font-size:13px;color:var(--cm-fg-muted);margin-top:8px}
   .pr-percat-row{padding:9px 0 !important; align-items:center;}

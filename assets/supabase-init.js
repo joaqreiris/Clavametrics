@@ -930,7 +930,7 @@
     var href = 'Plan Picker.html' + (opts.teamId ? ('?team=' + encodeURIComponent(opts.teamId)) : '');
     var st = document.createElement('style');
     st.id = 'cm-upsell-style';
-    st.textContent = '#cm-upsell-overlay{position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:rgba(10,12,16,.5);backdrop-filter:blur(6px);padding:24px}'
+    st.textContent = '#cm-upsell-overlay{position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:rgba(10,12,16,.5);-webkit-backdrop-filter:blur(6px); backdrop-filter:blur(6px);padding:24px}'
       + '#cm-upsell-card{width:100%;max-width:420px;background:var(--cm-bg-elevated,var(--cm-surface,#fff));color:var(--cm-fg-strong,#0f1115);border:1px solid var(--cm-border,rgba(0,0,0,.08));border-radius:16px;box-shadow:0 24px 64px rgba(0,0,0,.3);padding:28px 26px 22px;text-align:center}'
       + '#cm-upsell-card .ic{width:54px;height:54px;border-radius:50%;margin:0 auto 14px;display:flex;align-items:center;justify-content:center;font-size:26px;background:color-mix(in srgb,var(--cm-accent,#2da866) 14%,transparent);color:var(--cm-accent,#2da866)}'
       + '#cm-upsell-card h3{margin:0 0 8px;font-size:19px;font-weight:700}'

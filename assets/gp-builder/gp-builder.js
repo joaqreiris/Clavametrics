@@ -6706,7 +6706,7 @@
         const dot = px => `<span style="display:inline-block;width:${px * 2}px;height:${px * 2}px;border-radius:50%;background:rgba(148,163,184,0.45);border:1px solid rgba(148,163,184,0.9);flex-shrink:0"></span>`;
         const leg = document.createElement('div');
         leg.style.cssText = 'position:absolute;top:6px;left:8px;z-index:2;display:flex;align-items:center;gap:12px;'
-          + 'padding:5px 10px;border-radius:9px;background:rgba(255,255,255,0.82);backdrop-filter:blur(2px);'
+          + 'padding:5px 10px;border-radius:9px;background:rgba(255,255,255,0.82);-webkit-backdrop-filter:blur(2px); backdrop-filter:blur(2px);'
           + 'border:1px solid var(--cm-border,#e5e7eb);font:500 10px/1 var(--cm-font-sans,sans-serif);color:var(--cm-fg-muted,#6B7280);pointer-events:none';
         leg.innerHTML = `<span style="font-weight:600;color:var(--cm-fg,#374151)">${esc(d.sizeName)}${d.sizeUnit ? ` <span style="color:var(--cm-fg-faint,#9CA3AF)">(${esc(d.sizeUnit)})</span>` : ''}</span>`
           + `<span style="display:inline-flex;align-items:center;gap:6px">${dot(d.rMin)}<span>${esc(fmt(Math.round(d.sizeMin * 10) / 10))}</span></span>`

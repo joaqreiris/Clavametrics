@@ -432,7 +432,7 @@
     if($('lmExpModalStyles')) return;
     const css=`
     .lmx-ov{position:fixed;inset:0;z-index:var(--cm-z-modal,1000);display:flex;align-items:center;justify-content:center;
-      padding:24px;background:color-mix(in srgb,var(--cm-bg) 40%,rgba(0,0,0,.55));backdrop-filter:saturate(140%) blur(3px);}
+      padding:24px;background:color-mix(in srgb,var(--cm-bg) 40%,rgba(0,0,0,.55));-webkit-backdrop-filter:saturate(140%) blur(3px); backdrop-filter:saturate(140%) blur(3px);}
     .lmx{background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-5,16px);box-shadow:var(--cm-shadow-3,0 20px 60px rgba(0,0,0,.35));
       width:min(760px,100%);max-height:calc(100vh - 48px);display:flex;flex-direction:column;overflow:hidden;}
     .lmx-head{display:flex;align-items:flex-start;gap:12px;padding:18px 20px 14px;border-bottom:1px solid var(--cm-border-soft);}

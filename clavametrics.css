@@ -312,7 +312,7 @@ body.cm::before {
   border: var(--cm-bw) solid transparent;
   cursor: pointer;
   white-space: nowrap;
-  user-select: none;
+  -webkit-user-select:none; user-select:none;
   transition: background var(--cm-dur-1) var(--cm-ease),
               border-color var(--cm-dur-1) var(--cm-ease),
               color var(--cm-dur-1) var(--cm-ease),
@@ -501,7 +501,7 @@ body.cm::before {
 .cm-shell {
   display: grid;
   grid-template-columns: 248px 1fr;
-  min-height: 100vh;
+  min-height:100vh; min-height:100dvh;
   background: var(--cm-bg);
 }
 .cm-shell-side {
@@ -509,7 +509,7 @@ body.cm::before {
   border-right: var(--cm-bw) solid var(--cm-side-border);
   color: var(--cm-side-fg);
   display: flex; flex-direction: column;
-  position: sticky; top: 0; height: 100vh;
+  position: sticky; top: 0; height:100vh; height:100dvh;
 }
 .cm-shell-main {
   display: flex; flex-direction: column;
@@ -579,7 +579,7 @@ body.cm::before {
   height: 56px; padding: 0 24px;
   border-bottom: var(--cm-bw) solid var(--cm-border);
   background: color-mix(in srgb, var(--cm-bg) 92%, transparent);
-  backdrop-filter: saturate(140%) blur(8px);
+  -webkit-backdrop-filter:saturate(140%) blur(8px); backdrop-filter:saturate(140%) blur(8px);
   position: sticky; top: 0; z-index: var(--cm-z-sticky);
 }
 .cm-topbar h1 { font: var(--cm-h3); color: var(--cm-fg-strong); }
@@ -648,8 +648,12 @@ body.cm::before {
 .hub-topbar, .cm-topbar { min-width: 0; }
 .hub-topbar > *, .cm-topbar > * { min-width: 0; }
 
-/* El texto largo cede primero: es lo único recortable sin perder función. */
+/* El texto largo cede primero: es lo único recortable sin perder función.
+   Casi todas las páginas declaran el breadcrumb como display:flex en su propio
+   <style>, que gana por orden de cascada: ahí el text-overflow del contenedor
+   no hace nada y son los HIJOS los que tienen que poder encogerse y recortar. */
 .hub-crumb, .cm-crumb { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hub-crumb > *, .cm-crumb > * { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 
 /* Los botones no se deforman ni se parten: el que cede es el texto de al lado.
    Nada de overflow aquí — el panel de notificaciones (.cm-np) cuelga DENTRO de
@@ -657,6 +661,30 @@ body.cm::before {
    tienen. */
 .hub-topbar .actions, .cm-topbar-actions { flex-shrink: 0; }
 .hub-topbar .actions > *, .cm-topbar-actions > * { flex-shrink: 0; }
+/* Los contenedores intermedios también tienen que poder ceder, o el min-width:0
+   de arriba se corta en el primer nivel y la barra vuelve a empujar. */
+.hub-topbar .right, .hub-topbar .left, .cm-topbar .right, .cm-topbar .left { min-width: 0; }
+
+/* Por debajo de una tablet vertical, los botones de la barra se quedan con el
+   icono. Las etiquetas son lo que hace que la fila no entre —y son más largas
+   en español y portugués, que es donde reventaba—, mientras que el icono
+   identifica la acción igual. El :has() se limita a los botones que TIENEN
+   icono: uno de sólo texto conserva su etiqueta. Un navegador sin :has()
+   ignora el bloque entero y se queda como estaba. */
+@media (max-width: 820px) {
+  .hub-topbar .cm-btn:has(> .ti) > span,
+  .cm-topbar .cm-btn:has(> .ti) > span { display: none; }
+  .hub-topbar .cm-btn:has(> .ti),
+  .cm-topbar .cm-btn:has(> .ti) { padding: 0 9px; gap: 0; }
+}
+
+/* El buscador de la barra ocupa ~260px que no se encogen. En pantallas
+   estrechas es lo primero que sobra: la búsqueda global sigue a un ⌘K. Tres
+   páginas ya lo hacían por su cuenta, cada una con su propio umbral; aquí vale
+   para las 35. */
+@media (max-width: 1040px) {
+  .hub-topbar .hub-search, .cm-topbar .hub-search, .cm-topbar-search { display: none; }
+}
 
 /* ============================================================
    MEDIA — marco de proporción fija para video embebido.

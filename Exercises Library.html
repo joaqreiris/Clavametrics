@@ -30,7 +30,7 @@
 <style>
   body.cm { background: var(--cm-bg); }
 
-  .hub-topbar { display:flex; align-items:center; gap:14px; height:56px; padding:0 24px; border-bottom:1px solid var(--cm-border); background:color-mix(in srgb, var(--cm-bg) 92%, transparent); backdrop-filter:saturate(160%) blur(10px); position:sticky; top:0; z-index:50; }
+  .hub-topbar { display:flex; align-items:center; gap:14px; height:56px; padding:0 24px; border-bottom:1px solid var(--cm-border); background:color-mix(in srgb, var(--cm-bg) 92%, transparent); -webkit-backdrop-filter:saturate(160%) blur(10px); backdrop-filter:saturate(160%) blur(10px); position:sticky; top:0; z-index:50; }
   .hub-crumb { display:flex; align-items:center; gap:8px; color:var(--cm-fg-muted); font:var(--cm-body-sm); }
   .hub-crumb .ti { font-size:14px; }
   .hub-crumb .sep { color:var(--cm-fg-faint); }
@@ -116,7 +116,7 @@
     background:rgba(0,0,0,0.5); border:1.5px solid rgba(255,255,255,0.85);
     color:transparent; cursor:pointer; opacity:0; transform:scale(.85);
     transition:opacity 120ms, transform 120ms, background 120ms, border-color 120ms;
-    backdrop-filter:blur(6px);
+    -webkit-backdrop-filter:blur(6px); backdrop-filter:blur(6px);
   }
   .sl-check .ti { font-size:15px; }
   .sl-card:hover .sl-check { opacity:1; transform:scale(1); }
@@ -177,20 +177,20 @@
   .sl-thumb .focus.f-str { background:rgba(220,38,38,0.9); }
   .sl-thumb .focus.f-vel { background:rgba(8,145,178,0.9); }
   .sl-thumb .focus.f-end { background:rgba(22,163,74,0.9); }
-  .sl-thumb .focus.f-none { background:rgba(0,0,0,0.55); backdrop-filter:blur(6px); }
+  .sl-thumb .focus.f-none { background:rgba(0,0,0,0.55); -webkit-backdrop-filter:blur(6px); backdrop-filter:blur(6px); }
   .sl-thumb .dur {
     position:absolute; top:10px; right:10px;
     display:inline-flex; align-items:center; gap:4px;
     height:22px; padding:0 8px; border-radius:5px;
     background:rgba(0,0,0,0.6); color:#fff;
-    font:600 11px/1 var(--cm-font-mono); backdrop-filter:blur(6px); z-index:2;
+    font:600 11px/1 var(--cm-font-mono); -webkit-backdrop-filter:blur(6px); backdrop-filter:blur(6px); z-index:2;
   }
   .sl-thumb .dur .ti { font-size:12px; }
   .sl-thumb .md-badge {
     position:absolute; bottom:10px; left:10px;
     height:20px; padding:0 7px; border-radius:4px;
     background:rgba(0,0,0,0.6); color:#fff;
-    font:600 10px/1 var(--cm-font-mono); backdrop-filter:blur(6px); z-index:2;
+    font:600 10px/1 var(--cm-font-mono); -webkit-backdrop-filter:blur(6px); backdrop-filter:blur(6px); z-index:2;
     display:flex; align-items:center;
   }
 
@@ -227,7 +227,7 @@
     background:var(--cm-surface); border:1px solid var(--cm-border);
     border-radius:var(--cm-r-4); box-shadow:var(--cm-shadow-1);
     position:sticky; top:80px;
-    max-height:calc(100vh - 100px); overflow-y:auto;
+    max-height:calc(100vh - 100px); max-height:calc(100dvh - 100px); overflow-y:auto;
   }
   .sl-grid.has-rail .sl-rail { display:block; }
 
@@ -258,12 +258,12 @@
   .sl-preview-topbar .expand:hover { color:var(--cm-fg); }
   .sl-pv-draw { cursor:zoom-in; }
   .sl-pv-media { position:relative; }
-  .sl-pv-expand { position:absolute; top:6px; right:6px; z-index:4; width:26px; height:26px; border-radius:6px; border:0; background:rgba(8,12,16,0.6); backdrop-filter:blur(3px); color:#fff; display:flex; align-items:center; justify-content:center; cursor:pointer; }
+  .sl-pv-expand { position:absolute; top:6px; right:6px; z-index:4; width:26px; height:26px; border-radius:6px; border:0; background:rgba(8,12,16,0.6); -webkit-backdrop-filter:blur(3px); backdrop-filter:blur(3px); color:#fff; display:flex; align-items:center; justify-content:center; cursor:pointer; }
   .sl-pv-expand:hover { background:rgba(8,12,16,0.82); }
   .sl-pv-expand .ti { font-size:15px; }
 
   /* ── Lightbox (big preview) ── */
-  .sl-lb-backdrop { position:fixed; inset:0; z-index:950; display:none; align-items:center; justify-content:center; padding:32px; background:rgba(8,10,12,0.6); backdrop-filter:blur(6px); }
+  .sl-lb-backdrop { position:fixed; inset:0; z-index:950; display:none; align-items:center; justify-content:center; padding:32px; background:rgba(8,10,12,0.6); -webkit-backdrop-filter:blur(6px); backdrop-filter:blur(6px); }
   .sl-lb-backdrop.is-open { display:flex; }
   .sl-lb { background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-4); width:min(1040px,94vw); max-height:90vh; overflow:auto; box-shadow:0 24px 80px rgba(0,0,0,0.3); display:flex; flex-direction:column; }
   .sl-lb-head { display:flex; align-items:center; gap:12px; padding:16px 20px; border-bottom:1px solid var(--cm-border); position:sticky; top:0; background:var(--cm-surface); z-index:1; }
@@ -287,7 +287,7 @@
 
   /* "Has video" badge on cards (centred play overlay) */
   .sl-video-badge { position:absolute; inset:0; z-index:2; display:flex; align-items:center; justify-content:center; pointer-events:none; }
-  .sl-video-badge > span { width:32px; height:32px; border-radius:999px; background:rgba(0,0,0,0.5); backdrop-filter:blur(4px); border:1px solid rgba(255,255,255,0.5); display:flex; align-items:center; justify-content:center; color:#fff; }
+  .sl-video-badge > span { width:32px; height:32px; border-radius:999px; background:rgba(0,0,0,0.5); -webkit-backdrop-filter:blur(4px); backdrop-filter:blur(4px); border:1px solid rgba(255,255,255,0.5); display:flex; align-items:center; justify-content:center; color:#fff; }
   .sl-video-badge .ti { font-size:16px; margin-left:1px; }
   .sl-gps { margin-top:12px; padding-top:10px; border-top:1px solid var(--cm-border-soft); }
   .sl-gps-h { font:600 9px/1 var(--cm-font-mono); letter-spacing:0.06em; text-transform:uppercase; color:var(--cm-fg-muted); margin-bottom:7px; display:flex; align-items:center; gap:5px; }
@@ -1569,7 +1569,7 @@
     function pickExercise(current){
       return new Promise(resolve => {
         const pov = document.createElement('div');
-        pov.style.cssText = 'position:fixed;inset:0;z-index:10000;background:rgba(8,10,12,.5);backdrop-filter:blur(4px);display:flex;align-items:flex-start;justify-content:center;padding-top:60px';
+        pov.style.cssText = 'position:fixed;inset:0;z-index:10000;background:rgba(8,10,12,.5);-webkit-backdrop-filter:blur(4px); backdrop-filter:blur(4px);display:flex;align-items:flex-start;justify-content:center;padding-top:60px';
         pov.innerHTML = `<div style="background:var(--cm-surface,var(--cm-bg));border:1px solid var(--cm-border);border-radius:14px;width:560px;max-width:94vw;max-height:78vh;display:flex;flex-direction:column;box-shadow:0 24px 80px rgba(0,0,0,.2)">
           <div style="display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--cm-border)">
             <i class="ti ti-list-tree" style="font-size:16px;color:var(--cm-accent)"></i>

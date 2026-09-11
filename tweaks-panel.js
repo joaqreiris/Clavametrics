@@ -10,7 +10,7 @@
   .twk-hd{display:flex;align-items:center;justify-content:space-between;
     padding:10px 8px 10px 14px;cursor:move;user-select:none}
   .twk-hd b{font-size:12px;font-weight:600;letter-spacing:.01em}
-  .twk-x{appearance:none;border:0;background:transparent;color:rgba(41,38,27,.55);
+  .twk-x{-webkit-appearance:none; appearance:none;border:0;background:transparent;color:rgba(41,38,27,.55);
     width:22px;height:22px;border-radius:6px;cursor:default;font-size:13px;line-height:1}
   .twk-x:hover{background:rgba(0,0,0,.06);color:#29261b}
   .twk-body{padding:2px 14px 14px;display:flex;flex-direction:column;gap:10px;
@@ -33,7 +33,7 @@
     color:rgba(41,38,27,.45);padding:10px 0 0}
   .twk-sect:first-child{padding-top:0}
 
-  .twk-field{appearance:none;box-sizing:border-box;width:100%;min-width:0;height:26px;padding:0 8px;
+  .twk-field{-webkit-appearance:none; appearance:none;box-sizing:border-box;width:100%;min-width:0;height:26px;padding:0 8px;
     border:.5px solid rgba(0,0,0,.1);border-radius:7px;
     background:rgba(255,255,255,.6);color:inherit;font:inherit;outline:none}
   .twk-field:focus{border-color:rgba(0,0,0,.25);background:rgba(255,255,255,.85)}
@@ -41,7 +41,7 @@
     background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path fill='rgba(0,0,0,.5)' d='M0 0h10L5 6z'/></svg>");
     background-repeat:no-repeat;background-position:right 8px center}
 
-  .twk-slider{appearance:none;-webkit-appearance:none;width:100%;height:4px;margin:6px 0;
+  .twk-slider{-webkit-appearance:none; appearance:none;width:100%;height:4px;margin:6px 0;
     border-radius:999px;background:rgba(0,0,0,.12);outline:none}
   .twk-slider::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;
     width:14px;height:14px;border-radius:50%;background:#fff;
@@ -55,7 +55,7 @@
     background:rgba(255,255,255,.9);box-shadow:0 1px 2px rgba(0,0,0,.12);
     transition:left .15s cubic-bezier(.3,.7,.4,1),width .15s}
   .twk-seg.dragging .twk-seg-thumb{transition:none}
-  .twk-seg button{appearance:none;position:relative;z-index:1;flex:1;border:0;
+  .twk-seg button{-webkit-appearance:none; appearance:none;position:relative;z-index:1;flex:1;border:0;
     background:transparent;color:inherit;font:inherit;font-weight:500;min-height:22px;
     border-radius:6px;cursor:default;padding:4px 6px;line-height:1.2;
     overflow-wrap:anywhere}
@@ -70,7 +70,7 @@
   .twk-num{display:flex;align-items:center;box-sizing:border-box;min-width:0;height:26px;padding:0 0 0 8px;
     border:.5px solid rgba(0,0,0,.1);border-radius:7px;background:rgba(255,255,255,.6)}
   .twk-num-lbl{font-weight:500;color:rgba(41,38,27,.6);cursor:ew-resize;
-    user-select:none;padding-right:8px}
+    -webkit-user-select:none; user-select:none;padding-right:8px}
   .twk-num input{flex:1;min-width:0;height:100%;border:0;background:transparent;
     font:inherit;font-variant-numeric:tabular-nums;text-align:right;padding:0 8px 0 0;
     outline:none;color:inherit;-moz-appearance:textfield}
@@ -84,7 +84,7 @@
   .twk-btn.secondary{background:rgba(0,0,0,.06);color:inherit}
   .twk-btn.secondary:hover{background:rgba(0,0,0,.1)}
 
-  .twk-swatch{appearance:none;-webkit-appearance:none;width:56px;height:22px;
+  .twk-swatch{-webkit-appearance:none; appearance:none;width:56px;height:22px;
     border:.5px solid rgba(0,0,0,.1);border-radius:6px;padding:0;cursor:default;
     background:transparent;flex-shrink:0}
   .twk-swatch::-webkit-color-swatch-wrapper{padding:0}
@@ -92,7 +92,7 @@
   .twk-swatch::-moz-color-swatch{border:0;border-radius:5.5px}
 
   .twk-chips{display:flex;gap:6px}
-  .twk-chip{position:relative;appearance:none;flex:1;min-width:0;height:46px;
+  .twk-chip{position:relative;-webkit-appearance:none; appearance:none;flex:1;min-width:0;height:46px;
     padding:0;border:0;border-radius:6px;overflow:hidden;cursor:default;
     box-shadow:0 0 0 .5px rgba(0,0,0,.12),0 1px 2px rgba(0,0,0,.06);
     transition:transform .12s cubic-bezier(.3,.7,.4,1),box-shadow .12s}

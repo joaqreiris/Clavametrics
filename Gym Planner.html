@@ -57,6 +57,10 @@
 
   /* Document-style centred page (matches Daily Planning) */
   .gp-doc{max-width:1080px;margin:0 auto;padding:20px 26px 56px}
+  /* La hoja necesita ~787px de ancho útil para que la tabla de ejercicios se
+     lea. Cuando la ventana no da, se desliza dentro de su área en vez de
+     sacarle scroll horizontal a la página entera. */
+  @media (max-width:1100px){ .gp-doc{max-width:100%;overflow-x:auto} }
   .gp-head{display:flex;align-items:flex-end;gap:16px;margin-bottom:14px;flex-wrap:wrap;padding-bottom:14px;border-bottom:1px solid var(--cm-border-soft)}
   .gp-head h1{font:600 24px/1.1 var(--cm-font-sans);letter-spacing:-0.02em;color:var(--cm-fg-strong)}
   .gp-head .ctx{font:var(--cm-body-sm);color:var(--cm-fg-muted);margin-top:6px;display:flex;gap:6px;align-items:center}
@@ -852,7 +856,7 @@ function gpOpenLinkModal(tr) {
   if (!ov) {
     ov = document.createElement('div');
     ov.id = 'gpLinkOv';
-    ov.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(8,10,12,.5);backdrop-filter:blur(4px);z-index:920;align-items:flex-start;justify-content:center;padding-top:72px';
+    ov.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(8,10,12,.5);-webkit-backdrop-filter:blur(4px); backdrop-filter:blur(4px);z-index:920;align-items:flex-start;justify-content:center;padding-top:72px';
     ov.onclick = e => { if (e.target === ov) ov.style.display = 'none'; };
     document.body.appendChild(ov);
   }
@@ -1190,7 +1194,7 @@ function gpBuildLibModal() {
   if (_gpLibBuilt) return; _gpLibBuilt = true;
   const ov = document.createElement('div');
   ov.id = 'gpLibOv';
-  ov.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(8,10,12,.5);backdrop-filter:blur(4px);z-index:900;align-items:flex-start;justify-content:center;padding-top:60px';
+  ov.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(8,10,12,.5);-webkit-backdrop-filter:blur(4px); backdrop-filter:blur(4px);z-index:900;align-items:flex-start;justify-content:center;padding-top:60px';
   ov.onclick = e => { if (e.target === ov) gpCloseLib(); };
   ov.innerHTML = `
     <div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-4);width:560px;max-width:94vw;max-height:78vh;display:flex;flex-direction:column;box-shadow:0 24px 80px rgba(0,0,0,.2)">
@@ -1349,7 +1353,7 @@ function gpBuildVidPrev(){
   if (_gpVidPrevBuilt) return; _gpVidPrevBuilt = true;
   const ov = document.createElement('div');
   ov.id = 'gpVidPrevOv';
-  ov.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(8,10,12,.6);backdrop-filter:blur(4px);z-index:950;align-items:center;justify-content:center;padding:20px';
+  ov.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(8,10,12,.6);-webkit-backdrop-filter:blur(4px); backdrop-filter:blur(4px);z-index:950;align-items:center;justify-content:center;padding:20px';
   ov.onclick = e => { if (e.target === ov) gpCloseVidPrev(); };
   ov.innerHTML = `
     <div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-4);width:640px;max-width:94vw;overflow:hidden;box-shadow:0 24px 80px rgba(0,0,0,.3)">
@@ -1441,7 +1445,7 @@ function gpBuildExCreateModal(){
     .map(it => ({ token: it.token, label: gpEqLabel(it.token) }));
   const ov = document.createElement('div');
   ov.id = 'gpExCreateOv';
-  ov.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(8,10,12,.5);backdrop-filter:blur(4px);z-index:960;align-items:flex-start;justify-content:center;padding-top:70px';
+  ov.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(8,10,12,.5);-webkit-backdrop-filter:blur(4px); backdrop-filter:blur(4px);z-index:960;align-items:flex-start;justify-content:center;padding-top:70px';
   ov.onclick = e => { if (e.target === ov) gpCloseExCreate(); };
   const fieldCss = 'width:100%;height:34px;padding:0 10px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:7px;font:var(--cm-body-sm);color:var(--cm-fg);outline:none';
   const lblCss = 'font:600 11px/1 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:4px;display:block';
@@ -1571,7 +1575,7 @@ function gpBuildAiModal() {
   if (_gpAiBuilt) return;
   const ov = document.createElement('div');
   ov.id = 'gpAiOv';
-  ov.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(8,10,12,.5);backdrop-filter:blur(4px);z-index:900;align-items:flex-start;justify-content:center;padding-top:60px';
+  ov.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(8,10,12,.5);-webkit-backdrop-filter:blur(4px); backdrop-filter:blur(4px);z-index:900;align-items:flex-start;justify-content:center;padding-top:60px';
   ov.innerHTML = `
     <div style="width:560px;max-width:92vw;background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-4);box-shadow:var(--cm-shadow-3);padding:18px">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
@@ -1709,7 +1713,7 @@ function gpBuildTplModal() {
   if (_gpTplBuilt) return; _gpTplBuilt = true;
   const ov = document.createElement('div');
   ov.id = 'gpTplOv';
-  ov.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(8,10,12,.5);backdrop-filter:blur(4px);z-index:900;align-items:flex-start;justify-content:center;padding-top:60px';
+  ov.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(8,10,12,.5);-webkit-backdrop-filter:blur(4px); backdrop-filter:blur(4px);z-index:900;align-items:flex-start;justify-content:center;padding-top:60px';
   ov.onclick = e => { if (e.target === ov) gpCloseTpl(); };
   ov.innerHTML = `
     <div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-4);width:520px;max-width:94vw;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 24px 80px rgba(0,0,0,.2)">
@@ -2164,7 +2168,7 @@ function gpBuildSquadModal() {
   if (_gpSquadBuilt) return; _gpSquadBuilt = true;
   const ov = document.createElement('div');
   ov.id = 'gpSquadOv';
-  ov.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(8,10,12,.5);backdrop-filter:blur(4px);z-index:900;align-items:flex-start;justify-content:center;padding-top:60px';
+  ov.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(8,10,12,.5);-webkit-backdrop-filter:blur(4px); backdrop-filter:blur(4px);z-index:900;align-items:flex-start;justify-content:center;padding-top:60px';
   ov.onclick = e => { if (e.target === ov) gpCloseSquad(); };
   ov.innerHTML = `
     <div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-4);width:480px;max-width:94vw;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 24px 80px rgba(0,0,0,.2)">
@@ -2300,7 +2304,7 @@ function gpBuildGroupsModal() {
   if (_gpGrpBuilt) return; _gpGrpBuilt = true;
   const ov = document.createElement('div');
   ov.id = 'gpGrpOv';
-  ov.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(8,10,12,.5);backdrop-filter:blur(4px);z-index:900;align-items:flex-start;justify-content:center;padding-top:48px';
+  ov.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(8,10,12,.5);-webkit-backdrop-filter:blur(4px); backdrop-filter:blur(4px);z-index:900;align-items:flex-start;justify-content:center;padding-top:48px';
   ov.onclick = e => { if (e.target === ov) gpCloseGroups(); };
   ov.innerHTML = `
     <style>
