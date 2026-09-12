@@ -2,13 +2,16 @@ import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir:       './tests/e2e',
-  // 30 s por test. Los 60 s venían de cuando el arranque de la app se pasaba de los 30 s que trae
-  // Playwright por defecto; eso lo cubre ahora `webServer.timeout` de abajo, que es el que espera
-  // al servidor. Medido el 2026-09-12: un caso cuesta ~4 s y la suite entera pasa con --timeout
-  // 15000, así que 30 s dan 7x de margen. El techo alto no daba robustez, daba espera: un
-  // selector que ya no existe tardaba 60 s en admitirlo, y cuatro de esos se comían 4 de los
-  // 16,6 min de la suite. Si un caso legítimo necesita más, que lo pida él con test.setTimeout().
-  timeout:       30_000,
+  // 60 s por test, y NO bajarlo. Tienta hacerlo: un spec suelto pasa holgado con 15 s, y el techo
+  // alto hace que un selector que ya no existe tarde 60 s en admitirlo. Pero el número no está
+  // puesto para el caso aislado, está puesto para la suite entera: con 5 workers peleándose la
+  // máquina, estos e2e montan la app COMPLETA por caso y un test que solo tarda 8 s se pasa de
+  // los 30. Probado el 2026-09-12: con 30 s, gps-box, gps-builder-controls, gps-builder-title y
+  // gps-baseline-ref se cayeron en la suite completa (16 casos) y los cuatro pasan 7/7 corridos
+  // solos, a 30 s igual que a 60. Son fallos de contención, no del producto.
+  // Lo que hay que atacar para que la suite tarde menos son los tests que esperan a UI que ya no
+  // existe, no este techo.
+  timeout:       60_000,
   fullyParallel: false,
   retries:       process.env.CI ? 1 : 0,
   reporter:      'html',
