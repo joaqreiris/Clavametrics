@@ -18,6 +18,18 @@ async function mockSquad(page, opts = {}) {
   });
 }
 
+/**
+ * Abre el modal de edición del primer jugador de la tabla.
+ *
+ * La fila ya no trae un botón de editar propio (`.sq-edit-btn`, que no existe más): trae un kebab
+ * que abre el menú compartido #sqRowMenu, y "Edit" sale de ahí. Clickear la fila entera no sirve
+ * de atajo — eso navega al perfil del jugador.
+ */
+async function abrirEdicion(page) {
+  await page.locator('.sq-menu-btn').first().click();
+  await page.locator('#sqRowMenu [data-act="edit"]').click();
+}
+
 async function gotoSquad(page, opts = {}) {
   await injectSession(page);
   await mockSquad(page, opts);
@@ -93,19 +105,19 @@ test.describe('Squad — Modal open/close', () => {
 test.describe('Squad — Edit player', () => {
   test('clicking edit button opens modal with "Edit player" title', async ({ page }) => {
     await gotoSquad(page);
-    await page.locator('.sq-edit-btn').first().click();
+    await abrirEdicion(page);
     await expect(page.locator('#sqModalTitle')).toContainText('Edit');
   });
 
   test('modal pre-fills first name', async ({ page }) => {
     await gotoSquad(page);
-    await page.locator('.sq-edit-btn').first().click();
+    await abrirEdicion(page);
     await expect(page.locator('#sqF_first_name')).toHaveValue('Lucas');
   });
 
   test('Delete button visible when editing', async ({ page }) => {
     await gotoSquad(page);
-    await page.locator('.sq-edit-btn').first().click();
+    await abrirEdicion(page);
     await expect(page.locator('#sqModalDelete')).toBeVisible();
   });
 });
@@ -183,7 +195,7 @@ test.describe('Squad — Save new player', () => {
 test.describe('Squad — Delete player', () => {
   test('cancel on confirm dialog keeps modal open', async ({ page }) => {
     await gotoSquad(page);
-    await page.locator('.sq-edit-btn').first().click();
+    await abrirEdicion(page);
     page.on('dialog', d => d.dismiss());
     await page.click('#sqModalDelete');
     await expect(page.locator('#sqModalBackdrop')).toBeVisible();
@@ -191,7 +203,7 @@ test.describe('Squad — Delete player', () => {
 
   test('confirming delete closes modal and shows toast', async ({ page }) => {
     await gotoSquad(page);
-    await page.locator('.sq-edit-btn').first().click();
+    await abrirEdicion(page);
     page.on('dialog', d => d.accept());
     await page.click('#sqModalDelete');
     await expect(page.locator('#sqModalBackdrop')).toBeHidden({ timeout: 8000 });

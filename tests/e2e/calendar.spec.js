@@ -17,10 +17,15 @@ const MC = {
 const DIAS_MC = Math.round(
   (Date.parse(MC.end_date) - Date.parse(MC.start_date)) / 86400000) + 1;
 
+// Columnas REALES de training_sessions. El fixture traía el esquema de mayo
+// (name/date/focus) y el grid filtra por `session_date`: ninguna sesión caía en ningún día, todos
+// salían "Rest day" y los describes que hacen clic en un evento agotaban el timeout de 60 s.
 const SESSION = {
-  id: 'sess-1', name: '8vs8', date: '2026-05-15',
-  focus: 'Technical', duration: 90, notes: 'Test notes',
-  microcycle: 'MC 01', club_id: 'club-1',
+  id: 'sess-1', club_id: 'club-1',
+  title: '8vs8', session_date: '2026-05-15', session_type: 'training',
+  duration: 90, notes: 'Test notes', microcycle_id: 'mc-1',
+  sort_order: 0, session_time: null, visible_to: ['staff'],
+  recurrence_group_id: null, match_day_offset: null,
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -95,6 +100,19 @@ async function gotoCalendar(page, opts = {}) {
   await mockSupabase(page, opts);
   await page.goto('/Calendar.html');
   await page.waitForSelector('.mc-day', { timeout: 10_000 });
+}
+
+/**
+ * Abre el modal de edición de un evento.
+ *
+ * Un click sobre el evento ya NO abre el modal: abre el popover de detalle, y el modal sale de su
+ * botón "Edit event". Los tests de abajo se escribieron contra el flujo viejo (click → modal) y
+ * por eso esperaban en vano; el click se difiere 250 ms en las cards navegables, así que hay que
+ * dejar que Playwright espere al botón en lugar de clickear a ciegas.
+ */
+async function abrirEdicion(page) {
+  await page.locator('.mc-evt.training').first().click();
+  await page.locator('#epEditBtn').click();
 }
 
 // ── 1. RENDER ─────────────────────────────────────────────────────────────────
@@ -279,7 +297,7 @@ test.describe('Sidebar navigation', () => {
 // ── 4. FILTER PILLS ───────────────────────────────────────────────────────────
 
 test.describe('Filter pills', () => {
-  const gymSession = { ...SESSION, id: 'sess-2', focus: 'Gym', name: 'Strength', date: '2026-05-16' };
+  const gymSession = { ...SESSION, id: 'sess-2', session_type: 'gym', title: 'Strength', session_date: '2026-05-16' };
 
   test.beforeEach(async ({ page }) => {
     await gotoCalendar(page, { sessions: [SESSION, gymSession] });
@@ -426,7 +444,7 @@ test.describe('Form save — new event', () => {
     await page.click('#calEvtSave');
 
     await expect(page.locator('#calEvtBackdrop')).not.toHaveClass(/is-open/);
-    await expect(page.locator('#calToast')).toContainText('Session added');
+    await expect(page.locator('#calToast')).toContainText('Event added');
   });
 
   test('shows "Saving…" indicator while request is in flight', async ({ page }) => {
@@ -462,7 +480,7 @@ test.describe('Form save — new event', () => {
 test.describe('Modal — edit event', () => {
   test.beforeEach(async ({ page }) => {
     await gotoCalendar(page);
-    await page.locator('.mc-evt.training').first().click();
+    await abrirEdicion(page);
   });
 
   test('opens with "Edit event" title', async ({ page }) => {
@@ -484,7 +502,7 @@ test.describe('Modal — edit event', () => {
     await page.fill('#calEvtF_title', 'Updated 8vs8');
     await page.click('#calEvtSave');
     await expect(page.locator('#calEvtBackdrop')).not.toHaveClass(/is-open/);
-    await expect(page.locator('#calToast')).toContainText('Session updated');
+    await expect(page.locator('#calToast')).toContainText('Event updated');
   });
 });
 
@@ -493,7 +511,7 @@ test.describe('Modal — edit event', () => {
 test.describe('Delete event', () => {
   test('cancel on confirm dialog keeps modal open', async ({ page }) => {
     await gotoCalendar(page);
-    await page.locator('.mc-evt.training').first().click();
+    await abrirEdicion(page);
     page.on('dialog', d => d.dismiss());
     await page.click('#calEvtDelete');
     await expect(page.locator('#calEvtBackdrop')).toHaveClass(/is-open/);
@@ -501,11 +519,11 @@ test.describe('Delete event', () => {
 
   test('confirming delete closes modal and shows toast', async ({ page }) => {
     await gotoCalendar(page);
-    await page.locator('.mc-evt.training').first().click();
+    await abrirEdicion(page);
     page.on('dialog', d => d.accept());
     await page.click('#calEvtDelete');
     await expect(page.locator('#calEvtBackdrop')).not.toHaveClass(/is-open/);
-    await expect(page.locator('#calToast')).toContainText('Session deleted');
+    await expect(page.locator('#calToast')).toContainText('Event deleted');
   });
 });
 
@@ -551,7 +569,7 @@ test.describe('API errors', () => {
 
     await page.goto('/Calendar.html');
     await page.waitForSelector('.mc-evt.training');
-    await page.locator('.mc-evt.training').first().click();
+    await abrirEdicion(page);
     page.on('dialog', d => d.accept());
     await page.click('#calEvtDelete');
 

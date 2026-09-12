@@ -2,10 +2,13 @@ import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir:       './tests/e2e',
-  // 60 s por test. Estos e2e montan la app ENTERA por caso (GPS Analysis carga catálogo, filtros,
-  // dashboards y resuelve cada card), y con la suite completa en un worker el arranque se pasa de
-  // los 30 s que trae Playwright por defecto: aparecían fallos que aislados pasaban siempre.
-  timeout:       60_000,
+  // 30 s por test. Los 60 s venían de cuando el arranque de la app se pasaba de los 30 s que trae
+  // Playwright por defecto; eso lo cubre ahora `webServer.timeout` de abajo, que es el que espera
+  // al servidor. Medido el 2026-09-12: un caso cuesta ~4 s y la suite entera pasa con --timeout
+  // 15000, así que 30 s dan 7x de margen. El techo alto no daba robustez, daba espera: un
+  // selector que ya no existe tardaba 60 s en admitirlo, y cuatro de esos se comían 4 de los
+  // 16,6 min de la suite. Si un caso legítimo necesita más, que lo pida él con test.setTimeout().
+  timeout:       30_000,
   fullyParallel: false,
   retries:       process.env.CI ? 1 : 0,
   reporter:      'html',
