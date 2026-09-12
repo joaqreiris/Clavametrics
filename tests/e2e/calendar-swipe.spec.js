@@ -46,7 +46,7 @@ async function mockSupabase(page) {
       return route.fulfill({ json: [], headers: { 'content-range': '*/2' } });
     if (url.includes('/training_sessions'))
       return route.fulfill({ json: [] });
-    await route.continue();
+    await route.fallback();   // al mock de abajo, no a la red real
   });
 }
 

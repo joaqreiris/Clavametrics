@@ -25,7 +25,7 @@ async function mockDP(page, opts = {}) {
   await page.route(`${SB}/rest/v1/**`, async route => {
     const url    = route.request().url();
     const method = route.request().method();
-    if (method !== 'GET') return route.continue();
+    if (method !== 'GET') return route.fallback();   // al mock de abajo, no a la red real
 
     if (url.includes('/players'))          return route.fulfill({ json: players });
     if (url.includes('/availability'))     return route.fulfill({ json: avail });
@@ -33,7 +33,7 @@ async function mockDP(page, opts = {}) {
     if (url.includes('/treatments'))       return route.fulfill({ json: treatments });
     if (url.includes('/microcycles'))      return route.fulfill({ json: microcycles });
     if (url.includes('/training_sessions')) return route.fulfill({ json: [] });
-    await route.continue();
+    await route.fallback();   // al mock de abajo, no a la red real
   });
 }
 

@@ -85,7 +85,7 @@ async function mockSupabase(page, opts = {}) {
       if (method === 'DELETE') return route.fulfill({ json: [] });
     }
 
-    await route.continue();
+    await route.fallback();   // al mock de abajo, no a la red real
   });
 }
 
@@ -171,7 +171,7 @@ test.describe('Loading states', () => {
         await gate;
         return route.fulfill({ json: [SESSION] });
       }
-      await route.continue();
+      await route.fallback();   // al mock de abajo, no a la red real
     });
 
     // Mock remaining routes instantly
@@ -440,7 +440,7 @@ test.describe('Form save — new event', () => {
         await gate;
         return route.fulfill({ status: 201, json: [{ ...SESSION, id: 'x' }] });
       }
-      await route.continue();
+      await route.fallback();   // al mock de abajo, no a la red real
     });
 
     await page.goto('/Calendar.html');
@@ -525,7 +525,7 @@ test.describe('API errors', () => {
     await page.route(`${SB}/rest/v1/training_sessions`, async route => {
       if (route.request().method() === 'POST')
         return route.fulfill({ status: 400, json: { message: 'RLS policy violation' } });
-      await route.continue();
+      await route.fallback();   // al mock de abajo, no a la red real
     });
 
     await page.goto('/Calendar.html');
@@ -546,7 +546,7 @@ test.describe('API errors', () => {
     await page.route(`${SB}/rest/v1/training_sessions**`, async route => {
       if (route.request().method() === 'DELETE')
         return route.fulfill({ status: 500, json: { message: 'Internal server error' } });
-      await route.continue();
+      await route.fallback();   // al mock de abajo, no a la red real
     });
 
     await page.goto('/Calendar.html');
@@ -601,7 +601,7 @@ test.describe('Copia múltiple', () => {
         }
         return route.fulfill({ json: [S1, S2] });
       }
-      await route.continue();
+      await route.fallback();   // al mock de abajo, no a la red real
     });
     await page.goto('/Calendar.html');
     await page.waitForSelector('.mc-day');
@@ -610,19 +610,27 @@ test.describe('Copia múltiple', () => {
 
   const dia = (d) => `.mc-day[data-date="${d}"]`;
 
+  /** Click derecho en la cabecera de un día, con el menú ya abierto y quieto. */
+  async function menuDelDia(page, fecha) {
+    const head = page.locator(`${dia(fecha)} .mc-day-head`);
+    await head.scrollIntoViewIfNeeded();
+    await head.click({ button: 'right' });
+    await expect(page.locator('.cal-ctxmenu')).toBeVisible();
+  }
+
   test('el menú del día copia los dos eventos de una', async ({ page }) => {
     await conDosSesiones(page);
-    await page.locator(`${dia('2026-05-15')} .mc-day-head`).click({ button: 'right' });
+    await menuDelDia(page, '2026-05-15');
     await page.locator('.cal-ctx-opt', { hasText: 'Copy the whole day' }).click();
     await expect(page.locator('#calToast')).toContainText('2 events copied');
   });
 
   test('pegar en otro día inserta los dos, con sort_order distinto', async ({ page }) => {
     const posts = await conDosSesiones(page);
-    await page.locator(`${dia('2026-05-15')} .mc-day-head`).click({ button: 'right' });
+    await menuDelDia(page, '2026-05-15');
     await page.locator('.cal-ctx-opt', { hasText: 'Copy the whole day' }).click();
 
-    await page.locator(`${dia('2026-05-17')} .mc-day-head`).click({ button: 'right' });
+    await menuDelDia(page, '2026-05-17');
     await page.locator('.cal-ctx-opt', { hasText: 'Paste 2 events here' }).click();
 
     await expect(page.locator('#calToast')).toContainText('2 events pasted');
@@ -660,8 +668,9 @@ test.describe('Copia múltiple', () => {
     // Copiar suelta la selección: la próxima empieza limpia.
     await expect(page.locator('.mc-evt.is-selected')).toHaveCount(0);
 
-    await page.locator(`${dia('2026-05-18')} .mc-day-head`).click({ button: 'right' });
+    await menuDelDia(page, '2026-05-18');
     await page.locator('.cal-ctx-opt', { hasText: 'Paste 2 events here' }).click();
+    await expect(page.locator('#calToast')).toContainText('2 events pasted');
     expect(posts.map(p => p.session_date)).toEqual(['2026-05-18', '2026-05-18']);
   });
 
@@ -678,7 +687,7 @@ test.describe('Copia múltiple', () => {
 
   test('sin nada copiado, pegar está deshabilitado', async ({ page }) => {
     await conDosSesiones(page);
-    await page.locator(`${dia('2026-05-17')} .mc-day-head`).click({ button: 'right' });
+    await menuDelDia(page, '2026-05-17');
     await expect(page.locator('.cal-ctx-opt', { hasText: 'Paste here' })).toBeDisabled();
   });
 });

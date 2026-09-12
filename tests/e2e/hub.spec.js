@@ -19,7 +19,7 @@ async function mockHub(page, overrides = {}) {
   await page.route(`${SB}/rest/v1/**`, async route => {
     const url    = route.request().url();
     const method = route.request().method();
-    if (method !== 'GET') return route.continue();
+    if (method !== 'GET') return route.fallback();   // al mock de abajo, no a la red real
 
     if (url.includes('/players'))        return route.fulfill({ json: players, headers: { 'content-range': `*/${players.length}` } });
     if (url.includes('/injuries'))       return route.fulfill({ json: injuries });
@@ -29,7 +29,7 @@ async function mockHub(page, overrides = {}) {
     if (url.includes('/gps_reports'))    return route.fulfill({ json: gpsReports });
     if (url.includes('/microcycles'))    return route.fulfill({ json: microcycles });
     if (url.includes('/training_sessions')) return route.fulfill({ json: sessions });
-    await route.continue();
+    await route.fallback();   // al mock de abajo, no a la red real
   });
 }
 

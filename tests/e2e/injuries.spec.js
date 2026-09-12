@@ -24,7 +24,7 @@ async function mockInjuries(page, opts = {}) {
     if (url.includes('/players'))
       return route.fulfill({ json: players });
 
-    await route.continue();
+    await route.fallback();   // al mock de abajo, no a la red real
   });
 }
 

@@ -87,7 +87,7 @@ async function mockGpsBuilder(page, opts = {}) {
     if (method === 'POST')   return route.fulfill({ status: 201, json: [{ id: 'dash-new', name: 'New dashboard', sort_order: 99 }] });
     if (method === 'PATCH')  return route.fulfill({ json: [dashboards[0]] });
     if (method === 'DELETE') return route.fulfill({ json: [] });
-    await route.continue();
+    await route.fallback();   // al mock de abajo, no a la red real
   });
 
   // dashboard_cards
@@ -97,7 +97,7 @@ async function mockGpsBuilder(page, opts = {}) {
     if (method === 'POST')   return route.fulfill({ status: 201, json: [{ id: 'card-new', position: 0 }] });
     if (method === 'PATCH')  return route.fulfill({ json: [] });
     if (method === 'DELETE') return route.fulfill({ json: [] });
-    await route.continue();
+    await route.fallback();   // al mock de abajo, no a la red real
   });
 
   // training_sessions, gps_reports, players — empty (resolver returns no-data)

@@ -14,7 +14,7 @@ async function mockSquad(page, opts = {}) {
     if (method === 'POST')   return route.fulfill({ status: 201, json: [{ ...PLAYER, id: 'p-new' }] });
     if (method === 'PATCH')  return route.fulfill({ json: [PLAYER] });
     if (method === 'DELETE') return route.fulfill({ json: [] });
-    await route.continue();
+    await route.fallback();   // al mock de abajo, no a la red real
   });
 }
 
