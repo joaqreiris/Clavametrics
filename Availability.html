@@ -2437,6 +2437,17 @@
   });
 
   let _avStatsChart = null;
+  // Minutos entrenados: total = lo que midió el GPS + lo estimado por mediana para las sesiones
+  // en las que el jugador estuvo pero no llevó pulsera (arqueros, sobre todo). Se marca con ~ y
+  // el tooltip abre el desglose: el cuerpo técnico tiene que poder distinguir dato de estimación.
+  function avTrainCell(s) {
+    if (!s.trainEst) return `${s.trainMin}'`;
+    const vars = { measured: s.trainMin - s.trainEst, est: s.trainEst, n: s.trainEstSes };
+    const hint = tt('availability.statsMinTrainEst', "{measured}' measured by GPS + {est}' estimated (median of the group) for {n} session(s) without a GPS record", vars)
+      .replace(/\{(\w+)\}/g, (m, k) => (vars[k] != null ? vars[k] : m));
+    return `<span title="${esc(hint)}" style="border-bottom:1px dotted currentColor;cursor:help">${s.trainMin}'<span style="opacity:.5;font-weight:400"> ~</span></span>`;
+  }
+
   async function avRenderStats() {
     const host = document.getElementById('viewStats');
     if (!host) return;
@@ -2473,7 +2484,7 @@
     const stat = {};
     // minutes = minutos OFICIALES; minutesFr = amistosos (fila vieja sin match_kind = oficial).
     // No se suman juntos en ningún lado: el % de participación se calcula solo sobre oficiales.
-    players.forEach(p => stat[p.id] = { id:p.id, name: `${p.last_name||''} ${p.first_name||''}`.trim(), number: p.number, avail:0, partial:0, injury:0, illness:0, absent:0, national:0, otherTeam:0, minutes:0, minutesFr:0, trainMin:0, total:0 });
+    players.forEach(p => stat[p.id] = { id:p.id, name: `${p.last_name||''} ${p.first_name||''}`.trim(), number: p.number, avail:0, partial:0, injury:0, illness:0, absent:0, national:0, otherTeam:0, minutes:0, minutesFr:0, trainMin:0, trainEst:0, trainEstSes:0, total:0 });
     (avail||[]).forEach(r => {
       const s = stat[r.player_id]; if (!s) return;
       if (r.date > todayStr) return;   // future pre-fills are planning, not events — don't count as elapsed
@@ -2493,16 +2504,55 @@
     // Minutos ENTRENADOS, medidos por el GPS. No se escriben en Availability —ahí los minutos
     // son los de partido, que es lo que el cuerpo técnico carga y audita—: acá sólo se miran,
     // para poder leer el volumen de trabajo junto al de competencia.
+    //
+    // Los arqueros no llevan GPS: sumar sólo lo medido los deja en 0' y el ranking miente (en MOI,
+    // tres arqueros en 0' contra ~1.300' del resto). Para cada sesión se toma la MEDIANA de lo que
+    // midieron sus compañeros y se le imputa a quien ese día figura disponible o con trabajo
+    // modificado pero no tiene registro. Mediana y no media: casi todos completan la sesión entera
+    // —la mediana coincide con el máximo en la mayoría de las sesiones— y los pocos parciales (el
+    // que hizo 9' de 65) arrastran el promedio hacia abajo. Al lesionado, enfermo, ausente, con la
+    // selección o con otro equipo NO se le imputa nada: ese día no entrenó. Y sin fila de
+    // disponibilidad tampoco: el que no está en el día a día no suma minutos que nadie vio.
+    // Lo medido siempre gana sobre lo estimado.
     try {
-      let tq = window.sb.from('v_gps_player_minutes')
-        .select('player_id, minutes')
-        .eq('club_id', CLUB_ID).eq('session_type', 'training')
-        .in('player_id', pids.map(String))
-        .gte('session_date', from).lte('session_date', to);
-      if (_avTeamId) tq = tq.or(`team_id.eq.${_avTeamId},team_id.is.null`);
-      const { data: trainRows } = await tq;
+      // Paginado: una temporada entera son decenas de miles de filas (35 jugadores × ~180
+      // sesiones). Sin esto PostgREST corta en 1000 y la mediana se calcula sobre medias sesiones.
+      const { data: trainRows } = await avFetchAllRows((a, b) => {
+        let tq = window.sb.from('v_gps_player_minutes')
+          .select('player_id, session_id, session_date, minutes')
+          .eq('club_id', CLUB_ID).eq('session_type', 'training')
+          .in('player_id', pids.map(String))
+          .gte('session_date', from).lte('session_date', to);
+        if (_avTeamId) tq = tq.or(`team_id.eq.${_avTeamId},team_id.is.null`);
+        return tq.order('session_id').order('player_id').range(a, b);
+      });
+      const bySes = new Map();   // session_id → { date, mins:[], seen:Set(player_id) }
       (trainRows || []).forEach(r => {
-        const s = stat[r.player_id]; if (s) s.trainMin += Number(r.minutes) || 0;
+        const s = stat[r.player_id]; if (!s) return;
+        const m = Number(r.minutes) || 0;
+        s.trainMin += m;
+        let g = bySes.get(r.session_id);
+        if (!g) { g = { date: String(r.session_date || '').slice(0, 10), mins: [], seen: new Set() }; bySes.set(r.session_id, g); }
+        g.mins.push(m); g.seen.add(r.player_id);
+      });
+      // Estado del día, para saber a quién le corresponde la sesión que no midió.
+      const dayStatus = new Map();
+      (avail || []).forEach(r => {
+        if (r.date > todayStr || isOtherRow(r)) return;
+        dayStatus.set(r.player_id + '|' + r.date, (r.status || '').toLowerCase());
+      });
+      const TRAINED = new Set(['available', 'partial', 'limited']);
+      const roster = Object.values(stat);
+      bySes.forEach(g => {
+        if (!g.mins.length) return;
+        const ord = g.mins.slice().sort((x, y) => x - y), h = ord.length >> 1;
+        const med = Math.round(ord.length % 2 ? ord[h] : (ord[h - 1] + ord[h]) / 2);
+        if (med <= 0) return;
+        roster.forEach(s => {
+          if (g.seen.has(s.id)) return;                                          // lo medido manda
+          if (!TRAINED.has(dayStatus.get(s.id + '|' + g.date) || '')) return;    // ese día no entrenó
+          s.trainMin += med; s.trainEst += med; s.trainEstSes++;
+        });
       });
     } catch (e) { console.warn('[Availability] minutos entrenados no disponibles:', e?.message || e); }
 
@@ -2604,7 +2654,7 @@
               <th data-sort="otherTeam" style="padding:9px 10px;text-align:center;font:600 10.5px/1 var(--cm-font-sans);color:#6366F1;cursor:pointer">${tt('availability.statsColOther','Other')}</th>
               <th data-sort="minutes" style="padding:9px 10px;text-align:center;font:600 10.5px/1 var(--cm-font-sans);color:var(--cm-fg-strong);cursor:pointer">${tt('availability.statsColMinOff','Min off.')}</th>
               <th data-sort="minutesFr" style="padding:9px 10px;text-align:center;font:600 10.5px/1 var(--cm-font-sans);color:var(--cm-warning,#D97706);cursor:pointer">${tt('availability.statsColMinFr','Min friendly')}</th>
-              <th data-sort="trainMin" style="padding:9px 10px;text-align:center;font:600 10.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted);cursor:pointer" title="${tt('availability.statsColMinTrainHint','Minutes on the pitch in training, measured by the GPS')}">${tt('availability.statsColMinTrain','Min training')}</th>
+              <th data-sort="trainMin" style="padding:9px 10px;text-align:center;font:600 10.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted);cursor:pointer" title="${tt('availability.statsColMinTrainHint','Minutes on the pitch in training. Measured by the GPS; for whoever trained without one, estimated with the median of the session (marked with ~)')}">${tt('availability.statsColMinTrain','Min training')}</th>
               <th data-sort="pct" style="padding:9px 16px;text-align:right;font:600 10.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted);cursor:pointer;min-width:120px">${tt('availability.statsColPctAvail','% Availability')}</th>
               <th data-sort="partPct" style="padding:9px 16px;text-align:right;font:600 10.5px/1 var(--cm-font-sans);color:var(--cm-info,#2563eb);cursor:pointer;min-width:120px">${tt('availability.statsColPctMinOff','% Official min')}</th>
             </tr></thead>
@@ -2724,7 +2774,7 @@
           <td style="padding:10px;text-align:center;font:600 13px/1 var(--cm-font-mono);color:${s.otherTeam?'#6366F1':'var(--cm-fg-faint,#cbd5e1)'}">${s.otherTeam}</td>
           <td style="padding:10px;text-align:center;font:700 13px/1 var(--cm-font-mono);color:var(--cm-fg-strong)">${s.minutes}'</td>
           <td style="padding:10px;text-align:center;font:700 13px/1 var(--cm-font-mono);color:${s.minutesFr?'var(--cm-warning,#D97706)':'var(--cm-fg-faint,#cbd5e1)'}">${s.minutesFr}'</td>
-          <td style="padding:10px;text-align:center;font:700 13px/1 var(--cm-font-mono);color:${s.trainMin?'var(--cm-fg-muted)':'var(--cm-fg-faint,#cbd5e1)'}">${s.trainMin}'</td>
+          <td style="padding:10px;text-align:center;font:700 13px/1 var(--cm-font-mono);color:${s.trainMin?'var(--cm-fg-muted)':'var(--cm-fg-faint,#cbd5e1)'}">${avTrainCell(s)}</td>
           <td style="padding:10px 16px"><div style="display:flex;align-items:center;gap:8px;justify-content:flex-end"><div style="flex:1;max-width:70px;height:6px;background:var(--cm-bg-soft);border-radius:3px;overflow:hidden"><div style="width:${pct}%;height:100%;background:${barColor};border-radius:3px"></div></div><span style="font:700 12.5px/1 var(--cm-font-mono);color:${barColor};min-width:36px;text-align:right">${pct}%</span></div></td>
           <td style="padding:10px 16px"><div style="display:flex;align-items:center;gap:8px;justify-content:flex-end"><div style="flex:1;max-width:70px;height:6px;background:var(--cm-bg-soft);border-radius:3px;overflow:hidden"><div style="width:${s.partPct}%;height:100%;background:var(--cm-info,#2563eb);border-radius:3px"></div></div><span style="font:700 12.5px/1 var(--cm-font-mono);color:var(--cm-info,#2563eb);min-width:36px;text-align:right">${s.partPct}%</span></div></td>
         </tr>`;
