@@ -674,6 +674,20 @@ test.describe('Copia múltiple', () => {
     expect(posts.map(p => p.session_date)).toEqual(['2026-05-18', '2026-05-18']);
   });
 
+  test('la selección se pega directo, sin pasar por Copiar', async ({ page }) => {
+    const posts = await conDosSesiones(page);
+    const evts = page.locator(`${dia('2026-05-15')} .mc-evt[data-id]`);
+    await evts.nth(0).click({ modifiers: ['Shift'] });
+    await evts.nth(1).click({ modifiers: ['Shift'] });
+
+    await menuDelDia(page, '2026-05-19');
+    await page.locator('.cal-ctx-opt', { hasText: 'Paste 2 events here' }).click();
+    await expect(page.locator('#calToast')).toContainText('2 events pasted');
+    expect(posts.map(p => p.session_date)).toEqual(['2026-05-19', '2026-05-19']);
+    // La selección sigue puesta: la misma tanda se puede repartir en más días.
+    await expect(page.locator('.mc-evt.is-selected')).toHaveCount(2);
+  });
+
   test('el modo selección convierte el tap en selección (tablet)', async ({ page }) => {
     await conDosSesiones(page);
     await page.click('#calSelectModeBtn');

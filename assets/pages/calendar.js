@@ -328,11 +328,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // ── Render grid (continuous view — all MC days in one scrollable row) ──────────────
 let _dragId = null, _dragDate = null, _dragHasTime = false, _dropTargetId = null, _dropTargetDate = null;
-// Copy/paste clipboard for events (right-click / Ctrl+click). Holds the merged session object.
-let _clipEvt = null;
+// Copy/paste clipboard for events (right-click / Ctrl+click). Holds merged session objects:
+// un evento, los seleccionados a mano o todos los de un día caen en la misma lista, y pegar
+// siempre recorre esa lista — así «copiar uno» y «copiar el día entero» comparten el camino.
+let _clipEvts = [];
+// Selección múltiple. Vive fuera del render porque el grid se redibuja entero seguido
+// (filtros, drag, loadSessions) y la selección tiene que sobrevivir a eso.
+let _selIds = new Set();
+// Modo selección: en tablet no hay Shift+click, así que un botón pone el grid en modo
+// «tocar para seleccionar» y el tap deja de abrir el popover.
+let _selMode = false;
 
 // Cancel drag with ESC
 document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && !_dragId && (_selIds.size || _selMode)) { clearEvtSelection(); return; }
   if (e.key === 'Escape' && _dragId) {
     _dragId = null; _dragDate = null; _dragHasTime = false;
     _dropTargetId = null; _dropTargetDate = null;
@@ -394,7 +403,7 @@ function renderGrid() {
   if (headEl) headEl.innerHTML = `<strong>${mcName}</strong>${headMdLabel}${headTarget}`;
 
   const isPlayerView = _calView === 'player';
-  grid.className = 'mc-days' + (isPlayerView ? ' is-player-view' : '');
+  grid.className = 'mc-days' + (isPlayerView ? ' is-player-view' : '') + (_selMode ? ' is-selecting' : '');
 
   // Update player banner
   const banner = document.getElementById('calPlayerBanner');
@@ -498,7 +507,7 @@ function renderGrid() {
           const isMandatory = cat === 'prevention' && s.is_mandatory;
           const sub = (isMandatory && s.notes)
             ? `<span class="sub">${_esc(s.notes)}</span>` : '';
-          return `<div class="mc-evt ${cat}${isOutdoorTrain ? ' st-' + _esc(s.session_type) : ''}${isMandatory ? ' is-mandatory' : ''}" data-id="${s.id}" data-date="${dateStr}" data-has-time="${s.start_time ? '1' : '0'}" draggable="true">
+          return `<div class="mc-evt ${cat}${isOutdoorTrain ? ' st-' + _esc(s.session_type) : ''}${isMandatory ? ' is-mandatory' : ''}${_selIds.has(s.id) ? ' is-selected' : ''}" data-id="${s.id}" data-date="${dateStr}" data-has-time="${s.start_time ? '1' : '0'}" draggable="true">
             ${leadEl}
             ${timeStr ? `<span class="time">${timeStr}</span>` : ''}
             <span class="name" title="${_esc(evtName + durSuffix)}">${_esc(evtName)}${_esc(durSuffix)}</span>${au}${sub}
@@ -528,6 +537,7 @@ function renderGrid() {
   }
   grid.innerHTML = html;
   ensureCtxMenu(grid);
+  renderSelBar();
 
   // Wire event clicks — un click abre el popover; doble click sobre un entrenamiento/gym
   // salta directo a su planificación (Daily Planning / Gym Planner). El click simple se
@@ -538,6 +548,12 @@ function renderGrid() {
       e.stopPropagation();
       const s = _sessions.find(x => x.id === el.dataset.id);
       if (!s) return;
+      // Selección múltiple: modo selección (tablet) o Shift/Cmd+click (escritorio). Ctrl+click
+      // queda libre porque en macOS lo consume el menú contextual.
+      if (_calView !== 'player' && (_selMode || e.shiftKey || e.metaKey)) {
+        toggleEvtSelection(s.id);
+        return;
+      }
       if (!_evtPlanUrl(s)) { showEvtPopover(el, s); return; }
       if (clickTimer) return;   // segundo click de un doble → lo maneja dblclick
       clickTimer = setTimeout(() => { clickTimer = null; showEvtPopover(el, s); }, 250);
@@ -545,6 +561,7 @@ function renderGrid() {
     el.addEventListener('dblclick', e => {
       e.stopPropagation();
       e.preventDefault();
+      if (_selMode) return;   // en modo selección dos taps no navegan: solo seleccionan
       const s = _sessions.find(x => x.id === el.dataset.id);
       const url = s && _evtPlanUrl(s);
       if (!url) return;
@@ -678,11 +695,119 @@ function renderGrid() {
 // calendario no tape lo que se planificó. Marcar día libre y limpiar un override viejo
 // viven ahora en el menú contextual del día (click derecho).
 
+// ── Selección múltiple de eventos ─────────────────────────────────────────────
+// Antes solo se podía copiar de uno en uno: ahora se juntan varios (Shift/Cmd+click, modo
+// selección para tablet, o «todo el día» desde el menú del día) y se pegan juntos en otro día.
+
+// Los eventos que se ven en un día, con el filtro de tipo aplicado y sin el day off de equipo:
+// copiar tiene que llevarse exactamente lo que el usuario está mirando, no lo que el filtro tapa.
+function visibleEvtsOnDate(dateStr) {
+  const isPlayerView = _calView === 'player';
+  const all = _sessions.filter(s => s.session_date === dateStr);
+  if (all.some(_isFullDayOff)) return [];
+  return all.filter(s =>
+    (!isPlayerView || (Array.isArray(s.visible_to) && s.visible_to.includes('players'))) &&
+    (_filterType === 'all' || focusToClass(s.session_type) === _filterType) &&
+    !_isFullDayOff(s));
+}
+
+function evtShortName(s) {
+  return s.title || evtTypeLabel(s.session_type) || tt('calendar.filter_training','Training');
+}
+
+function toggleEvtSelection(id) {
+  if (_selIds.has(id)) _selIds.delete(id); else _selIds.add(id);
+  const el = document.querySelector(`.mc-evt[data-id="${id}"]`);
+  if (el) el.classList.toggle('is-selected', _selIds.has(id));
+  renderSelBar();
+}
+
+function addEvtsToSelection(list) {
+  list.forEach(s => _selIds.add(s.id));
+  _selMode = true;
+  renderGrid();
+}
+
+function clearEvtSelection() {
+  _selIds.clear();
+  _selMode = false;
+  renderGrid();
+}
+
+// La barra flotante es el único lugar donde se ve cuántos hay agarrados y qué se puede hacer
+// con ellos; sin eso la selección es invisible en un grid largo con scroll.
+function renderSelBar() {
+  const bar = document.getElementById('calSelBar');
+  if (!bar) return;
+  // Un evento borrado o filtrado fuera no puede seguir seleccionado.
+  const live = new Set(_sessions.map(s => s.id));
+  for (const id of [..._selIds]) if (!live.has(id)) _selIds.delete(id);
+  if (_calView === 'player') { _selIds.clear(); _selMode = false; }
+  const n = _selIds.size;
+  const show = _calView !== 'player' && (n > 0 || _selMode);
+  bar.classList.toggle('is-show', show);
+  document.getElementById('calSelectModeBtn')?.classList.toggle('is-on', _selMode || n > 0);
+  if (!show) return;
+  document.getElementById('calSelBarCount').textContent = n === 1
+    ? tt('calendar.sel_one','1 event selected')
+    : tt('calendar.sel_n','{n} events selected',{n});
+  document.getElementById('calSelBarHint').textContent = n
+    ? tt('calendar.sel_hint','right-click a day to paste')
+    : tt('calendar.sel_hint_empty','tap the events you want to copy');
+  document.getElementById('calSelCopy').disabled = !n;
+}
+
+// Copiar = volcar la selección al portapapeles y soltarla, para que la próxima selección
+// empiece limpia y el portapapeles no cambie sin que el usuario lo pida.
+function copySelectionToClip() {
+  const list = _sessions.filter(s => _selIds.has(s.id));
+  if (!list.length) return;
+  copyEvtsToClip(list);
+  clearEvtSelection();
+}
+
+function copyEvtsToClip(list) {
+  _clipEvts = list.slice();
+  showCalToast(_clipEvts.length === 1
+    ? tt('calendar.ctx_copied','Event copied — right-click a day to paste.')
+    : tt('calendar.ctx_copied_n','{n} events copied — right-click a day to paste.',{n:_clipEvts.length}));
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('calSelectModeBtn')?.addEventListener('click', () => {
+    if (_selMode || _selIds.size) { clearEvtSelection(); return; }
+    _selMode = true;
+    renderGrid();
+  });
+  document.getElementById('calSelCopy')?.addEventListener('click', copySelectionToClip);
+  document.getElementById('calSelClear')?.addEventListener('click', clearEvtSelection);
+  // «Seleccionar todo» = todos los eventos visibles del microciclo entero, día por día.
+  document.getElementById('calSelAll')?.addEventListener('click', () => {
+    const mc = _allMCs[_mcIdx];
+    if (!mc) return;
+    const total = daysBetween(mc.start_date, mc.end_date) + 1;
+    const all = [];
+    for (let i = 0; i < total; i++) all.push(...visibleEvtsOnDate(addDays(mc.start_date, i)));
+    if (!all.length) { showCalToast(tt('calendar.sel_nothing','Nothing to select here.')); return; }
+    addEvtsToSelection(all);
+  });
+});
+
+// Cmd/Ctrl+C copia la selección sin pasar por la barra.
+document.addEventListener('keydown', e => {
+  if ((e.metaKey || e.ctrlKey) && (e.key === 'c' || e.key === 'C') && _selIds.size && _calView !== 'player') {
+    const t = e.target;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+    e.preventDefault();
+    copySelectionToClip();
+  }
+});
+
 // ── Copy/paste context menu (right-click on Windows / Ctrl+click on Mac) ────────
 // The `contextmenu` DOM event fires for both a Windows right-click and a macOS
 // Ctrl+click, so a single handler covers both. Right-clicking an event offers
 // «Copy»; right-clicking a day column offers «Paste here» when something's copied.
-let _ctxMenu = null, _ctxMenuWired = false;
+let _ctxMenu = null, _ctxMenuWired = false, _ctxOpenedAt = 0;
 
 function ensureCtxMenu(grid) {
   if (_ctxMenuWired) return;
@@ -701,20 +826,49 @@ function ensureCtxMenu(grid) {
     e.preventDefault();
 
     const items = [];
-    if (evtEl) {
-      const s = _sessions.find(x => x.id === evtEl.dataset.id);
-      if (s) items.push({ icon: 'ti-copy', label: tt('calendar.ctx_copy','Copy event'),
-        onClick: () => { _clipEvt = s; showCalToast(tt('calendar.ctx_copied','Event copied — right-click a day to paste.')); } });
-    }
     const targetDate = (dayEl || evtEl?.closest('.mc-day'))?.dataset.date;
+    const evtSess = evtEl ? _sessions.find(x => x.id === evtEl.dataset.id) : null;
+    // Si el click derecho cae sobre un evento seleccionado, el menú actúa sobre TODA la
+    // selección: es lo que el usuario acaba de armar y lo que ve resaltado.
+    const selList = _sessions.filter(x => _selIds.has(x.id));
+    const onSelected = !!(evtSess && _selIds.has(evtSess.id)) && selList.length > 1;
+    if (onSelected) {
+      items.push({ icon: 'ti-copy', label: tt('calendar.ctx_copy_selected','Copy {n} selected events',{n:selList.length}),
+        onClick: () => copySelectionToClip() });
+      items.push({ icon: 'ti-square-off', label: tt('calendar.ctx_clear_selection','Clear selection'),
+        onClick: () => clearEvtSelection() });
+    } else if (evtSess) {
+      items.push({ icon: 'ti-copy', label: tt('calendar.ctx_copy','Copy event'),
+        onClick: () => copyEvtsToClip([evtSess]) });
+      items.push({ icon: _selIds.has(evtSess.id) ? 'ti-square-minus' : 'ti-square-check',
+        label: _selIds.has(evtSess.id) ? tt('calendar.ctx_unselect','Remove from selection') : tt('calendar.ctx_select','Add to selection'),
+        onClick: () => { _selMode = true; toggleEvtSelection(evtSess.id); renderSelBar(); } });
+    }
     if (targetDate) {
+      // Copiar / seleccionar el día entero: el caso real es llevarse la jornada completa a otro día.
+      const dayEvts = visibleEvtsOnDate(targetDate);
+      if (dayEvts.length) {
+        items.push({ sep: true });
+        items.push({ icon: 'ti-copy', label: tt('calendar.ctx_copy_day','Copy the whole day'),
+          sub: String(dayEvts.length),
+          onClick: () => { clearEvtSelection(); copyEvtsToClip(dayEvts); } });
+        items.push({ icon: 'ti-select-all', label: tt('calendar.ctx_select_day','Select the whole day'),
+          sub: String(dayEvts.length),
+          onClick: () => addEvtsToSelection(dayEvts) });
+      }
       if (items.length) items.push({ sep: true });
-      const clipName = _clipEvt ? (_clipEvt.title || evtTypeLabel(_clipEvt.session_type) || tt('calendar.filter_training','Training')) : '';
+      // Lo que hay seleccionado se pega sin pasar por «Copiar»: seleccionar y pegar en el día
+      // destino es el camino corto, y obligar a copiar antes era un paso que nadie entendía.
+      // La selección no se suelta al pegar, así que la misma tanda se puede repartir en varios días.
+      const toPaste = selList.length ? selList : _clipEvts;
+      const clipName = toPaste.length === 1 ? evtShortName(toPaste[0]) : '';
       items.push({ icon: 'ti-clipboard-plus',
-        label: _clipEvt ? tt('calendar.ctx_paste_named','Paste «{name}» here',{name:clipName}) : tt('calendar.ctx_paste_empty','Paste here'),
-        sub: _clipEvt ? '' : tt('calendar.ctx_nothing_copied','nothing copied'),
-        disabled: !_clipEvt,
-        onClick: () => { if (_clipEvt) pasteEvtToDate(_clipEvt, targetDate); } });
+        label: !toPaste.length ? tt('calendar.ctx_paste_empty','Paste here')
+             : toPaste.length === 1 ? tt('calendar.ctx_paste_named','Paste «{name}» here',{name:clipName})
+             : tt('calendar.ctx_paste_n','Paste {n} events here',{n:toPaste.length}),
+        sub: toPaste.length ? '' : tt('calendar.ctx_nothing_copied','nothing copied'),
+        disabled: !toPaste.length,
+        onClick: () => { if (toPaste.length) pasteEvtsToDate(toPaste, targetDate); } });
       // Día libre y limpieza de overrides viejos: antes vivían en el menú del chip MD, que
       // ahora es de solo lectura (el MD se define en la planificación del día).
       const _dayOff = _sessions.some(s => s.session_date === targetDate && _isFullDayOff(s));
@@ -739,7 +893,10 @@ function ensureCtxMenu(grid) {
   document.addEventListener('click', e => {
     if (_ctxMenu.style.display !== 'none' && !_ctxMenu.contains(e.target)) closeCtxMenu();
   });
-  document.addEventListener('scroll', () => closeCtxMenu(), true);
+  document.addEventListener('scroll', () => {
+    if (Date.now() - _ctxOpenedAt < 250) return;
+    closeCtxMenu();
+  }, true);
   document.addEventListener('keydown', e => { if (e.key === 'Escape') closeCtxMenu(); });
 }
 
@@ -755,6 +912,7 @@ function openCtxMenu(pageX, pageY, items) {
     if (it && !it.disabled) b.addEventListener('click', ev => { ev.stopPropagation(); closeCtxMenu(); it.onClick(); });
   });
   _ctxMenu.style.display = 'block';
+  _ctxOpenedAt = Date.now();
   const mw = _ctxMenu.offsetWidth, mh = _ctxMenu.offsetHeight;
   let left = pageX, top = pageY;
   if (left + mw > window.scrollX + window.innerWidth)  left = window.scrollX + window.innerWidth - mw - 8;
@@ -765,57 +923,73 @@ function openCtxMenu(pageX, pageY, items) {
 
 function closeCtxMenu() { if (_ctxMenu) _ctxMenu.style.display = 'none'; }
 
+// Pegar varios en un día: un solo refresco y un solo toast al final, aunque sean diez.
+// El sort_order se lleva contado a mano porque _sessions todavía no vio las filas nuevas y,
+// sin eso, todas las copias sin hora caerían en la misma posición.
+async function pasteEvtsToDate(clips, newDate) {
+  const list = (clips || []).filter(Boolean);
+  if (!list.length || !newDate) return;
+  const clubId = _clubId || await window.getClubId();
+  let sortNext = _sessions.filter(s => s.session_date === newDate && !s.start_time).length;
+  let ok = 0, firstErr = null;
+  for (const clip of list) {
+    try {
+      await pasteOneEvtToDate(clip, newDate, clubId, clip.start_time ? null : sortNext++);
+      ok++;
+    } catch (e) {
+      if (!firstErr) firstErr = e.message || e;
+    }
+  }
+  if (ok) showCalToast(ok === 1
+    ? tt('calendar.ctx_pasted','Event pasted.')
+    : tt('calendar.ctx_pasted_n','{n} events pasted.',{n:ok}));
+  if (firstErr) showCalToast(tt('calendar.error_prefix','Error: {msg}',{msg:firstErr}));
+  await loadSessions();
+  await refreshRibbonMatches();
+}
+
 // Paste = insert a standalone copy of the source row on `newDate`. Re-fetches the
 // full row so every column carries over faithfully; strips identity/link/feedback
 // columns and detaches from any recurrence series.
-async function pasteEvtToDate(clip, newDate) {
-  if (!clip || !newDate) return;
-  const clubId = _clubId || await window.getClubId();
-  try {
-    if (clip.source === 'event') {
-      const { data: row, error: fe } = await window.sb.from('calendar_events').select('*').eq('id', clip.id).single();
-      if (fe || !row) throw new Error(fe?.message || 'Source not found.');
-      const payload = { ...row };
-      delete payload.id; delete payload.created_at; delete payload.updated_at;
-      payload.date = newDate;
-      payload.recurrence_group_id = null;
-      payload.published = false;
-      // El MD era el del día viejo: se vuelve a poner en el evento si corresponde.
-      if ('match_day_offset' in payload && payload.type !== 'match') payload.match_day_offset = null;
-      payload.club_id = clubId;
-      payload.team_id = _activeTeamId;
-      payload.sort_order = payload.start_time ? null : _sessions.filter(s => s.session_date === newDate && !s.start_time).length;
-      const { error } = await window.sb.from('calendar_events').insert(payload);
-      if (error) throw error;
-      // Day off parcial pegado en otra fecha → marcar libres también ahí
-      if (payload.type === 'day_off' && Array.isArray(payload.player_ids) && payload.player_ids.length) {
-        await calSyncDayOffAvail(null, { date: newDate, ids: payload.player_ids });
-      }
-    } else {
-      const { data: row, error: fe } = await window.sb.from('training_sessions').select('*').eq('id', clip.id).single();
-      if (fe || !row) throw new Error(fe?.message || 'Source not found.');
-      const payload = { ...row };
-      delete payload.id; delete payload.created_at; delete payload.updated_at;
-      delete payload.external_activity_id;  // GPS link is 1:1 (unique) — never copy it
-      delete payload.rpe_avg;               // real feedback belongs to the original session
-      // El MD es del día, no de la sesión: pegada en otra fecha se recalcula (la planificación
-      // del día la vuelve a completar). Si no, el MD viejo viaja y el calendario muestra una
-      // segunda dinámica que no existe. El partido sí conserva su 'MD'.
-      if (payload.session_type !== 'match') payload.match_day_offset = null;
-      payload.session_date = newDate;
-      payload.recurrence_group_id = null;
-      payload.published = false;
-      payload.club_id = clubId;
-      payload.team_id = _activeTeamId;
-      payload.sort_order = payload.session_time ? null : _sessions.filter(s => s.session_date === newDate && !s.start_time).length;
-      const { error } = await window.sb.from('training_sessions').insert(payload);
-      if (error) throw error;
+async function pasteOneEvtToDate(clip, newDate, clubId, sortOrder) {
+  if (clip.source === 'event') {
+    const { data: row, error: fe } = await window.sb.from('calendar_events').select('*').eq('id', clip.id).single();
+    if (fe || !row) throw new Error(fe?.message || 'Source not found.');
+    const payload = { ...row };
+    delete payload.id; delete payload.created_at; delete payload.updated_at;
+    payload.date = newDate;
+    payload.recurrence_group_id = null;
+    payload.published = false;
+    // El MD era el del día viejo: se vuelve a poner en el evento si corresponde.
+    if ('match_day_offset' in payload && payload.type !== 'match') payload.match_day_offset = null;
+    payload.club_id = clubId;
+    payload.team_id = _activeTeamId;
+    payload.sort_order = payload.start_time ? null : sortOrder;
+    const { error } = await window.sb.from('calendar_events').insert(payload);
+    if (error) throw error;
+    // Day off parcial pegado en otra fecha → marcar libres también ahí
+    if (payload.type === 'day_off' && Array.isArray(payload.player_ids) && payload.player_ids.length) {
+      await calSyncDayOffAvail(null, { date: newDate, ids: payload.player_ids });
     }
-    showCalToast(tt('calendar.ctx_pasted','Event pasted.'));
-    await loadSessions();
-    await refreshRibbonMatches();
-  } catch (e) {
-    showCalToast(tt('calendar.error_prefix','Error: {msg}',{msg:e.message || e}));
+  } else {
+    const { data: row, error: fe } = await window.sb.from('training_sessions').select('*').eq('id', clip.id).single();
+    if (fe || !row) throw new Error(fe?.message || 'Source not found.');
+    const payload = { ...row };
+    delete payload.id; delete payload.created_at; delete payload.updated_at;
+    delete payload.external_activity_id;  // GPS link is 1:1 (unique) — never copy it
+    delete payload.rpe_avg;               // real feedback belongs to the original session
+    // El MD es del día, no de la sesión: pegada en otra fecha se recalcula (la planificación
+    // del día la vuelve a completar). Si no, el MD viejo viaja y el calendario muestra una
+    // segunda dinámica que no existe. El partido sí conserva su 'MD'.
+    if (payload.session_type !== 'match') payload.match_day_offset = null;
+    payload.session_date = newDate;
+    payload.recurrence_group_id = null;
+    payload.published = false;
+    payload.club_id = clubId;
+    payload.team_id = _activeTeamId;
+    payload.sort_order = payload.session_time ? null : sortOrder;
+    const { error } = await window.sb.from('training_sessions').insert(payload);
+    if (error) throw error;
   }
 }
 
@@ -3117,9 +3291,9 @@ document.getElementById('calRibbonReset')?.addEventListener('click', () => {
 
 // ── Filter pills ──────────────────────────────────────────────
 document.querySelectorAll('.cal-filters').forEach(bar => {
-  bar.querySelectorAll('.cal-filter-pill').forEach(p => {
+  bar.querySelectorAll('.cal-filter-pill[data-filter]').forEach(p => {
     p.addEventListener('click', () => {
-      bar.querySelectorAll('.cal-filter-pill').forEach(o => o.classList.remove('is-on'));
+      bar.querySelectorAll('.cal-filter-pill[data-filter]').forEach(o => o.classList.remove('is-on'));
       p.classList.add('is-on');
       const txt = p.dataset.filter || 'all';
       _filterType = txt === 'all' ? 'all' : txt;

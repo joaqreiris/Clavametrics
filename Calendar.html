@@ -969,6 +969,33 @@
   .mc-day.drag-target { outline: 2px solid var(--cm-accent); outline-offset: -2px; background: color-mix(in srgb, var(--cm-accent) 5%, transparent); transition: outline 80ms, background 80ms; }
   .mc-day.drag-target-warn { outline-color: var(--cm-warning); background: color-mix(in srgb, var(--cm-warning) 5%, transparent); }
 
+  /* Selección múltiple de eventos (copiar varios / todo el día a otro día) */
+  .mc-evt.is-selected {
+    outline: 2px solid var(--cm-accent);
+    outline-offset: -2px;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--cm-accent) 18%, transparent);
+  }
+  .mc-days.is-selecting .mc-evt[data-id] { cursor: copy; }
+  .cal-selbar {
+    position: fixed; z-index: 2100;
+    left: 50%; bottom: 22px; transform: translateX(-50%) translateY(12px);
+    display: none; align-items: center; gap: 10px;
+    padding: 8px 10px 8px 14px;
+    background: var(--cm-surface); border: 1px solid var(--cm-border);
+    border-radius: 999px; box-shadow: 0 12px 34px rgba(0,0,0,0.22);
+    opacity: 0; transition: opacity 140ms, transform 140ms;
+  }
+  .cal-selbar.is-show { display: flex; opacity: 1; transform: translateX(-50%) translateY(0); }
+  .cal-selbar-count { font: 600 12px/1 var(--cm-font-sans); color: var(--cm-fg); white-space: nowrap; }
+  .cal-selbar-hint  { font: 500 11px/1 var(--cm-font-sans); color: var(--cm-fg-faint); white-space: nowrap; }
+  .cal-selbar-sep   { width: 1px; height: 20px; background: var(--cm-border-soft); }
+  /* En tablet angosto el hint es lo primero que sobra: en es/pt la frase es ~25% más larga
+     y la barra se iría del ancho de la pantalla. */
+  @media (max-width: 900px) {
+    .cal-selbar { max-width: calc(100vw - 24px); }
+    .cal-selbar-hint, .cal-selbar-sep { display: none; }
+  }
+
   /* Workload chart */
   .wk-chart { padding:14px 16px 18px; }
   .wk-rows { display:flex; gap:5px; align-items:end; height:130px; margin-bottom:12px; }
@@ -1497,6 +1524,7 @@
             <button class="cal-filter-pill" data-filter="match"><span class="dot" style="background:var(--cm-danger)"></span><span data-i18n="calendar.filter_match">Match</span></button>
             <button class="cal-filter-pill" data-filter="recovery"><span class="dot" style="background:var(--cm-success)"></span><span data-i18n="calendar.filter_recovery">Recovery</span></button>
             <button class="cal-filter-pill" data-filter="travel"><span class="dot" style="background:#06B6D4"></span><span data-i18n="calendar.filter_travel">Travel</span></button>
+            <button class="cal-filter-pill" id="calSelectModeBtn" style="margin-left:auto" data-i18n-attr="title:calendar.sel_mode_hint" title="Tap events to select them, then copy them to another day"><i class="ti ti-select-all" style="font-size:13px"></i><span data-i18n="calendar.sel_mode">Select</span></button>
           </div>
 
           <!-- Days grid: Sun 11 → Sat 17 (week 1, today is Fri 16) -->
@@ -2125,6 +2153,14 @@
       <button class="cm-btn is-primary is-sm" id="calEvtSave" data-i18n="common.save">Save</button>
     </div>
   </div>
+</div>
+<div class="cal-selbar" id="calSelBar">
+  <span class="cal-selbar-count" id="calSelBarCount">0</span>
+  <span class="cal-selbar-hint" id="calSelBarHint" data-i18n="calendar.sel_hint">right-click a day to paste</span>
+  <span class="cal-selbar-sep"></span>
+  <button class="cm-btn is-sm" id="calSelCopy"><i class="ti ti-copy" style="font-size:14px"></i> <span data-i18n="calendar.sel_copy">Copy</span></button>
+  <button class="cm-btn is-ghost is-sm" id="calSelAll" data-i18n="calendar.sel_all">Select all</button>
+  <button class="cm-btn is-ghost is-sm" id="calSelClear" data-i18n="calendar.sel_clear">Cancel</button>
 </div>
 <div class="sq-toast" id="calToast"></div>
 
