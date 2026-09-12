@@ -12,6 +12,11 @@ const MC = {
   color: '#C9A84C',
 };
 
+// El calendario dibuja UNA COLUMNA POR DÍA DEL MICROCICLO, no una semana fija: se calcula del MC
+// de prueba para que cambiarle las fechas no rompa los tests.
+const DIAS_MC = Math.round(
+  (Date.parse(MC.end_date) - Date.parse(MC.start_date)) / 86400000) + 1;
+
 const SESSION = {
   id: 'sess-1', name: '8vs8', date: '2026-05-15',
   focus: 'Technical', duration: 90, notes: 'Test notes',
@@ -50,12 +55,17 @@ async function mockSupabase(page, opts = {}) {
   await page.route(`${SB}/rest/v1/**`, async route => {
     const url    = route.request().url();
     const method = route.request().method();
+    // .single() pide el objeto solo (Accept: …pgrst.object+json) y un array le da error.
+    // getClubId() resuelve el club así: devolviéndole el array quedaba en null, y sin club la
+    // página no consulta nada y el calendario se dibuja sin días.
+    const uno = (obj) => route.fulfill({
+      json: (route.request().headers()['accept'] || '').includes('pgrst.object') ? obj : [obj] });
 
     if (url.includes('/profiles'))
-      return route.fulfill({ json: [{ id: 'user-1', club_id: 'club-1', name: 'Test User', role: 'coach', club_role: 'Head Coach' }] });
+      return uno({ id: 'user-1', club_id: 'club-1', name: 'Test User', role: 'coach', club_role: 'Head Coach' });
 
     if (url.includes('/clubs'))
-      return route.fulfill({ json: [{ id: 'club-1', name: 'Test FC', accent_color: '#3B82F6' }] });
+      return uno({ id: 'club-1', name: 'Test FC', accent_color: '#3B82F6' });
 
     if (url.includes('/microcycles'))
       return route.fulfill({ json: mcs });
@@ -90,9 +100,9 @@ async function gotoCalendar(page, opts = {}) {
 // ── 1. RENDER ─────────────────────────────────────────────────────────────────
 
 test.describe('Render', () => {
-  test('renders 7 day columns', async ({ page }) => {
+  test('una columna por día del microciclo', async ({ page }) => {
     await gotoCalendar(page);
-    await expect(page.locator('.mc-day')).toHaveCount(7);
+    await expect(page.locator('.mc-day')).toHaveCount(DIAS_MC);
   });
 
   test('shows MC name in card header', async ({ page }) => {
@@ -143,7 +153,7 @@ test.describe('Render', () => {
 
   test('"+ Add" button exists in every day column', async ({ page }) => {
     await gotoCalendar(page);
-    await expect(page.locator('[data-add-date]')).toHaveCount(7);
+    await expect(page.locator('[data-add-date]')).toHaveCount(DIAS_MC);
   });
 });
 
@@ -553,5 +563,122 @@ test.describe('API errors', () => {
     await mockSupabase(page, { mcs: [] });
     await page.goto('/Calendar.html');
     await expect(page.locator('#calDaysGrid')).toContainText('No microcycles found', { timeout: 8000 });
+  });
+});
+
+// ── 12. COPIAR VARIOS EVENTOS ─────────────────────────────────────────────────
+// Antes solo se podía copiar de uno en uno. Lo que se prueba acá es lo que pedía el uso real:
+// llevarse la jornada entera (o una selección a mano) a otro día en una sola pegada.
+
+test.describe('Copia múltiple', () => {
+  // Fixtures con las columnas REALES de training_sessions (session_date/title/session_type):
+  // el fixture SESSION de arriba viene del esquema viejo y no cae en ningún día.
+  const BASE = { duration: 90, notes: null, sort_order: 0, estimated_rpe: 5,
+                 session_time: null, visible_to: ['staff'], recurrence_group_id: null,
+                 match_day_offset: null, club_id: 'club-1' };
+  const S1 = { ...BASE, id: 'sess-1', title: 'Activación', session_type: 'training', session_date: '2026-05-15', sort_order: 0 };
+  const S2 = { ...BASE, id: 'sess-2', title: 'Gimnasio',   session_type: 'gym',      session_date: '2026-05-15', sort_order: 1 };
+
+  /** Devuelve los POST a training_sessions que hizo la página. */
+  async function conDosSesiones(page) {
+    const posts = [];
+    await injectSession(page);
+    await mockSupabase(page, { sessions: [S1, S2] });
+    // El pegado relee la fila de origen con .single(): sin el objeto suelto tira
+    // "Source not found" y no llega a insertar nada.
+    await page.route(`${SB}/rest/v1/calendar_events**`, route => route.fulfill({ json: [] }));
+    await page.route(`${SB}/rest/v1/training_sessions**`, async route => {
+      const req = route.request();
+      if (req.method() === 'POST') {
+        posts.push(JSON.parse(req.postData() || '{}'));
+        return route.fulfill({ status: 201, json: [{ ...S1, id: 'new-' + posts.length }] });
+      }
+      if (req.method() === 'GET') {
+        const single = (req.headers()['accept'] || '').includes('pgrst.object');
+        if (single) {
+          const id = decodeURIComponent(req.url()).includes('sess-2') ? S2 : S1;
+          return route.fulfill({ json: id });
+        }
+        return route.fulfill({ json: [S1, S2] });
+      }
+      await route.continue();
+    });
+    await page.goto('/Calendar.html');
+    await page.waitForSelector('.mc-day');
+    return posts;
+  }
+
+  const dia = (d) => `.mc-day[data-date="${d}"]`;
+
+  test('el menú del día copia los dos eventos de una', async ({ page }) => {
+    await conDosSesiones(page);
+    await page.locator(`${dia('2026-05-15')} .mc-day-head`).click({ button: 'right' });
+    await page.locator('.cal-ctx-opt', { hasText: 'Copy the whole day' }).click();
+    await expect(page.locator('#calToast')).toContainText('2 events copied');
+  });
+
+  test('pegar en otro día inserta los dos, con sort_order distinto', async ({ page }) => {
+    const posts = await conDosSesiones(page);
+    await page.locator(`${dia('2026-05-15')} .mc-day-head`).click({ button: 'right' });
+    await page.locator('.cal-ctx-opt', { hasText: 'Copy the whole day' }).click();
+
+    await page.locator(`${dia('2026-05-17')} .mc-day-head`).click({ button: 'right' });
+    await page.locator('.cal-ctx-opt', { hasText: 'Paste 2 events here' }).click();
+
+    await expect(page.locator('#calToast')).toContainText('2 events pasted');
+    expect(posts).toHaveLength(2);
+    expect(posts.map(p => p.session_date)).toEqual(['2026-05-17', '2026-05-17']);
+    // Las dos copias sin hora no pueden caer en la misma posición del día.
+    expect(new Set(posts.map(p => p.sort_order)).size).toBe(2);
+    // El origen nunca viaja: ni el id, ni el vínculo con GPS, ni el RPE real.
+    for (const p of posts) {
+      expect(p.id).toBeUndefined();
+      expect(p.external_activity_id).toBeUndefined();
+      expect(p.published).toBe(false);
+    }
+  });
+
+  test('Shift+click selecciona varios y la barra los cuenta', async ({ page }) => {
+    await conDosSesiones(page);
+    const evts = page.locator(`${dia('2026-05-15')} .mc-evt[data-id]`);
+    await evts.nth(0).click({ modifiers: ['Shift'] });
+    await evts.nth(1).click({ modifiers: ['Shift'] });
+
+    await expect(page.locator('#calSelBar')).toHaveClass(/is-show/);
+    await expect(page.locator('#calSelBarCount')).toContainText('2 events selected');
+    await expect(page.locator('.mc-evt.is-selected')).toHaveCount(2);
+    // Seleccionar no abre la ficha del evento: si la abriera, el segundo click nunca llega.
+    await expect(page.locator('#calEvtBackdrop')).not.toHaveClass(/is-open/);
+  });
+
+  test('copiar la selección desde la barra y pegarla en otro día', async ({ page }) => {
+    const posts = await conDosSesiones(page);
+    const evts = page.locator(`${dia('2026-05-15')} .mc-evt[data-id]`);
+    await evts.nth(0).click({ modifiers: ['Shift'] });
+    await evts.nth(1).click({ modifiers: ['Shift'] });
+    await page.click('#calSelCopy');
+    // Copiar suelta la selección: la próxima empieza limpia.
+    await expect(page.locator('.mc-evt.is-selected')).toHaveCount(0);
+
+    await page.locator(`${dia('2026-05-18')} .mc-day-head`).click({ button: 'right' });
+    await page.locator('.cal-ctx-opt', { hasText: 'Paste 2 events here' }).click();
+    expect(posts.map(p => p.session_date)).toEqual(['2026-05-18', '2026-05-18']);
+  });
+
+  test('el modo selección convierte el tap en selección (tablet)', async ({ page }) => {
+    await conDosSesiones(page);
+    await page.click('#calSelectModeBtn');
+    await page.locator(`${dia('2026-05-15')} .mc-evt[data-id]`).first().click();
+    await expect(page.locator('#calSelBarCount')).toContainText('1 event selected');
+    // Cancelar deja el grid como estaba.
+    await page.click('#calSelClear');
+    await expect(page.locator('#calSelBar')).not.toHaveClass(/is-show/);
+    await expect(page.locator('.mc-evt.is-selected')).toHaveCount(0);
+  });
+
+  test('sin nada copiado, pegar está deshabilitado', async ({ page }) => {
+    await conDosSesiones(page);
+    await page.locator(`${dia('2026-05-17')} .mc-day-head`).click({ button: 'right' });
+    await expect(page.locator('.cal-ctx-opt', { hasText: 'Paste here' })).toBeDisabled();
   });
 });
