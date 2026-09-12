@@ -253,10 +253,10 @@ test.describe('Register — Render', () => {
     await page.goto('/Register.html');
   });
 
-  test('shows club name, country, org-size fields', async ({ page }) => {
+  test('shows club name and country fields', async ({ page }) => {
     await expect(page.locator('#club-name')).toBeVisible();
     await expect(page.locator('#country')).toBeVisible();
-    await expect(page.locator('#org-size')).toBeVisible();
+    // El campo de tamaño de organización (#org-size) ya no está en Register.html.
   });
 
   test('shows personal info fields', async ({ page }) => {

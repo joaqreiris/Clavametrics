@@ -70,8 +70,9 @@ test.describe('Availability — Stats · evolución', () => {
     const cells = page.locator('#aev-c-grid .hm-cell:not(.empty)');
     expect(await cells.count()).toBeGreaterThan(0);
 
-    // Leyenda de estados poblada (6 ítems)
-    await expect(page.locator('#aev-legend .it')).toHaveCount(6);
+    // Leyenda de estados poblada. Son 7, no 6: el STATUS de availability-evolution-bc.js sumó
+    // "Other team" (otro) a los seis originales.
+    await expect(page.locator('#aev-legend .it')).toHaveCount(7);
   });
 
   test('NO queda el área-chart Chart.js de evolución (lo reemplazamos)', async ({ page }) => {
@@ -105,15 +106,14 @@ test.describe('Availability — Stats · evolución', () => {
     await gotoStats(page);
 
     const cells = page.locator('#aev-c-grid .hm-cell:not(.empty)');
-    const segs  = page.locator('#aevRangeSegs .aev-seg');
 
-    // Microciclo activo por defecto (8 días)
-    await expect(segs.filter({ hasText: 'Microciclo' })).toHaveClass(/is-on/);
-    await expect(cells).toHaveCount(8);
+    // El rango ya no son segmentos inline con data-range (`#aevRangeSegs`, que no existe más):
+    // es el menú desplegable del encabezado. La conducta que importa es la misma — elegir un
+    // rango recorta la serie — así que se prueba esa y no el resaltado del control.
+    await expect(cells).toHaveCount(8);   // microciclo por defecto (8 días)
 
-    // Click en "1 semana" desde la propia barra de Stats → 7 días + resaltado
-    await page.click('#aevRangeSegs .aev-seg[data-range="7"]');
+    await page.click('#avMcPickerName');
+    await page.click('#avRangeMenu .av-range-opt[onclick*="avSetPreset(\'7\')"]');
     await expect(cells).toHaveCount(7);
-    await expect(page.locator('#aevRangeSegs .aev-seg[data-range="7"]')).toHaveClass(/is-on/);
   });
 });
