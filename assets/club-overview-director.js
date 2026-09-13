@@ -350,10 +350,16 @@
     // una lesión vieja que sigue abierta.
     const injQ = sb().from('injuries').select('id,player_id,body_area,severity,status,start_date,expected_return,returned_date,injury_category,injury_mechanism,mechanism,injury_type')
       .eq('club_id', cid).or('returned_date.is.null,returned_date.gte.' + from);
-    const plQ = sb().from('players').select('id,first_name,last_name,position,positions,team_id,date_of_birth').eq('club_id', cid).is('archived_at', null);
+    const plQ = sb().from('players').select('id,first_name,last_name,position,positions,team_id,date_of_birth,status').eq('club_id', cid).is('archived_at', null);
     const ptQ = sb().from('player_teams').select('player_id,team_id').eq('club_id', cid);
-    const [sessions, avail, rpe, wellness, injuries, players, pteams] =
-      await Promise.all([run(sessQ), run(avQ), run(rpeQ), run(wellQ), run(injQ), run(plQ), run(ptQ)]);
+    /* Convocatoria y exenciones: sin estas dos, el cumplimiento de RPE espera al plantel
+       ENTERO en cada sesión, y una sesión de gimnasio de seis jugadores cuenta como si
+       hubieran faltado treinta y dos. Son las mismas dos tablas que mira session_rpe_status
+       (db/schema.sql), que es la definición que ya usa la pantalla de RPE. */
+    const spQ = sb().from('session_participants').select('session_id,player_id').eq('club_id', cid);
+    const exQ = sb().from('rpe_exemptions').select('session_id,player_id,kind').eq('club_id', cid);
+    const [sessions, avail, rpe, wellness, injuries, players, pteams, sparts, exempts] =
+      await Promise.all([run(sessQ), run(avQ), run(rpeQ), run(wellQ), run(injQ), run(plQ), run(ptQ), run(spQ), run(exQ)]);
     const pmap = {}; (players || []).forEach(p => { pmap[String(p.id)] = p; });
     // Un jugador puede estar en varios equipos (player_teams) y además tener players.team_id.
     // Para atribuir una lesión o una edad a UN equipo hace falta un dueño único: gana
@@ -364,7 +370,15 @@
     const rosterOf = {};
     (pteams || []).forEach(r => { (rosterOf[r.team_id] = rosterOf[r.team_id] || new Set()).add(String(r.player_id)); });
     (players || []).forEach(p => { if (p.team_id) (rosterOf[p.team_id] = rosterOf[p.team_id] || new Set()).add(String(p.id)); });
-    const out = { from, to, sessions, avail, rpe, wellness, injuries, players, pteams, pmap, teamOf, rosterOf };
+    // Índices para el cumplimiento de RPE: convocados por sesión, exentos por sesión y
+    // estados de disponibilidad por día, todos como Set/Map para no recorrer arrays por sesión.
+    const partsOf = {};
+    (sparts || []).forEach(r => { (partsOf[r.session_id] = partsOf[r.session_id] || new Set()).add(String(r.player_id)); });
+    const exemptOf = {};
+    (exempts || []).forEach(r => { if (r.kind === 'not_required') (exemptOf[r.session_id] = exemptOf[r.session_id] || new Set()).add(String(r.player_id)); });
+    const availOf = {};
+    (avail || []).forEach(a => { (availOf[a.date] = availOf[a.date] || []).push(a); });
+    const out = { from, to, sessions, avail, rpe, wellness, injuries, players, pteams, pmap, teamOf, rosterOf, partsOf, exemptOf, availOf };
     S.cache[key] = out; return out;
   }
 
@@ -432,20 +446,74 @@
     return { pct: pct(n - out, n), limPct: pct(lim, n), records: n, days: days };
   }
 
-  // Cumplimiento de RPE: misma lógica que la pestaña Semana — se esperan tantas respuestas
-  // como jugadores en el plantel del equipo de la sesión, y los partidos no cuentan.
+  /* ── CUMPLIMIENTO DE RPE ───────────────────────────────────────────────────
+     Quién se espera en una sesión NO es "el plantel". Es lo que define
+     session_rpe_status (db/schema.sql), la función que ya usa la pantalla de
+     RPE, y acá se replica igual:
+
+       · con convocatoria cargada (session_participants) → sólo los anotados;
+         sin convocatoria → el plantel del equipo
+       · menos quien ese día estaba enfermo, no disponible, con la selección
+         (away) o de día libre — day_off es relativo al equipo
+       · menos las exenciones 'not_required' (hizo sólo gimnasio, diferenciado,
+         permiso). Las 'ignored' SÍ cuentan como no respondido: ahí el
+         incumplimiento es real y no se tapa.
+
+     Y además se separan dos cosas que antes iban sumadas en un solo número:
+
+       · sesiones que RECOGIERON algo (al menos una respuesta) → de ahí sale el
+         cumplimiento, que es la pregunta "¿mis jugadores responden?"
+       · sesiones que no recogieron NADA → eso no es un jugador que no contesta,
+         es un enlace que no se mandó o una sesión que no se hizo. Mezclarlas
+         daba 24% en un club cuyo primer equipo carga RPE en 30 de 31
+         entrenamientos, y el número no significaba ninguna de las dos cosas.   */
+  const RPE_EXEMPT_AV = new Set(['sick', 'unavailable', 'away']);
+  function expectedForSession(core, s) {
+    const out = new Set();
+    const parts = core.partsOf ? core.partsOf[s.id] : null;
+    if (parts && parts.size) parts.forEach(p => out.add(p));
+    else rosterFor(core, s.team_id).forEach(p => out.add(p));
+    if (!out.size) return out;
+    // Fuera los que ese día no se esperaban.
+    const day = (core.availOf && core.availOf[s.session_date]) || [];
+    day.forEach(a => {
+      const pid = String(a.player_id); if (!out.has(pid)) return;
+      const st = (a.status || '').toLowerCase();
+      if (RPE_EXEMPT_AV.has(st)) { out.delete(pid); return; }
+      if (st === 'day_off' && (a.team_id == null || s.team_id == null || a.team_id === s.team_id)) out.delete(pid);
+    });
+    const ex = core.exemptOf ? core.exemptOf[s.id] : null;
+    if (ex) ex.forEach(p => out.delete(p));
+    // Jugadores dados de baja no se esperan (players.status), igual que en session_rpe_status.
+    out.forEach(pid => { const p = core.pmap[pid]; if (p && (p.status || '') === 'inactive') out.delete(pid); });
+    return out;
+  }
   function rpeStats(core, teamIds, from, to) {
     const bySession = {};
     (core.rpe || []).forEach(r => { if (!r.session_id) return; (bySession[r.session_id] = bySession[r.session_id] || new Set()).add(String(r.player_id)); });
-    let exp = 0, got = 0;
+    let exp = 0, got = 0, silentSessions = 0, silentExpected = 0, sessions = 0;
     (core.sessions || []).forEach(s => {
       if (!teamIds.has(s.team_id)) return;
       if ((s.session_type || '').toLowerCase() === 'match') return;
       if (s.session_date < from || s.session_date > to) return;
-      const n = rosterFor(core, s.team_id).size; if (!n) return;
-      exp += n; got += Math.min(n, bySession[s.id] ? bySession[s.id].size : 0);
+      const answered = bySession[s.id];
+      /* La rehab no es sesión de equipo: es trabajo individual de readaptación y nadie manda
+         el enlace de RPE para eso. Contarla como "sin recoger" llenaría el aviso de ruido en
+         cualquier club que planifique readaptación (Clava FC tiene 125 en un año). Si aun así
+         recogió algo, cuenta normal — hay clubes que sí la piden. Mismo criterio que usa el
+         cálculo de exposición para la incidencia de lesiones. */
+      if ((s.session_type || '').toLowerCase() === 'rehab' && (!answered || answered.size === 0)) return;
+      const want = expectedForSession(core, s); if (!want.size) return;
+      sessions++;
+      /* "Sin recoger" es literalmente CERO filas de RPE en la sesión — ahí el enlace no se
+         mandó o la sesión no se hizo. No vale medirlo como "ninguno de los esperados
+         respondió": si el único que cargó fue alguien que ese día figuraba enfermo, la sesión
+         sí recogió, y el 0/N que le corresponde es un incumplimiento real que hay que mostrar. */
+      if (!answered || answered.size === 0) { silentSessions++; silentExpected += want.size; return; }
+      let n = 0; want.forEach(pid => { if (answered.has(pid)) n++; });
+      exp += want.size; got += n;
     });
-    return { pct: pct(got, exp), expected: exp, got: got };
+    return { pct: pct(got, exp), expected: exp, got: got, silentSessions, silentExpected, sessions };
   }
 
   // Respuesta de wellness: partes cargados ÷ (jugadores × días con al menos un parte).
@@ -610,7 +678,10 @@
       kpiCard({
         ic: 'ti-activity', col: 'var(--cm-violet)', bg: 'var(--cm-violet-bg)', lbl: tt('club_overview.k_rpe', 'RPE compliance'),
         val: R.pct == null ? '—' : nf(R.pct, 0), unit: R.pct == null ? '' : '%',
-        sub: deltaChip(cR.pct, pR.pct, { unit: '%' }) + '<span class="co-chip neutral">' + esc(nf(R.got) + '/' + nf(R.expected)) + '</span>',
+        // La pastilla de "sin recoger" es lo que impide leer mal el porcentaje: dice que hay
+        // sesiones que nadie respondió porque a nadie se le preguntó, no porque no contesten.
+        sub: deltaChip(cR.pct, pR.pct, { unit: '%' }) + '<span class="co-chip neutral">' + esc(nf(R.got) + '/' + nf(R.expected)) + '</span>' +
+          (R.silentSessions > 0 ? '<span class="co-chip warn" title="' + esc(tt('co_dir.silent_hint', 'These sessions collected no RPE at all — the link was never sent, or the session did not happen. They are left out of the percentage.')) + '"><i class="ti ti-mail-off"></i>' + esc(nf(R.silentSessions) + ' ' + tt('co_dir.silent_sessions', 'not collected')) + '</span>' : ''),
         spark: sparkline(series.map(s => s.rpe), { color: 'var(--cm-violet)' })
       }),
       kpiCard({
@@ -629,7 +700,7 @@
         id: t.id, name: t.name || '—', category: t.category || '',
         squad: rosterFor(core, t.id).size,
         avail: a.pct, active: i.active, days: i.daysLost,
-        rpe: r.pct, well: w.pct, sessions: s.count, load: s.avgLoad
+        rpe: r.pct, rpeSilent: r.silentSessions, well: w.pct, sessions: s.count, load: s.avgLoad
       };
     });
     const sort = S.sort.cmp;
@@ -657,14 +728,15 @@
       const rpeCls = r.rpe == null ? 'neutral' : r.rpe >= 85 ? 'good' : r.rpe >= 60 ? 'warn' : 'bad';
       const wellCls = r.well == null ? 'neutral' : r.well >= 80 ? 'good' : r.well >= 50 ? 'warn' : 'bad';
       return '<tr><th scope="row"><div class="cod-tname"><span class="cod-tn">' + esc(r.name) + '</span>' + (r.category ? '<span class="cod-tc">' + esc(r.category) + '</span>' : '') + '</div></th>' +
-        '<td class="num">' + esc(nf(r.squad)) + '</td>' +
-        '<td class="num"><span class="co-chip ' + availCls + '">' + esc(fmtPct(r.avail)) + '</span></td>' +
-        '<td class="num">' + (r.active ? '<span class="co-chip bad">' + esc(nf(r.active)) + '</span>' : '<span class="cod-zero">0</span>') + '</td>' +
-        '<td class="num">' + esc(nf(r.days)) + '</td>' +
-        '<td class="num"><span class="co-chip ' + rpeCls + '">' + esc(fmtPct(r.rpe)) + '</span></td>' +
-        '<td class="num"><span class="co-chip ' + wellCls + '">' + esc(fmtPct(r.well)) + '</span></td>' +
-        '<td class="num">' + esc(nf(r.sessions)) + '</td>' +
-        '<td class="num">' + (r.load == null ? '—' : esc(nf(r.load)) + '<small> AU</small>') + '</td></tr>';
+        '<td class="num" data-col="squad">' + esc(nf(r.squad)) + '</td>' +
+        '<td class="num" data-col="avail"><span class="co-chip ' + availCls + '">' + esc(fmtPct(r.avail)) + '</span></td>' +
+        '<td class="num" data-col="active">' + (r.active ? '<span class="co-chip bad">' + esc(nf(r.active)) + '</span>' : '<span class="cod-zero">0</span>') + '</td>' +
+        '<td class="num" data-col="days">' + esc(nf(r.days)) + '</td>' +
+        '<td class="num" data-col="rpe"><span class="co-chip ' + rpeCls + '">' + esc(fmtPct(r.rpe)) + '</span>' +
+          (r.rpeSilent > 0 ? '<div class="cod-subnum" title="' + esc(tt('co_dir.silent_hint', 'These sessions collected no RPE at all.')) + '">' + esc(nf(r.rpeSilent) + ' ' + tt('co_dir.silent_short', 'not collected')) + '</div>' : '') + '</td>' +
+        '<td class="num" data-col="well"><span class="co-chip ' + wellCls + '">' + esc(fmtPct(r.well)) + '</span></td>' +
+        '<td class="num" data-col="sessions">' + esc(nf(r.sessions)) + '</td>' +
+        '<td class="num" data-col="load">' + (r.load == null ? '—' : esc(nf(r.load)) + '<small> AU</small>') + '</td></tr>';
     }).join('') : '';
 
     root.innerHTML =
@@ -674,7 +746,7 @@
         (tbody
           ? '<div class="cod-tablewrap"><table class="cod-table" id="coCmpTable"><thead><tr>' + thead + '</tr></thead><tbody>' + tbody + '</tbody></table></div>'
           : emptyBlock(tt('co_dir.no_teams_data', 'No data for the teams in this period.'), 'ti-table-off')) +
-        '<div class="cod-foot">' + method(tt('co_dir.m_cmp', 'Availability is the share of recorded player-days where the player was not injured, sick, unavailable or away. Days lost counts every day an injury overlaps this period. RPE and Wellness are submissions received over submissions expected from each team\'s roster.')) + '</div>' +
+        '<div class="cod-foot">' + method(tt('co_dir.m_cmp', 'Availability is the share of recorded player-days where the player was not injured, sick, unavailable or away. Days lost counts every day an injury overlaps this period. RPE expects, per session, the called-up squad (or the roster when no call-up is set), minus anyone sick, unavailable, away or off that day, minus explicit exemptions — the same rule the RPE screen uses. Sessions that collected no RPE at all are reported separately instead of counting as everyone failing to answer.')) + '</div>' +
       '</div>' +
       (SS.count ? '' : hint(tt('co_dir.no_sessions_hint', 'No sessions in this period — load, RPE and wellness columns will stay empty until the week is planned.')));
 
@@ -983,6 +1055,12 @@
       if (!ss.count) gaps.push({ k: 'warn', i: 'ti-calendar-off', t: t.name, d: tt('co_dir.gap_nosess', 'No sessions planned in this period.') });
       const rr = rpeStats(core, one, from, to);
       if (rr.expected > 0 && rr.pct != null && rr.pct < 50) gaps.push({ k: 'warn', i: 'ti-activity', t: t.name, d: tt('co_dir.gap_rpe', 'RPE compliance below 50%.') });
+      /* El hueco más accionable de los dos: una sesión que no recogió NADA no es un problema
+         de los jugadores, es un enlace que no se mandó. Se avisa a partir de un tercio de las
+         sesiones para no ensuciar con el club que hace gimnasio sin pedir RPE a propósito. */
+      if (rr.silentSessions > 0 && rr.sessions > 0 && (rr.silentSessions / rr.sessions) >= 0.34) {
+        gaps.push({ k: 'warn', i: 'ti-mail-off', t: t.name, d: tt('co_dir.gap_silent', '{n} of {m} sessions collected no RPE at all.').replace('{n}', nf(rr.silentSessions)).replace('{m}', nf(rr.sessions)) });
+      }
     });
     const noEta = (core.injuries || []).filter(i => (i.status === 'active') && !i.expected_return && (!tIds.size || tIds.has(core.teamOf[String(i.player_id)])));
     if (noEta.length) gaps.push({ k: 'warn', i: 'ti-bandage', t: tt('co_dir.gap_eta_t', 'Injuries without an expected return'), d: tt('co_dir.gap_eta', '{n} open cases have no ETA — Return to play cannot rank them.').replace('{n}', nf(noEta.length)) });

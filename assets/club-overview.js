@@ -215,7 +215,12 @@
     let lpQ = sb().from('load_plan').select('plan_date,metric,pct').eq('club_id', cid).gte('plan_date', from).lte('plan_date', to);
     if (state.scopeTeam) { sessQ = sessQ.eq('team_id', state.scopeTeam); mcQ = mcQ.eq('team_id', state.scopeTeam); lpQ = lpQ.eq('team_id', state.scopeTeam); }
     const ptQ = sb().from('player_teams').select('player_id,team_id').eq('club_id', cid);
-    const avQ = sb().from('availability').select('player_id,status,team_id,notes').eq('club_id', cid).eq('date', today);
+    // Antes traía sólo HOY. El cumplimiento de RPE necesita el estado del día de cada sesión
+    // de la semana (quién estaba enfermo, de selección o de día libre), así que se trae el
+    // rango entero y los usos de "hoy" filtran por fecha. Es la misma consulta, no una más.
+    const avQ = sb().from('availability').select('player_id,status,team_id,notes,date').eq('club_id', cid).gte('date', from).lte('date', to);
+    const spQ = sb().from('session_participants').select('session_id,player_id').eq('club_id', cid);
+    const exQ = sb().from('rpe_exemptions').select('session_id,player_id,kind').eq('club_id', cid);
     const rpeQ = sb().from('rpe').select('session_id,player_id,load,session_date').eq('club_id', cid).gte('session_date', from).lte('session_date', to);
     const plQ = sb().from('players').select('id,first_name,last_name,position,team_id').eq('club_id', cid).is('archived_at', null);
     // Lesiones abiertas (para el panel de regreso): club-wide, no acotadas a la semana; scope por equipo client-side.
@@ -224,14 +229,42 @@
     const tzoff = new Date().getTimezoneOffset();
     const wellQ = sb().rpc('wellness_status', { p_club_id: cid, p_team_id: state.scopeTeam || null, p_date: today, p_tz_offset: tzoff });
 
-    const [sessions, cal, micros, pteams, avail, rpe, lplan, players, injuries, wellness] = await Promise.all([run(sessQ), runCal(), run(mcQ), run(ptQ), run(avQ), run(rpeQ), run(lpQ), run(plQ), run(injQ), run(wellQ)]);
+    const [sessions, cal, micros, pteams, availWeek, rpe, lplan, players, injuries, wellness, sparts, exempts] = await Promise.all([run(sessQ), runCal(), run(mcQ), run(ptQ), run(avQ), run(rpeQ), run(lpQ), run(plQ), run(injQ), run(wellQ), run(spQ), run(exQ)]);
+    // `avail` sigue significando HOY para todo lo que ya lo usaba; `availWeek` es el rango.
+    const avail = (availWeek || []).filter(a => a.date === today);
     const isMatch = e => (e.type || '').toLowerCase() === 'match';
     const matches = (cal || []).filter(isMatch);       // subconjunto de partidos (dedup + mdFor)
     const calevents = (cal || []).filter(e => !isMatch(e)); // resto: viajes, comidas, reuniones, etc.
     const pmap = {}; (players || []).forEach(p => { pmap[String(p.id)] = p; });
-    state.data = { sessions, matches, calevents, micros, pteams, avail, rpe, lplan, players, injuries, wellness, pmap, today };
+    const partsOf = {}; (sparts || []).forEach(r => { (partsOf[r.session_id] = partsOf[r.session_id] || new Set()).add(String(r.player_id)); });
+    const exemptOf = {}; (exempts || []).forEach(r => { if (r.kind === 'not_required') (exemptOf[r.session_id] = exemptOf[r.session_id] || new Set()).add(String(r.player_id)); });
+    const availOf = {}; (availWeek || []).forEach(a => { (availOf[a.date] = availOf[a.date] || []).push(a); });
+    state.data = { sessions, matches, calevents, micros, pteams, avail, availWeek, rpe, lplan, players, injuries, wellness, pmap, today, partsOf, exemptOf, availOf };
   }
   function playerName(id) { const p = state.data && state.data.pmap ? state.data.pmap[String(id)] : null; if (!p) return ''; return [p.first_name, p.last_name].filter(Boolean).join(' ').trim() || ''; }
+
+  /* Quién se espera que cargue RPE en una sesión. Replica session_rpe_status (db/schema.sql),
+     que es la definición que usa la pantalla de RPE: la convocatoria si está cargada y si no
+     el plantel, menos quien ese día estaba enfermo / no disponible / con la selección / de día
+     libre, menos las exenciones 'not_required'. Antes se esperaba el plantel entero en TODA
+     sesión, y una de gimnasio de seis jugadores contaba como treinta y dos ausencias. */
+  const RPE_OUT_AV = new Set(['sick', 'unavailable', 'away']);
+  function rpeExpectedFor(s) {
+    const D = state.data, out = new Set();
+    const parts = D.partsOf ? D.partsOf[s.id] : null;
+    if (parts && parts.size) parts.forEach(p => out.add(p));
+    else (D.pteams || []).forEach(p => { if (p.team_id === s.team_id) out.add(String(p.player_id)); });
+    if (!out.size) return out;
+    ((D.availOf && D.availOf[s.session_date]) || []).forEach(a => {
+      const pid = String(a.player_id); if (!out.has(pid)) return;
+      const st = (a.status || '').toLowerCase();
+      if (RPE_OUT_AV.has(st)) { out.delete(pid); return; }
+      if (st === 'day_off' && (a.team_id == null || s.team_id == null || a.team_id === s.team_id)) out.delete(pid);
+    });
+    const ex = D.exemptOf ? D.exemptOf[s.id] : null;
+    if (ex) ex.forEach(p => out.delete(p));
+    return out;
+  }
 
   // ── KPIs ──
   function computeKpis() {
@@ -255,16 +288,26 @@
     let ep = '—', epPct = 0;
     if ((D.lplan || []).length) { const avg = D.lplan.reduce((a, r) => a + (Number(r.pct) || 0), 0) / D.lplan.length; ep = (avg / 100).toFixed(2); epPct = Math.max(0, Math.min(100, Math.round(avg))); }
 
-    const rosterByTeam = {}; (D.pteams || []).forEach(p => { (rosterByTeam[p.team_id] = rosterByTeam[p.team_id] || new Set()).add(String(p.player_id)); });
     const rpeBySession = {}; (D.rpe || []).forEach(r => { if (!r.session_id) return; (rpeBySession[r.session_id] = rpeBySession[r.session_id] || new Set()).add(String(r.player_id)); });
-    let exp = 0, got = 0;
+    let exp = 0, got = 0, silent = 0;
     (D.sessions || []).filter(s => evClass(s.session_type) !== 'match' && ids.has(s.team_id) && s.session_date <= D.today).forEach(s => {
-      const n = (rosterByTeam[s.team_id] ? rosterByTeam[s.team_id].size : 0); exp += n;
-      got += Math.min(n, rpeBySession[s.id] ? rpeBySession[s.id].size : 0);
+      const answered = rpeBySession[s.id];
+      /* La rehab no es sesión de equipo: es trabajo individual de readaptación y nadie manda
+         el enlace de RPE para eso. Contarla como "sin recoger" llenaría el aviso de ruido en
+         cualquier club que planifique readaptación (Clava FC tiene 125 en un año). Si aun así
+         recogió algo, cuenta normal — hay clubes que sí la piden. Mismo criterio que usa el
+         cálculo de exposición para la incidencia de lesiones. */
+      if ((s.session_type || '').toLowerCase() === 'rehab' && (!answered || answered.size === 0)) return;
+      const want = rpeExpectedFor(s); if (!want.size) return;
+      // Sesión que no recogió NADA (cero filas): no es que no respondan, es que no se
+      // preguntó. Se cuenta aparte en vez de hundir el porcentaje. Igual que en Temporada.
+      if (!answered || answered.size === 0) { silent++; return; }
+      let n = 0; want.forEach(pid => { if (answered.has(pid)) n++; });
+      exp += want.size; got += n;
     });
     const comp = exp ? Math.round(got / exp * 100) : null;
 
-    return { sessions: events, noPlan, avgLoad, total, available, out, injured, injIds, otherIds, ep, epPct, comp };
+    return { sessions: events, noPlan, avgLoad, total, available, out, injured, injIds, otherIds, ep, epPct, comp, rpeSilent: silent };
   }
 
   // ── Wellness de hoy (readiness = estado; distinto del cumplimiento de RPE) ──
@@ -294,7 +337,7 @@
       { ic: 'ti-users-group', col: 'var(--cm-info)', bg: 'var(--cm-info-bg)', lbl: tt('club_overview.k_available', 'Squad available'), val: k.available + '<small>/' + k.total + '</small>', sub: availSub },
       { ic: 'ti-chart-line', col: 'var(--cm-violet)', bg: 'var(--cm-violet-bg)', lbl: tt('club_overview.k_load', 'Avg session load'), val: k.avgLoad + '<small> AU</small>', bar: { p: Math.min(100, k.avgLoad ? Math.round(k.avgLoad / 900 * 100) : 0), c: 'var(--cm-violet)' } },
       { ic: 'ti-chart-histogram', col: 'var(--cm-accent)', bg: 'var(--cm-accent-soft)', lbl: tt('club_overview.k_ep', 'Weekly E:P ratio'), val: k.ep, bar: k.ep !== '—' ? { p: k.epPct, c: 'var(--cm-accent)' } : null },
-      { ic: 'ti-activity', col: 'var(--cm-danger)', bg: 'var(--cm-danger-bg)', lbl: tt('club_overview.k_rpe', 'RPE compliance'), val: (k.comp == null ? '—' : k.comp + '<small>%</small>'), bar: k.comp == null ? null : { p: k.comp, c: k.comp >= 85 ? 'var(--cm-success)' : 'var(--cm-warning)' } },
+      { ic: 'ti-activity', col: 'var(--cm-danger)', bg: 'var(--cm-danger-bg)', lbl: tt('club_overview.k_rpe', 'RPE compliance'), val: (k.comp == null ? '—' : k.comp + '<small>%</small>'), sub: (k.rpeSilent > 0 ? '<span class="co-chip warn" title="' + esc(tt('co_dir.silent_hint', 'These sessions collected no RPE at all.')) + '"><i class="ti ti-mail-off"></i>' + k.rpeSilent + ' ' + esc(tt('co_dir.silent_sessions', 'not collected')) + '</span>' : ''), bar: k.comp == null ? null : { p: k.comp, c: k.comp >= 85 ? 'var(--cm-success)' : 'var(--cm-warning)' } },
       { ic: 'ti-battery-charging', col: 'var(--cm-info)', bg: 'var(--cm-info-bg)', lbl: tt('club_overview.k_wellness', 'Wellness / readiness'), val: (w.avg == null ? '—' : w.avg.toFixed(1) + '<small>/10</small>'), sub: wSub, bar: w.avg == null ? null : { p: Math.round(w.avg * 10), c: w.avg >= 6 ? 'var(--cm-success)' : w.avg >= 4 ? 'var(--cm-warning)' : 'var(--cm-danger)' } }
     ];
     document.getElementById('coPulse').innerHTML = cards.map(c => '<div class="co-kpi"><div class="kt"><div class="ki" style="background:' + c.bg + ';color:' + c.col + '"><i class="ti ' + c.ic + '"></i></div><div class="kl">' + c.lbl + '</div></div><div class="kv">' + c.val + '</div>' + (c.sub ? '<div class="ks">' + c.sub + '</div>' : '') + (c.bar ? '<div class="co-track"><span style="width:' + c.bar.p + '%;background:' + c.bar.c + '"></span></div>' : '') + '</div>').join('');
@@ -588,8 +631,12 @@
     scopeTeams().forEach(t => {
       const daySess = (D.sessions || []).filter(s => s.team_id === t.id && s.session_date === today && evClass(s.session_type) !== 'match');
       if (!daySess.length) return;
-      const sids = new Set(daySess.map(s => s.id)), roster = new Set();
-      (D.pteams || []).forEach(p => { if (p.team_id === t.id) roster.add(String(p.player_id)); });
+      const sids = new Set(daySess.map(s => s.id));
+      // Se espera la UNIÓN de los esperados de las sesiones de hoy, no el plantel entero:
+      // si hoy hay gimnasio para seis, el pendiente son seis y no el plantel completo.
+      const roster = new Set();
+      daySess.forEach(s => rpeExpectedFor(s).forEach(pid => roster.add(pid)));
+      if (!roster.size) return;
       const sub = new Set();
       (D.rpe || []).forEach(r => { const pid = String(r.player_id); if (!roster.has(pid)) return; if (r.session_date === today || (r.session_id && sids.has(r.session_id))) sub.add(pid); });
       res.push({ team: t, sub: sub.size, total: roster.size });

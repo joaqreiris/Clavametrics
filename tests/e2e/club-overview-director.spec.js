@@ -99,14 +99,41 @@ function buildAvailability() {
 }
 const AVAIL = buildAvailability();
 
-/** RPE: cumplimiento alto en Primera, flojo en el juvenil — para que la comparativa muestre algo. */
+/* Convocatoria: el gimnasio es para seis jugadores, no para el plantel entero. Sin esto cada
+   sesión de gimnasio esperaba a los doce, y el cumplimiento se hundía por jugadores a los que
+   nunca se les pidió nada — que es exactamente el bug reportado (24% en un club cuyo primer
+   equipo carga RPE en 30 de 31 entrenamientos). */
+const SPARTS = [];
+SESSIONS.filter(s => s.session_type === 'gym').forEach(s => {
+  PLAYERS.filter(p => p.team_id === s.team_id).slice(0, 6)
+    .forEach(p => SPARTS.push({ session_id: s.id, player_id: p.id, club_id: CLUB.id }));
+});
+const PARTS_OF = SPARTS.reduce((m, r) => { (m[r.session_id] = m[r.session_id] || []).push(r.player_id); return m; }, {});
+
+// Una exención explícita: no le correspondía, sale del total esperado.
+const EXEMPTS = (() => {
+  const s = SESSIONS.find(x => x.session_type === 'training' && x.team_id === 'team-a');
+  const p = PLAYERS.find(x => x.team_id === 'team-a');
+  return s && p ? [{ session_id: s.id, player_id: p.id, club_id: CLUB.id, kind: 'not_required', reason: 'gym_only' }] : [];
+})();
+
+/** A quién se le pide RPE en una sesión: los convocados si los hay, si no el plantel. */
+function expectedIds(s) {
+  return PARTS_OF[s.id] || PLAYERS.filter(p => p.team_id === s.team_id).map(p => p.id);
+}
+
+/* RPE: cumplimiento alto en Primera, medio en Reserva, flojo en el juvenil. Las tasas se
+   aplican sobre los ESPERADOS de cada sesión (no sobre el plantel), que es como se mide. */
 function buildRpe() {
   const out = [];
   SESSIONS.filter(s => s.session_type !== 'match' && s.session_type !== 'rehab').forEach(s => {
-    const roster = PLAYERS.filter(p => p.team_id === s.team_id);
+    // El equipo B deja 1 de cada 3 sesiones SIN recoger nada (enlace no enviado): no es que
+    // los jugadores no respondan, y el número tiene que distinguir las dos cosas.
+    if (s.team_id === 'team-b' && (parseInt(String(s.id).replace(/\D/g, ''), 10) % 3 === 0)) return;
     const rate = s.team_id === 'team-a' ? 0.95 : s.team_id === 'team-b' ? 0.7 : 0.35;
-    roster.slice(0, Math.round(roster.length * rate)).forEach(p => {
-      out.push({ session_id: s.id, player_id: p.id, session_date: s.session_date, load: 480, club_id: CLUB.id });
+    const want = expectedIds(s);
+    want.slice(0, Math.max(1, Math.round(want.length * rate))).forEach(id => {
+      out.push({ session_id: s.id, player_id: id, session_date: s.session_date, load: 480, club_id: CLUB.id });
     });
   });
   return out;
@@ -179,8 +206,8 @@ const SEASONS = TEAMS.map((t, i) => ({ name: '2026/27', start_date: dayAgo(120 +
 /** Mockea todo lo que la página consulta. `empty` sirve el caso "club recién creado". */
 async function mockAll(page, { empty = false } = {}) {
   const D = empty
-    ? { players: [], pteams: [], sessions: [], avail: [], rpe: [], wellness: [], injuries: [], activity: [], profiles: [ADMIN], teams: [], seasons: [], matches: [], pms: [] }
-    : { players: PLAYERS, pteams: PTEAMS, sessions: SESSIONS, avail: AVAIL, rpe: RPE, wellness: WELLNESS, injuries: INJURIES, activity: ACTIVITY, profiles: STAFF_PROFILES, teams: TEAMS, seasons: SEASONS, matches: MATCH_RESULTS, pms: PMS };
+    ? { players: [], pteams: [], sessions: [], avail: [], rpe: [], wellness: [], injuries: [], activity: [], profiles: [ADMIN], teams: [], seasons: [], matches: [], pms: [], sparts: [], exempts: [] }
+    : { players: PLAYERS, pteams: PTEAMS, sessions: SESSIONS, avail: AVAIL, rpe: RPE, wellness: WELLNESS, injuries: INJURIES, activity: ACTIVITY, profiles: STAFF_PROFILES, teams: TEAMS, seasons: SEASONS, matches: MATCH_RESULTS, pms: PMS, sparts: SPARTS, exempts: EXEMPTS };
 
   const uno = obj => route => {
     const acc = route.request().headers()['accept'] || '';
@@ -212,6 +239,8 @@ async function mockAll(page, { empty = false } = {}) {
     if (t('clubs')) return uno(CLUB)(route);
     if (t('teams')) return route.fulfill({ json: D.teams });
     if (t('player_teams')) return route.fulfill({ json: D.pteams });
+    if (t('session_participants')) return route.fulfill({ json: D.sparts });
+    if (t('rpe_exemptions')) return route.fulfill({ json: D.exempts });
     if (t('player_match_stats')) return route.fulfill({ json: D.pms });
     if (t('players')) return route.fulfill({ json: D.players });
     if (t('training_sessions')) return route.fulfill({ json: D.sessions });
@@ -357,13 +386,43 @@ test.describe('Club Overview · Temporada', () => {
     await openPage(page, { tab: 'season' });
     const panel = await waitTab(page, 'coTabSeason');
     const fila = n => panel.locator('#coCmpTable tbody tr', { has: page.locator(`th:has-text("${n}")`) });
-    // Primera muy por encima del juvenil: es el dato que hace útil la tabla.
-    const primera = await fila('Primera').locator('td').nth(4).innerText();
-    const juvenil = await fila('Juvenil A').locator('td').nth(4).innerText();
+    /* Se lee la PASTILLA, no la celda entera: la celda puede llevar además el subnúmero de
+       sesiones sin recoger, y un `replace(/\D/g,'')` sobre todo el texto pega el porcentaje
+       con ese conteo ("33%" + "5 sin recoger" → 335). */
+    const primera = await fila('Primera').locator('td[data-col="rpe"] .co-chip').innerText();
+    const juvenil = await fila('Juvenil A').locator('td[data-col="rpe"] .co-chip').innerText();
     const num = s => parseInt(String(s).replace(/[^\d]/g, ''), 10);
     expect(num(primera)).toBeGreaterThan(num(juvenil));
     expect(num(primera)).toBeGreaterThan(80);
     expect(num(juvenil)).toBeLessThan(60);
+  });
+
+  /* Regresión del bug reportado: el cumplimiento marcaba 24% en un club donde los jugadores
+     responden casi todos los días. Eran dos errores sumados — esperar al plantel ENTERO en
+     sesiones con convocatoria corta (gimnasio de seis), y contar como incumplimiento las
+     sesiones que no recogieron nada porque nunca se mandó el enlace. */
+  test('el cumplimiento de RPE respeta la convocatoria, no el plantel entero', async ({ page }) => {
+    await openPage(page, { tab: 'season' });
+    const panel = await waitTab(page, 'coTabSeason');
+    const kpi = panel.locator('.cod-kpi', { hasText: /Cumplimiento de RPE/i }).first();
+    const val = parseInt((await kpi.locator('.cod-kv').innerText()).replace(/[^\d]/g, ''), 10);
+
+    // El fixture manda RPE al 95% de los convocados del equipo A y al 70% del B. Si el
+    // denominador volviera a ser el plantel entero, el gimnasio (6 de 12 convocados) lo
+    // hundiría muy por debajo de 60.
+    expect(val, 'el cumplimiento no puede hundirse por jugadores a los que no se convocó').toBeGreaterThan(60);
+    expect(val).toBeLessThanOrEqual(100);
+  });
+
+  test('las sesiones que no recogieron nada se informan aparte, no como incumplimiento', async ({ page }) => {
+    await openPage(page, { tab: 'season' });
+    const panel = await waitTab(page, 'coTabSeason');
+    const kpi = panel.locator('.cod-kpi', { hasText: /Cumplimiento de RPE/i }).first();
+    // El equipo B deja 1 de cada 3 sesiones sin recoger: tiene que haber pastilla.
+    await expect(kpi).toContainText(/sin recoger/i);
+    // Y la fila de ese equipo lo dice también.
+    const fila = panel.locator('#coCmpTable tbody tr', { has: page.locator('th:has-text("Reserva")') });
+    await expect(fila.locator('td[data-col="rpe"] .cod-subnum')).toHaveCount(1);
   });
 
   test('ordenar por una columna reordena las filas', async ({ page }) => {
@@ -385,7 +444,7 @@ test.describe('Club Overview · Temporada', () => {
     await panel.locator('#coCmpTable th[data-cmp="days"] button').click();
     await waitTab(page, 'coTabSeason');
     await expect(panel.locator('#coCmpTable th[data-cmp="days"]')).toHaveAttribute('aria-sort', 'descending');
-    const dias = (await panel.locator('#coCmpTable tbody tr td:nth-child(5)').allInnerTexts()).map(t => parseInt(t.replace(/[^\d]/g, ''), 10) || 0);
+    const dias = (await panel.locator('#coCmpTable tbody td[data-col="days"]').allInnerTexts()).map(t => parseInt(t.replace(/[^\d]/g, ''), 10) || 0);
     expect(dias).toEqual([...dias].sort((a, b) => b - a));
   });
 
