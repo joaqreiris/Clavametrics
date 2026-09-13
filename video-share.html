@@ -23,7 +23,9 @@
      No impide grabar la pantalla — eso no existe en la web — pero saca las vías fáciles. */
   body{font-family:var(--vs-sans);color:var(--vs-fg);-webkit-font-smoothing:antialiased;
        -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;}
-  img,video{-webkit-user-drag:none;user-drag:none;pointer-events:none;}
+  img{-webkit-user-drag:none;user-drag:none;pointer-events:none;}
+  /* El video se sigue sin poder arrastrar, pero sus controles tienen que responder. */
+  video{-webkit-user-drag:none;user-drag:none;}
   .wrap{max-width:640px;margin:0 auto;padding:14px 14px calc(48px + env(safe-area-inset-bottom));}
 
   .brand{display:flex;align-items:center;gap:8px;justify-content:center;margin:4px 0 16px;}
@@ -103,6 +105,7 @@
 </div>
 
 <script src="assets/i18n.js" defer></script>
+<script src="assets/share-tracker.js"></script>
 <script>
 (function(){
   'use strict';
@@ -143,18 +146,22 @@
     var provLabel = PROV_LABEL[c.provider] || PROV_LABEL.other;
     var dur = fmtDur(c.duration_seconds);
     var frame;
-    if (c.embed){
-      frame = '<div class="frame"><iframe src="'+esc(safeUrl(c.embed))+'" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen referrerpolicy="no-referrer" loading="lazy"></iframe></div>';
+    if (c.embed && c.embed_kind === 'file'){
+      // Archivo servido en crudo (Dropbox y links directos): reproductor propio.
+      // Es lo único que permite saber si el corte se reprodujo y hasta dónde.
+      // controlsList saca el botón de descarga del menú del navegador; no es una
+      // barrera real, pero mantiene el criterio de no ofrecer el archivo original.
+      frame = '<div class="frame" data-frame="'+i+'"><video data-clip="'+i+'" src="'+esc(safeUrl(c.embed))+'"'
+            + ' controls playsinline preload="metadata" controlsList="nodownload noplaybackrate"'
+            + ' disablePictureInPicture></video></div>';
+    } else if (c.embed){
+      frame = '<div class="frame" data-frame="'+i+'"><iframe data-clip="'+i+'" src="'+esc(safeUrl(c.embed))+'" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen referrerpolicy="no-referrer" loading="lazy"></iframe></div>';
     } else {
-      var bg = c.thumbnail_url ? ' style="background-image:url(\''+esc(safeUrl(c.thumbnail_url))+'\')"' : '';
-      frame = '<div class="frame is-fallback"'+bg+'><div class="fb">'+
-        '<div class="t">'+esc(tt('video_share.no_preview_title','Preview not available here'))+'</div>'+
-        '<div class="b">'+esc(tt('video_share.no_preview_body','Tap the button below to watch it in {name}.', { name: provLabel }))+'</div>'+
-      '</div></div>';
+      frame = fallbackFrameHtml(c);
     }
     var startTag = (c.start_seconds > 0)
       ? '<span class="dot"></span><span>'+esc(tt('video_share.from_minute','From {t}', { t: fmtClock(c.start_seconds) }))+'</span>' : '';
-    return '<article class="clip">'+
+    return '<article class="clip" data-clip="'+i+'">'+
       '<div class="clip-head"><span class="clip-idx">'+(i+1)+'</span>'+
         '<div style="flex:1;min-width:0"><div class="clip-title">'+esc(c.title || tt('video_share.untitled','Video'))+'</div>'+
           '<div class="clip-sub"><span>'+esc(provLabel)+'</span>'+(dur?'<span class="dot"></span><span>'+dur+'</span>':'')+startTag+'</div>'+
@@ -164,13 +171,26 @@
       (c.comment ? '<p class="clip-note">'+esc(c.comment)+'</p>' : '')+
       // Con reproducción embebida no se ofrece el archivo original: ahí el jugador
       // tendría el botón de descarga del proveedor. Solo aparece si no hay otra vía.
-      (c.embed ? '' :
-        '<div class="clip-acts">'+
-          '<a class="btn primary" href="'+esc(safeUrl(c.open))+'" target="_blank" rel="noopener">'+
-            '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3"/></svg>'+
-            esc(tt('video_share.open_in','Open in {name}', { name: provLabel }))+'</a>'+
-        '</div>')+
+      (c.embed ? '' : openActsHtml(c))+
     '</article>';
+  }
+
+  // Marco de "acá no se puede reproducir": el jugador abre el clip en el proveedor.
+  function fallbackFrameHtml(c){
+    var provLabel = PROV_LABEL[c.provider] || PROV_LABEL.other;
+    var bg = c.thumbnail_url ? ' style="background-image:url(\''+esc(safeUrl(c.thumbnail_url))+'\')"' : '';
+    return '<div class="frame is-fallback"'+bg+'><div class="fb">'+
+      '<div class="t">'+esc(tt('video_share.no_preview_title','Preview not available here'))+'</div>'+
+      '<div class="b">'+esc(tt('video_share.no_preview_body','Tap the button below to watch it in {name}.', { name: provLabel }))+'</div>'+
+    '</div></div>';
+  }
+  function openActsHtml(c){
+    var provLabel = PROV_LABEL[c.provider] || PROV_LABEL.other;
+    return '<div class="clip-acts">'+
+      '<a class="btn primary" href="'+esc(safeUrl(c.open))+'" target="_blank" rel="noopener">'+
+        '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3"/></svg>'+
+        esc(tt('video_share.open_in','Open in {name}', { name: provLabel }))+'</a>'+
+    '</div>';
   }
 
   function seenHtml(seenAt){
@@ -182,6 +202,199 @@
         '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>'+
         esc(on ? tt('video_share.seen_on','Watched') : tt('video_share.seen_off','Mark as watched'))+'</button>'+
     '</div>';
+  }
+
+  // ══ Control de visionado ════════════════════════════════════════════════════
+  // Qué cortes miró el jugador y hasta dónde. La contabilidad (qué suma y qué no)
+  // vive en assets/share-tracker.js; acá está el cableado de cada reproductor y el
+  // envío. Nada de esto se le muestra al jugador: la página se ve igual que antes.
+  //
+  // La precisión depende del proveedor y el dato lo dice (campo `tracking`):
+  //   Dropbox y archivos directos → <video> nuestro: reproducción real.
+  //   YouTube / Vimeo             → su API dentro del iframe: reproducción real.
+  //   Google Drive                → su /preview no expone nada: sólo tiempo en pantalla.
+  var TRACK   = null;    // cmShareTracking.createSet(n) — sobrevive a los re-render
+  var TEARDOWN = [];     // cómo desmontar los reproductores del render anterior
+  var BEAT_MS = 10000;   // cada cuánto se manda lo acumulado
+  var beatTimer = null, visTimer = null, flushTimer = null;
+  var visibleClips = {}; // índices de los cortes que están a la vista
+
+  function trackerFor(i){ return TRACK ? TRACK.clip(i) : null; }
+
+  function sendBeat(all){
+    if (!TRACK) return;
+    var pend = TRACK.pending({ all: !!all });
+    if (!pend.length) return;
+    var body = JSON.stringify({ token: TOKEN, action: 'progress', session: TRACK.session, items: pend });
+    try {
+      // keepalive: el navegador termina el envío aunque la página se esté cerrando.
+      var req = fetch(FN, {
+        method: 'POST',
+        headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer '+SB_KEY, 'Content-Type': 'application/json' },
+        body: body, keepalive: true,
+      });
+      // Sólo se da por mandado lo que llegó: si falla, el próximo beat lo reintenta
+      // (van acumulados, no incrementos, así que reintentar no duplica nada).
+      // fetch no rechaza por un 500: hay que mirar el status para no dar por
+      // mandado algo que el servidor no llegó a guardar.
+      if (req && req.then) req.then(function(r){ if (r && r.ok) TRACK.markSent(pend); }).catch(function(){});
+    } catch (err){ /* sin red: se reintenta en el próximo beat */ }
+  }
+  // Pausa, fin de video o salida de pantalla: conviene no esperar los 10 s.
+  function flushSoon(){
+    clearTimeout(flushTimer);
+    flushTimer = setTimeout(function(){ sendBeat(false); }, 1500);
+  }
+
+  function startTimers(){
+    if (beatTimer) return;
+    beatTimer = setInterval(function(){ sendBeat(false); }, BEAT_MS);
+    // Reloj de "estuvo en pantalla": sólo corre con la pestaña al frente, para no
+    // contar como visto un clip que quedó abierto en una pestaña de atrás.
+    visTimer = setInterval(function(){
+      if (document.visibilityState !== 'visible') return;
+      Object.keys(visibleClips).forEach(function(k){
+        var c = trackerFor(Number(k));
+        if (c) c.addVisible(1);
+      });
+    }, 1000);
+    document.addEventListener('visibilitychange', function(){
+      if (document.visibilityState === 'hidden') sendBeat(true);
+    });
+    // pagehide cubre el cierre y el swipe-atrás del móvil, donde unload no dispara.
+    window.addEventListener('pagehide', function(){ sendBeat(true); });
+  }
+
+  // ── Carga perezosa de los SDK de los proveedores ───────────────────────────
+  var sdkPromises = {};
+  function loadScript(src){
+    if (sdkPromises[src]) return sdkPromises[src];
+    sdkPromises[src] = new Promise(function(resolve, reject){
+      var el = document.createElement('script');
+      el.src = src; el.async = true;
+      el.onload = function(){ resolve(); };
+      el.onerror = function(){ reject(new Error('sdk')); };
+      document.head.appendChild(el);
+    });
+    return sdkPromises[src];
+  }
+  function loadYT(){
+    if (window.YT && window.YT.Player) return Promise.resolve();
+    var ready = new Promise(function(resolve){
+      var prev = window.onYouTubeIframeAPIReady;
+      window.onYouTubeIframeAPIReady = function(){ if (typeof prev === 'function') prev(); resolve(); };
+    });
+    return loadScript('https://www.youtube.com/iframe_api').then(function(){ return ready; });
+  }
+
+  // ── Un reproductor por corte ───────────────────────────────────────────────
+  function mountFile(el, clip, i){
+    var t = trackerFor(i);
+    if (!t) return;
+    var onMeta = function(){ t.setDuration(el.duration); if (clip.start_seconds > 0 && !el.currentTime) { try { el.currentTime = clip.start_seconds; } catch(e){} } };
+    var onPlay = function(){ t.play(); };
+    var onTime = function(){ t.time(el.currentTime); };
+    var onPause= function(){ t.pause(); flushSoon(); };
+    var onEnd  = function(){ t.ended(); flushSoon(); };
+    // Si el archivo no se puede reproducir (link de carpeta, permisos, formato),
+    // el clip no queda en negro: se cae al marco de "abrilo en el proveedor".
+    var onError = function(){
+      var frame = el.parentNode;
+      if (!frame || !frame.parentNode) return;
+      var host = document.createElement('div');
+      host.innerHTML = fallbackFrameHtml(clip) + openActsHtml(clip);
+      var art = frame.parentNode;
+      art.replaceChild(host.firstChild, frame);
+      art.appendChild(host.firstChild);   // el botón de abrir, al final de la tarjeta
+    };
+    el.addEventListener('loadedmetadata', onMeta);
+    el.addEventListener('play', onPlay);
+    el.addEventListener('timeupdate', onTime);
+    el.addEventListener('pause', onPause);
+    el.addEventListener('ended', onEnd);
+    el.addEventListener('error', onError);
+    TEARDOWN.push(function(){
+      el.removeEventListener('loadedmetadata', onMeta); el.removeEventListener('play', onPlay);
+      el.removeEventListener('timeupdate', onTime);     el.removeEventListener('pause', onPause);
+      el.removeEventListener('ended', onEnd);           el.removeEventListener('error', onError);
+    });
+  }
+
+  function mountYouTube(el, i){
+    var t = trackerFor(i);
+    if (!t) return;
+    loadYT().then(function(){
+      var poll = null, player = null;
+      player = new window.YT.Player(el, {
+        events: {
+          onReady: function(){ try { t.setDuration(player.getDuration()); } catch(e){} },
+          onStateChange: function(ev){
+            var S = window.YT.PlayerState;
+            if (ev.data === S.PLAYING){
+              t.play();
+              try { t.setDuration(player.getDuration()); } catch(e){}
+              // YouTube no avisa el paso del tiempo: hay que preguntarle.
+              clearInterval(poll);
+              poll = setInterval(function(){ try { t.time(player.getCurrentTime()); } catch(e){} }, 500);
+            } else {
+              clearInterval(poll); poll = null;
+              if (ev.data === S.ENDED) { t.ended(); flushSoon(); }
+              else if (ev.data === S.PAUSED) { t.pause(); flushSoon(); }
+            }
+          },
+        },
+      });
+      TEARDOWN.push(function(){ clearInterval(poll); try { player.destroy(); } catch(e){} });
+    }).catch(function(){ /* sin SDK el corte cae al conteo por pantalla */ });
+  }
+
+  function mountVimeo(el, i){
+    var t = trackerFor(i);
+    if (!t) return;
+    loadScript('https://player.vimeo.com/api/player.js').then(function(){
+      if (!window.Vimeo || !window.Vimeo.Player) return;
+      var player = new window.Vimeo.Player(el);
+      player.getDuration().then(function(d){ t.setDuration(d); }).catch(function(){});
+      player.on('play',      function(){ t.play(); });
+      player.on('timeupdate',function(d){ t.time(d && d.seconds); });
+      player.on('pause',     function(){ t.pause(); flushSoon(); });
+      player.on('ended',     function(){ t.ended(); flushSoon(); });
+      TEARDOWN.push(function(){ try { player.unload(); } catch(e){} });
+    }).catch(function(){ /* idem: queda el conteo por pantalla */ });
+  }
+
+  // Fallback para todo lo que no deja leer su reproductor (Google Drive): cuánto
+  // tiempo estuvo el corte a la vista. No prueba que lo haya mirado, y por eso
+  // viaja marcado como 'viewport' y la app lo muestra como estimado.
+  function observeVisibility(){
+    if (!window.IntersectionObserver) return;
+    var io = new IntersectionObserver(function(entries){
+      entries.forEach(function(en){
+        var i = Number(en.target.getAttribute('data-clip'));
+        if (en.isIntersecting && en.intersectionRatio >= 0.5) visibleClips[i] = true;
+        else delete visibleClips[i];
+      });
+    }, { threshold: [0, 0.5, 1] });
+    Array.prototype.forEach.call(document.querySelectorAll('article.clip[data-clip]'), function(el){ io.observe(el); });
+    TEARDOWN.push(function(){ io.disconnect(); visibleClips = {}; });
+  }
+
+  function setupTracking(clips){
+    if (!window.cmShareTracking) return;         // el tracker no cargó: la página anda igual
+    TEARDOWN.forEach(function(fn){ try { fn(); } catch(e){} });
+    TEARDOWN = [];
+    if (!TRACK) TRACK = window.cmShareTracking.createSet(clips.length);
+
+    clips.forEach(function(c, i){
+      var el = document.querySelector('video[data-clip="'+i+'"], iframe[data-clip="'+i+'"]');
+      if (!el) return;
+      if (el.tagName === 'VIDEO') mountFile(el, c, i);
+      else if (c.provider === 'youtube') mountYouTube(el, i);
+      else if (c.provider === 'vimeo')   mountVimeo(el, i);
+      // Drive y compañía: sólo el reloj de pantalla.
+    });
+    observeVisibility();
+    startTimers();
   }
 
   function render(data){
@@ -220,6 +433,7 @@
 
     root.innerHTML = html;
     wireSeen();
+    setupTracking(clips);
   }
 
   function wireSeen(){
@@ -232,7 +446,18 @@
         var res = await fetch(FN, { method:'POST', headers:{ 'apikey':SB_KEY, 'Authorization':'Bearer '+SB_KEY, 'Content-Type':'application/json' },
           body: JSON.stringify({ token: TOKEN, action:'seen', value: next }) });
         var data = await res.json();
-        if (data && data.found) render(data);
+        // Se repinta SOLO la tarjeta: repintar todo reiniciaba cada reproductor
+        // desde cero, y el jugador perdía el clip que estaba mirando.
+        if (data && data.found){
+          if (DATA && DATA.share) DATA.share.seen_at = data.share ? data.share.seen_at : null;
+          var card = document.querySelector('.seen-card');
+          if (card){
+            var host = document.createElement('div');
+            host.innerHTML = seenHtml(DATA.share.seen_at);
+            card.parentNode.replaceChild(host.firstChild, card);
+            wireSeen();
+          }
+        }
       } catch (err){ console.error('[video-share] seen failed', err); }
       btn.disabled = false;
     });

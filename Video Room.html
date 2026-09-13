@@ -233,11 +233,18 @@
   .vc-dow { font:600 10.5px/1 var(--cm-font-sans); letter-spacing:.05em; text-transform:uppercase; color:var(--cm-fg-faint); text-align:center; padding:2px 0 4px; }
   .vc-cell { min-height:104px; border:1px solid var(--cm-border); border-radius:var(--cm-r-3); background:var(--cm-surface); padding:7px 8px 8px; display:flex; flex-direction:column; gap:4px; cursor:pointer; text-align:left; }
   .vc-cell:hover { border-color:var(--cm-border-strong); }
+  .vc-cell:focus-visible { outline:2px solid var(--cm-accent); outline-offset:1px; }
   .vc-cell.is-out { background:var(--cm-bg-soft); opacity:.55; }
   .vc-cell.is-today .dnum { background:var(--cm-accent); color:#fff; }
   .vc-cell.is-sel { outline:2px solid var(--cm-accent); outline-offset:-1px; }
   .vc-cell .dnum { align-self:flex-start; min-width:21px; height:21px; padding:0 5px; border-radius:999px; font:600 11.5px/21px var(--cm-font-mono); color:var(--cm-fg-muted); text-align:center; }
   .vc-evt { display:flex; align-items:center; gap:5px; padding:2px 6px; border-radius:var(--cm-r-2); font:600 10.5px/1.35 var(--cm-font-sans); border:1px solid transparent; overflow:hidden; }
+  /* Como <button> dentro de la celda: sin estilos de UA y a todo el ancho. */
+  button.vc-evt { width:100%; text-align:left; cursor:pointer; font-family:var(--cm-font-sans); }
+  button.vc-evt:hover { filter:brightness(.97); border-color:currentColor; }
+  button.vc-evt:focus-visible { outline:2px solid var(--cm-accent); outline-offset:1px; }
+  .vc-evt .n { margin-left:auto; flex:none; padding:0 4px; border-radius:999px; background:#0000001a; font:600 9.5px/14px var(--cm-font-mono); }
+  .vc-evt.is-head { display:inline-flex; font:600 12px/1.4 var(--cm-font-sans); padding:3px 9px; }
   .vc-evt span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .vc-evt .ti { font-size:12px; flex:none; }
   .vc-evt.match { background:var(--cm-accent-soft); border-color:var(--cm-success-bd); color:var(--cm-accent); }
@@ -245,6 +252,10 @@
   .vc-tags { margin-top:auto; display:flex; gap:5px; flex-wrap:wrap; }
   .vc-tag { display:inline-flex; align-items:center; gap:4px; padding:1px 6px; border-radius:999px; background:var(--cm-bg-sunk); border:1px solid var(--cm-border); font:600 10.5px/17px var(--cm-font-mono); color:var(--cm-fg); }
   .vc-tag .ti { font-size:12px; color:var(--cm-fg-muted); }
+  button.vc-tag { cursor:pointer; }
+  button.vc-tag:hover { background:var(--cm-accent-soft); border-color:var(--cm-accent); color:var(--cm-accent); }
+  button.vc-tag:hover .ti { color:var(--cm-accent); }
+  button.vc-tag:focus-visible { outline:2px solid var(--cm-accent); outline-offset:1px; }
 
   /* Panel del día seleccionado */
   .vc-day { background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-4); box-shadow:var(--cm-shadow-1); padding:16px 18px; display:flex; flex-direction:column; gap:12px; }
@@ -252,6 +263,13 @@
   .vc-day .dh h3 { flex:1; min-width:0; margin:0; font:600 15px/1.3 var(--cm-font-sans); color:var(--cm-fg-strong); text-transform:capitalize; }
   .vc-day .devts { display:flex; flex-wrap:wrap; gap:6px; }
   .vc-day .dsec { display:flex; flex-direction:column; gap:6px; }
+  .vc-day .dsub { margin:2px 0 0; font:600 10.5px/1 var(--cm-font-sans); letter-spacing:.05em; text-transform:uppercase; color:var(--cm-fg-faint); }
+  /* Un día con muchos cortes no empuja el calendario fuera de la pantalla. */
+  .vc-day .dsec { max-height:46vh; overflow-y:auto; }
+  /* En el panel los chips son inline (en la celda del mes van a todo el ancho). */
+  .vc-day .devts button.vc-evt { width:auto; }
+  .vc-row .go { color:var(--cm-fg-faint); font-size:16px; flex:none; }
+  .vc-row .sub .ti { font-size:13px; vertical-align:-2px; }
   .vc-row { display:flex; align-items:center; gap:10px; padding:8px 10px; border:1px solid var(--cm-border); border-radius:var(--cm-r-3); background:var(--cm-bg-soft); cursor:pointer; }
   .vc-row:hover { background:var(--cm-bg-sunk); }
   .vc-row .ic { width:28px; height:28px; flex:none; border-radius:var(--cm-r-2); background:var(--cm-surface); border:1px solid var(--cm-border); display:flex; align-items:center; justify-content:center; color:var(--cm-fg-muted); }
@@ -293,6 +311,29 @@
   .vr-recip .ract { display:flex; gap:4px; flex-shrink:0; }
   .vr-recip .ract button { width:28px; height:28px; border:1px solid var(--cm-border); background:var(--cm-surface); border-radius:var(--cm-r-2); color:var(--cm-fg-muted); display:flex; align-items:center; justify-content:center; cursor:pointer; }
   .vr-recip .ract button:hover { background:var(--cm-bg-soft); color:var(--cm-fg); }
+  /* Visionado por corte: el resumen en la fila y el detalle desplegable. */
+  .vr-recip .exp { width:22px; height:22px; flex:none; border:0; background:transparent; border-radius:var(--cm-r-2); color:var(--cm-fg-faint); display:flex; align-items:center; justify-content:center; cursor:pointer; }
+  .vr-recip .exp:hover { background:var(--cm-bg-sunk); color:var(--cm-fg); }
+  .vr-recip .exp .ti { font-size:15px; transition:transform .15s ease; }
+  .vr-recip .exp.is-open .ti { transform:rotate(90deg); }
+  .vr-recip .pgsum { display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:999px; border:1px solid var(--cm-border); background:var(--cm-bg-soft); font:600 11.5px/1.5 var(--cm-font-mono); color:var(--cm-fg-muted); white-space:nowrap; flex-shrink:0; }
+  .vr-recip .pgsum .ti { font-size:13px; }
+  .vr-recip .pgsum.ok  { background:var(--cm-success-bg); border-color:var(--cm-success-bd); color:var(--cm-success); }
+  .vr-recip .pgsum.mid { background:var(--cm-warning-bg); border-color:var(--cm-warning-bd); color:var(--cm-warning); }
+  .vr-prog { display:flex; flex-direction:column; gap:4px; margin:2px 0 8px 30px; padding:8px 10px; border-left:2px solid var(--cm-border); }
+  .vr-prog[hidden] { display:none; }
+  .vr-pg-row { display:flex; align-items:center; gap:9px; font:var(--cm-body-sm); color:var(--cm-fg); }
+  .vr-pg-row .ic { width:20px; flex:none; color:var(--cm-fg-faint); display:flex; justify-content:center; }
+  .vr-pg-row .ic .ti { font-size:15px; }
+  .vr-pg-row.is-done .ic { color:var(--cm-success); }
+  .vr-pg-row.is-none { color:var(--cm-fg-faint); }
+  .vr-pg-row .nm { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .vr-pg-row .bar { width:88px; height:5px; flex:none; border-radius:999px; background:var(--cm-bg-sunk); overflow:hidden; }
+  .vr-pg-row .bar b { display:block; height:100%; border-radius:999px; background:var(--cm-accent); }
+  .vr-pg-row.is-done .bar b { background:var(--cm-success); }
+  .vr-pg-row .lb { font:var(--cm-meta); color:var(--cm-fg-muted); white-space:nowrap; min-width:132px; text-align:right; }
+  .vr-prog .pgnote { margin:4px 0 0; display:flex; align-items:flex-start; gap:6px; font:var(--cm-meta); color:var(--cm-fg-faint); }
+  .vr-prog .pgnote .ti { font-size:14px; flex:none; }
   .vr-recip .ract button .ti { font-size:15px; }
   .vr-recip.is-revoked { opacity:.55; }
 
@@ -644,6 +685,7 @@
   let VIDEOS = [];                                  // enriched video rows
   let FOLDERS = [];                                 // native (in-app) folders
   let currentFolder = null;                         // folder id when drilled in, else null
+  let calBack = null;                               // { date, focus } cuando se entró a la carpeta desde el calendario
   const filters = { q:'', link:'all', date:'any' };
 
   // Día del video = el día que PASÓ lo filmado. Nunca la fecha de carga: un corte
@@ -709,9 +751,9 @@
       const playerLabel = p => { const name = (p && (p.last_name || p.first_name)) || '—'; return tt('video_room.label_player', `Player · ${name}`, { name }); };
       const matchLabel  = e => { const name = (e && (e.opponent || e.title)) || tt('video_room.link_match', 'Match'); return tt('video_room.label_match', `Match · ${name}`, { name }); };
 
-      sRows.forEach(r => linksByVideo[r.video_id]?.push({ type:'session', icon:'ti-clipboard-list', label: sessionLabel(sMap.get(r.session_id)) }));
-      pRows.forEach(r => linksByVideo[r.video_id]?.push({ type:'player',  icon:'ti-user',           label: playerLabel(pMap.get(r.player_id)) }));
-      mRows.forEach(r => linksByVideo[r.video_id]?.push({ type:'match',   icon:'ti-ball-football',  label: matchLabel(eMap.get(r.event_id)) }));
+      sRows.forEach(r => linksByVideo[r.video_id]?.push({ type:'session', ref: r.session_id, icon:'ti-clipboard-list', label: sessionLabel(sMap.get(r.session_id)) }));
+      pRows.forEach(r => linksByVideo[r.video_id]?.push({ type:'player',  ref: r.player_id,  icon:'ti-user',           label: playerLabel(pMap.get(r.player_id)) }));
+      mRows.forEach(r => linksByVideo[r.video_id]?.push({ type:'match',   ref: r.event_id,   icon:'ti-ball-football',  label: matchLabel(eMap.get(r.event_id)) }));
     }
 
     // Orden de la biblioteca: por el día filmado (lo más reciente primero); los que
@@ -805,6 +847,12 @@
     const f = currentFolder ? FOLDERS.find(x => x.id === currentFolder) : null;
     if (!f) { crumb.hidden = true; return; }
     crumb.hidden = false;
+    // Si la carpeta se abrió desde el calendario, la vuelta es al calendario.
+    // El data-i18n se mueve con el texto: si no, el cambio de idioma lo pisa.
+    const back = $('#vrBackBtn').querySelector('span');
+    const backKey = calBack ? 'video_room.back_to_calendar' : 'video_room.back';
+    back.setAttribute('data-i18n', backKey);
+    back.textContent = tt(backKey, calBack ? 'Calendar' : 'Video room');
     $('#vrCrumbName').innerHTML = `<i class="ti ti-folder"></i>${esc(f.name || tt('video_room.untitled_folder', 'Untitled folder'))}`;
   }
 
@@ -843,7 +891,7 @@
     const delFolderBtn = e.target.closest('[data-del-folder]');
     if (delFolderBtn) { e.stopPropagation(); deleteFolder(delFolderBtn.dataset.delFolder); return; }
     const folderCard = e.target.closest('.vr-folder');
-    if (folderCard?.dataset.folder) { currentFolder = folderCard.dataset.folder; render(); return; }
+    if (folderCard?.dataset.folder) { calBack = null; currentFolder = folderCard.dataset.folder; render(); return; }
     const moreBtn = e.target.closest('.vr-card .more');
     if (moreBtn) { e.stopPropagation(); openCardMenu(moreBtn); return; }
     const card = e.target.closest('.vr-card');
@@ -898,7 +946,18 @@
     await loadVideos();
   }
 
-  $('#vrBackBtn').addEventListener('click', () => { currentFolder = null; render(); });
+  $('#vrBackBtn').addEventListener('click', async () => {
+    currentFolder = null;
+    // Se entró desde el calendario: se vuelve al día (y al evento) donde estaba.
+    if (calBack) {
+      const { date, focus } = calBack;
+      calBack = null;
+      CAL.sel = date; CAL.focus = focus;
+      await setTab('calendar');
+      return;
+    }
+    render();
+  });
 
   // ── Filter dropdowns ───────────────────────────────────────────────────────
   const LINK_OPTS = () => [
@@ -981,7 +1040,9 @@
   // ── Vista calendario ───────────────────────────────────────────────────────
   // El mes del equipo activo (partidos + entrenamientos) con el material colgando
   // de cada día. Los videos ya están todos en memoria: acá sólo se piden eventos.
-  const CAL = { month: startOfMonth(new Date()), sel: null, events: [], sessions: [], key: '' };
+  // sel = día abierto; focus = { kind:'match'|'session', id } cuando se entró por
+  // el chip de un partido/entrenamiento y el panel muestra sólo su material.
+  const CAL = { month: startOfMonth(new Date()), sel: null, focus: null, events: [], sessions: [], key: '' };
 
   function startOfMonth(d) { return new Date(d.getFullYear(), d.getMonth(), 1); }
   function parseYmd(s) { const [y, m, d] = String(s).split('-').map(Number); return new Date(y, (m || 1) - 1, d || 1); }
@@ -1044,6 +1105,29 @@
     };
   }
 
+  // Material de UN partido/entrenamiento: la carpeta que nació atada a él y los
+  // videos vinculados (más los que estén dentro de esa carpeta aunque nadie los
+  // haya vinculado uno por uno). Es lo que se abre al clickear su chip.
+  function eventItems(kind, id) {
+    const folders = FOLDERS.filter(f => (kind === 'session' ? f.session_id : f.event_id) === id);
+    const fids = new Set(folders.map(f => f.id));
+    const videos = VIDEOS.filter(v =>
+      v.links.some(l => l.type === kind && l.ref === id) || (v.folder_id && fids.has(v.folder_id)));
+    return { folders, videos };
+  }
+  function eventCount(kind, id) { const it = eventItems(kind, id); return it.folders.length + it.videos.length; }
+
+  // El chip de un evento es un botón: lleva a su material, con cuántas piezas hay.
+  function evtChipHtml(kind, id, label, icon, cls) {
+    const n = eventCount(kind, id);
+    const hint = tt('video_room.see_material', 'See its videos');
+    return `<button type="button" class="vc-evt ${cls}" data-evt-kind="${kind}" data-evt-id="${esc(id)}" title="${esc(label)} — ${esc(hint)}">`
+      + `<i class="ti ${icon}"></i><span>${esc(label)}</span>${n ? `<b class="n">${n}</b>` : ''}</button>`;
+  }
+  const matchChip = e => evtChipHtml('match', e.id, evtLabel(e), 'ti-ball-football', 'match');
+  const sesChip   = s => evtChipHtml('session', s.id, sesLabel(s), 'ti-clipboard-list', 'train');
+  const evtChip   = e => evtChipHtml('match', e.id, evtLabel(e), 'ti-calendar-event', 'train');
+
   function renderCal() {
     const start = monthGridStart(CAL.month);
     const today = window.cmToday();
@@ -1059,18 +1143,19 @@
       const d = new Date(start); d.setDate(start.getDate() + i);
       const key = window.cmYMD(d);
       const it = dayItems(key, idx);
-      const chips = [
-        ...it.matches.map(e => `<span class="vc-evt match"><i class="ti ti-ball-football"></i><span>${esc(evtLabel(e))}</span></span>`),
-        ...it.sessions.map(s => `<span class="vc-evt train"><i class="ti ti-clipboard-list"></i><span>${esc(sesLabel(s))}</span></span>`),
-      ].slice(0, 3).join('');
-      const tags = (it.folders.length ? `<span class="vc-tag"><i class="ti ti-folder"></i>${it.folders.length}</span>` : '')
-                 + (it.videos.length  ? `<span class="vc-tag"><i class="ti ti-movie"></i>${it.videos.length}</span>`  : '');
+      const chips = [...it.matches.map(matchChip), ...it.sessions.map(sesChip)].slice(0, 3).join('');
+      const tags = (it.folders.length
+                     ? `<button type="button" class="vc-tag" data-jump="folders" title="${esc(tt('video_room.see_folders', 'See the folders of this day'))}"><i class="ti ti-folder"></i>${it.folders.length}</button>` : '')
+                 + (it.videos.length
+                     ? `<button type="button" class="vc-tag" data-jump="videos" title="${esc(tt('video_room.see_videos', 'See the videos of this day'))}"><i class="ti ti-movie"></i>${it.videos.length}</button>` : '');
       const cls = ['vc-cell'];
       if (d.getMonth() !== CAL.month.getMonth()) cls.push('is-out');
       if (key === today) cls.push('is-today');
       if (key === CAL.sel) cls.push('is-sel');
-      html += `<button type="button" class="${cls.join(' ')}" data-day="${key}">
-        <span class="dnum">${d.getDate()}</span>${chips}<span class="vc-tags">${tags}</span></button>`;
+      // La celda no es <button>: adentro hay botones (chips y contadores) y no se
+      // pueden anidar. Sigue siendo activable con teclado (ver keydown del grid).
+      html += `<div class="${cls.join(' ')}" data-day="${key}" role="button" tabindex="0">
+        <span class="dnum">${d.getDate()}</span>${chips}<span class="vc-tags">${tags}</span></div>`;
     }
     $('#vcGrid').innerHTML = html;
     renderDayPanel();
@@ -1117,28 +1202,58 @@
     if (v) window.location.href = 'Video%20Detail.html?id=' + encodeURIComponent(v.dataset.openVideo);
   });
 
-  function renderDayPanel() {
-    const box = $('#vcDay');
-    if (!CAL.sel) { box.hidden = true; return; }
-    const it = dayItems(CAL.sel);
-    const evChips = [
-      ...it.matches.map(e => `<span class="vc-evt match"><i class="ti ti-ball-football"></i><span>${esc(evtLabel(e))}</span></span>`),
-      ...it.sessions.map(s => `<span class="vc-evt train"><i class="ti ti-clipboard-list"></i><span>${esc(sesLabel(s))}</span></span>`),
-      ...it.events.map(e => `<span class="vc-evt train"><i class="ti ti-calendar-event"></i><span>${esc(evtLabel(e))}</span></span>`),
-    ].join('');
-    const anchor = it.matches[0] || it.sessions[0] || null;   // a qué se ataría una carpeta del día
-
-    const folderRows = it.folders.map(f => `
+  // Filas del panel: la carpeta entra a la biblioteca, el video abre su ficha.
+  function folderRowHtml(f) {
+    const n = folderVideoCount(f.id);
+    return `
       <div class="vc-row" data-open-folder="${esc(f.id)}">
         <span class="ic"><i class="ti ti-folder"></i></span>
         <span class="nm">${esc(f.name || tt('video_room.untitled_folder', 'Untitled folder'))}</span>
-        <span class="sub">${esc(tt('video_room.folder_count', `${folderVideoCount(f.id)} videos`, { count: folderVideoCount(f.id) }))}</span>
-      </div>`).join('');
-    const videoRows = it.videos.map(v => `
+        <span class="sub">${esc(tt('video_room.folder_count', `${n} video${n === 1 ? '' : 's'}`, { count: n }))}</span>
+        <i class="ti ti-chevron-right go"></i>
+      </div>`;
+  }
+  function videoRowHtml(v) {
+    const f = v.folder_id ? FOLDERS.find(x => x.id === v.folder_id) : null;
+    const inFolder = f ? tt('video_room.in_folder', `in ${f.name || ''}`, { name: f.name || tt('video_room.untitled_folder', 'Untitled folder') }) : '';
+    return `
       <div class="vc-row" data-open-video="${esc(v.id)}">
         <span class="ic"><i class="ti ${v.kind === 'folder' ? 'ti-folder' : 'ti-player-play'}"></i></span>
         <span class="nm">${esc(v.title || tt('video_room.untitled_video', 'Untitled video'))}</span>
-      </div>`).join('');
+        ${f ? `<span class="sub"><i class="ti ti-folder"></i> ${esc(inFolder)}</span>` : ''}
+      </div>`;
+  }
+  const dsec = (label, rows) => rows ? `<div class="dsec"><h4 class="dsub">${esc(label)}</h4>${rows}</div>` : '';
+  const nFolders = n => tt('video_room.count_folders', `${n} folder${n === 1 ? '' : 's'}`, { count: n });
+  const nVideos  = n => tt('video_room.count', `${n} video${n === 1 ? '' : 's'}`, { count: n });
+
+  // Qué evento está abierto (null si el mes cambió y ya no está en memoria).
+  function focusMeta() {
+    if (!CAL.focus) return null;
+    const { kind, id } = CAL.focus;
+    if (kind === 'session') {
+      const ses = CAL.sessions.find(x => x.id === id);
+      return ses ? { label: sesLabel(ses), icon: 'ti-clipboard-list', cls: 'train', session: ses } : null;
+    }
+    const ev = CAL.events.find(x => x.id === id);
+    if (!ev) return null;
+    const isMatch = ev.type === 'match';
+    return { label: evtLabel(ev), icon: isMatch ? 'ti-ball-football' : 'ti-calendar-event', cls: isMatch ? 'match' : 'train', match: ev };
+  }
+
+  function renderDayPanel() {
+    const box = $('#vcDay');
+    if (!CAL.sel) { CAL.focus = null; box.hidden = true; return; }
+    const meta = CAL.focus ? focusMeta() : null;
+    if (CAL.focus && !meta) CAL.focus = null;      // el evento ya no está: se vuelve al día
+    if (meta) { renderEventPanel(box, meta); return; }
+
+    const it = dayItems(CAL.sel);
+    const evChips = [...it.matches.map(matchChip), ...it.sessions.map(sesChip), ...it.events.map(evtChip)].join('');
+    const anchor = it.matches[0] || it.sessions[0] || null;   // a qué se ataría una carpeta del día
+
+    const folderRows = it.folders.map(folderRowHtml).join('');
+    const videoRows = it.videos.map(videoRowHtml).join('');
 
     box.innerHTML = `
       <div class="dh">
@@ -1148,24 +1263,84 @@
       </div>
       ${evChips ? `<div class="devts">${evChips}</div>` : ''}
       ${(folderRows || videoRows)
-        ? `<div class="dsec">${folderRows}${videoRows}</div>`
+        ? dsec(nFolders(it.folders.length), folderRows) + dsec(nVideos(it.videos.length), videoRows)
         : `<p class="dempty">${esc(tt('video_room.day_empty', 'No videos on this day yet.'))}</p>`}`;
     box.hidden = false;
+  }
+
+  // Panel de UN partido/entrenamiento: sólo su carpeta y sus videos, con la vuelta
+  // al día entero a mano.
+  function renderEventPanel(box, meta) {
+    const { kind, id } = CAL.focus;
+    const it = eventItems(kind, id);
+    const folderRows = it.folders.map(folderRowHtml).join('');
+    const videoRows = it.videos.map(videoRowHtml).join('');
+
+    box.innerHTML = `
+      <div class="dh">
+        <button class="cm-btn is-ghost is-sm" type="button" id="vcAllDay"><i class="ti ti-arrow-left" style="font-size:15px"></i>${esc(tt('video_room.whole_day', 'Whole day'))}</button>
+        <h3><span class="vc-evt ${meta.cls} is-head"><i class="ti ${meta.icon}"></i><span>${esc(meta.label)}</span></span></h3>
+        <span class="sub">${esc(fmtDayLong(CAL.sel))}</span>
+        <button class="cm-btn is-ghost is-sm" type="button" id="vcAddFolder"><i class="ti ti-folder-plus" style="font-size:15px"></i>${esc(tt('video_room.folder_for_event', 'Folder for this'))}</button>
+        <button class="cm-btn is-primary is-sm" type="button" id="vcAddVideo"><i class="ti ti-plus" style="font-size:15px"></i>${esc(tt('video_room.add_video', 'Add video'))}</button>
+      </div>
+      ${(folderRows || videoRows)
+        ? dsec(nFolders(it.folders.length), folderRows) + dsec(nVideos(it.videos.length), videoRows)
+        : `<p class="dempty">${esc(tt('video_room.event_empty', 'Nothing linked to this yet.'))}</p>`}`;
+    box.hidden = false;
+  }
+
+  // Abrir el material de un evento: el día se selecciona igual, pero el panel
+  // muestra sólo lo suyo.
+  function openEvent(day, kind, id) {
+    CAL.sel = day;
+    CAL.focus = { kind, id };
+    renderCal();
+    $('#vcDay').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  function selectDay(day) {
+    CAL.sel = (CAL.sel === day && !CAL.focus) ? null : day;
+    CAL.focus = null;
+    renderCal();
+    if (CAL.sel) $('#vcDay').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
 
   $('#vcGrid').addEventListener('click', e => {
     const cell = e.target.closest('.vc-cell');
     if (!cell) return;
-    CAL.sel = (CAL.sel === cell.dataset.day) ? null : cell.dataset.day;
-    renderCal();
+    // El chip de un partido/entrenamiento lleva directo a sus videos.
+    const chip = e.target.closest('[data-evt-id]');
+    if (chip) { openEvent(cell.dataset.day, chip.dataset.evtKind, chip.dataset.evtId); return; }
+    // Los contadores abren el día con la lista (carpetas o videos) a la vista.
+    if (e.target.closest('[data-jump]')) { selectDay(cell.dataset.day); return; }
+    selectDay(cell.dataset.day);
+  });
+  // La celda es un div con role=button: el teclado la activa a mano.
+  $('#vcGrid').addEventListener('keydown', e => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const cell = e.target.closest('.vc-cell');
+    if (!cell || e.target !== cell) return;
+    e.preventDefault();
+    selectDay(cell.dataset.day);
   });
   $('#vcDay').addEventListener('click', e => {
+    const chip = e.target.closest('[data-evt-id]');
+    if (chip) { openEvent(CAL.sel, chip.dataset.evtKind, chip.dataset.evtId); return; }
+    if (e.target.closest('#vcAllDay')) { CAL.focus = null; renderCal(); return; }
     const f = e.target.closest('[data-open-folder]');
-    if (f) { currentFolder = f.dataset.openFolder; setTab('library'); return; }
+    if (f) { currentFolder = f.dataset.openFolder; calBack = { date: CAL.sel, focus: CAL.focus }; setTab('library'); return; }
     const v = e.target.closest('[data-open-video]');
     if (v) { window.location.href = 'Video%20Detail.html?id=' + encodeURIComponent(v.dataset.openVideo); return; }
-    if (e.target.closest('#vcAddVideo'))  { openModal({ date: CAL.sel }); return; }
-    if (e.target.closest('#vcAddFolder')) { openFolderModal({ date: CAL.sel }); return; }
+    const meta = CAL.focus ? focusMeta() : null;
+    if (e.target.closest('#vcAddVideo')) {
+      openModal({ date: CAL.sel, link: CAL.focus ? (CAL.focus.kind === 'session' ? 's:' : 'm:') + CAL.focus.id : null });
+      return;
+    }
+    if (e.target.closest('#vcAddFolder')) {
+      openFolderModal({ date: CAL.sel, match: meta?.match || null, session: meta?.session || null });
+      return;
+    }
   });
   async function goMonth(delta) {
     CAL.month = new Date(CAL.month.getFullYear(), CAL.month.getMonth() + delta, 1);
@@ -1243,7 +1418,7 @@
     const day = opts.date || (folder && folder.event_date) || '';
     $('#vrDate').value = day;
     const inherited = folder && (folder.event_id ? 'm:' + folder.event_id : folder.session_id ? 's:' + folder.session_id : null);
-    fillLinkOptions(day, inherited);
+    fillLinkOptions(day, opts.link || inherited);
     backdrop.classList.add('is-open'); $('#vrTitle').focus();
   }
   function closeModal() { backdrop.classList.remove('is-open'); }
@@ -1337,8 +1512,10 @@
     $('#vrFolderName').value = '';
     $('#vrFolderDayHint').hidden = true;
     if (opts.date) {
-      const it = await eventsForDay(opts.date);
-      const match = it.matches[0], ses = it.sessions[0];
+      // Si se vino del chip de un evento, la carpeta se ata a ESE, no al primero
+      // del día (un día puede tener varias sesiones).
+      let match = opts.match || null, ses = opts.session || null;
+      if (!match && !ses) { const it = await eventsForDay(opts.date); match = it.matches[0]; ses = it.sessions[0]; }
       folderDay = { date: opts.date, event_id: match?.id || null, session_id: match ? null : (ses?.id || null) };
       const what = match ? evtLabel(match) : ses ? sesLabel(ses) : '';
       $('#vrFolderName').value = [what, fmtDayShort(opts.date)].filter(Boolean).join(' — ');
@@ -1687,18 +1864,84 @@
   });
 
   // ── Pestaña "Enviados" ─────────────────────────────────────────────────────
+  // Lo que el jugador hizo con cada corte. Se pide aparte del resto del select
+  // para poder caerse con elegancia: si la migración 148 todavía no corrió, la
+  // pestaña de Enviados sigue funcionando como antes en vez de quedar vacía.
+  const SENDS_COLS = 'id,token,batch_id,title,message,created_at,expires_at,revoked,opened_at,open_count,seen_at,created_by_name,player_id,players(first_name,last_name,number),video_share_items(video_id,position,comment,start_seconds)';
+  const VIEW_COLS  = ',video_share_views(video_id,play_count,watched_seconds,max_position_seconds,duration_seconds,completed,visible_seconds,tracking,first_played_at)';
+
   async function loadSends() {
     // Los envíos también son del equipo activo: no se ven los de otra categoría.
-    let q = window.sb.from('video_shares')
-      .select('id,token,batch_id,title,message,created_at,expires_at,revoked,opened_at,open_count,seen_at,created_by_name,player_id,players(first_name,last_name,number),video_share_items(video_id,position,comment,start_seconds)')
-      .eq('club_id', clubId);
-    if (activeTeamId) q = q.eq('team_id', activeTeamId);
-    const { data, error } = await q.order('created_at', { ascending: false }).limit(400);
+    const ask = cols => {
+      let q = window.sb.from('video_shares').select(cols).eq('club_id', clubId);
+      if (activeTeamId) q = q.eq('team_id', activeTeamId);
+      return q.order('created_at', { ascending: false }).limit(400);
+    };
+    let { data, error } = await ask(SENDS_COLS + VIEW_COLS);
+    if (error && /video_share_views/.test(error.message || '')) {
+      ({ data, error } = await ask(SENDS_COLS));
+    }
     if (error) { console.error('[VideoRoom] sends load error:', error); SENDS = []; }
     else SENDS = data || [];
     const batches = new Set(SENDS.map(s => s.batch_id));
     $('#vrSendsBadge').textContent = batches.size;
     if (!$('#vrSends').hidden) renderSends();
+  }
+
+  // ── Visionado por corte ────────────────────────────────────────────────────
+  // Lo que llega de video_share_views. Dos calidades de dato que NO se mezclan:
+  //   tracking 'player'   → tiempo de reproducción real (Dropbox, YouTube, Vimeo).
+  //   tracking 'viewport' → sólo tiempo en pantalla (Google Drive): es un indicio,
+  //                         no prueba que lo haya reproducido, y se marca como tal.
+  const hasViews = r => Array.isArray(r.video_share_views);
+  const viewOf = (r, videoId) => (r.video_share_views || []).find(v => v.video_id === videoId) || null;
+  const viewStarted = v => !!v && (v.play_count > 0 || v.visible_seconds > 0 || v.max_position_seconds > 0);
+  // Porcentaje sólo cuando hay reproductor y duración: sin las dos cosas, una
+  // barra de progreso sería un número inventado.
+  function viewPct(v) {
+    if (!v || v.tracking !== 'player') return null;
+    if (v.completed) return 100;
+    const dur = v.duration_seconds || 0;
+    if (!dur) return null;
+    return Math.max(0, Math.min(100, Math.round((v.max_position_seconds / dur) * 100)));
+  }
+  function viewLabel(v) {
+    if (!viewStarted(v)) return tt('video_room.view_not_started', 'Not opened');
+    if (v.completed) return tt('video_room.view_complete', 'Watched to the end');
+    const pct = viewPct(v);
+    if (pct != null) return tt('video_room.view_pct', `${pct}% · ${fmtSecs(v.watched_seconds)} watched`, { pct, time: fmtSecs(v.watched_seconds) });
+    if (v.tracking === 'player' && v.watched_seconds) return tt('video_room.view_played', `${fmtSecs(v.watched_seconds)} played`, { time: fmtSecs(v.watched_seconds) });
+    // Fallback de Google Drive: se dice explícitamente que es una estimación.
+    return tt('video_room.view_onscreen', `${fmtSecs(v.visible_seconds)} on screen (estimate)`, { time: fmtSecs(v.visible_seconds) });
+  }
+
+  // Resumen de un destinatario: cuántos cortes tocó y cuántos terminó.
+  function recipProgress(r, clips) {
+    const total = clips.length;
+    let started = 0, done = 0, estimated = 0;
+    clips.forEach(c => {
+      const v = viewOf(r, c.video_id);
+      if (!viewStarted(v)) return;
+      started += 1;
+      if (v.completed) done += 1;
+      if (v.tracking !== 'player') estimated += 1;
+    });
+    return { total, started, done, estimated };
+  }
+
+  function progressRowsHtml(r, clips, titleOf) {
+    return clips.map(c => {
+      const v = viewOf(r, c.video_id);
+      const pct = viewPct(v);
+      const cls = !viewStarted(v) ? 'is-none' : v.completed ? 'is-done' : 'is-part';
+      return `
+        <div class="vr-pg-row ${cls}">
+          <span class="ic"><i class="ti ${v && v.completed ? 'ti-circle-check-filled' : viewStarted(v) ? 'ti-player-play' : 'ti-minus'}"></i></span>
+          <span class="nm">${esc(titleOf(c.video_id))}</span>
+          <span class="bar" aria-hidden="true"><b style="width:${pct == null ? (viewStarted(v) ? 8 : 0) : pct}%"></b></span>
+          <span class="lb">${esc(viewLabel(v))}</span>
+        </div>`;
+    }).join('');
   }
 
   function renderSends() {
@@ -1728,6 +1971,9 @@
       const stCls   = live.length && seen === live.length ? 'ok' : (seen + opened) ? 'mid' : 'no';
       const stTxt   = tt('video_room.sends_seen_of', `${seen}/${live.length} watched`, { seen, total: live.length });
       const clips   = (head.video_share_items || []).slice().sort((a,b) => a.position - b.position);
+      // Lo medido, al lado de lo declarado: cuántos terminaron TODOS los cortes.
+      const measured = clips.length && live.some(hasViews);
+      const allDone = measured ? live.filter(r => { const g = recipProgress(r, clips); return g.total && g.done === g.total; }).length : 0;
       const expired = head.expires_at && new Date(head.expires_at).getTime() < Date.now();
 
       const recips = rows.map(r => {
@@ -1738,16 +1984,26 @@
                    : r.seen_at  ? { c:'ok', i:'ti-circle-check-filled', t: tt('video_room.sends_watched', 'Watched') }
                    : r.opened_at? { c:'',   i:'ti-eye',           t: tt('video_room.sends_opened', 'Opened') }
                                 : { c:'',   i:'ti-clock',         t: tt('video_room.sends_not_opened', 'Not opened') };
+        // El resumen por corte: es la diferencia entre "abrió el link" y "los vio".
+        const pg = clips.length && hasViews(r) ? recipProgress(r, clips) : null;
+        const pgCls = !pg || !pg.started ? '' : pg.done === pg.total ? 'ok' : 'mid';
         return `
           <div class="vr-recip ${r.revoked ? 'is-revoked' : ''}" data-url="${esc(url)}" data-share="${esc(r.id)}">
+            ${pg ? `<button class="exp" data-act="prog" title="${esc(tt('video_room.view_detail', 'Clip by clip'))}"><i class="ti ti-chevron-right"></i></button>` : ''}
             <span class="nm">${esc(name)}</span>
+            ${pg ? `<span class="pgsum ${pgCls}" title="${esc(tt('video_room.view_started_of', `${pg.started} of ${pg.total} clips opened`, { started: pg.started, total: pg.total }))}">
+              <i class="ti ti-player-play"></i>${pg.started}/${pg.total}${pg.done ? `<i class="ti ti-circle-check-filled" style="margin-left:5px"></i>${pg.done}` : ''}</span>` : ''}
             <span class="stt ${st.c}"><i class="ti ${st.i}"></i>${esc(st.t)}</span>
             <span class="ract">
               <button data-act="copy" title="${esc(tt('video_room.copy_link', 'Copy link'))}"><i class="ti ti-copy"></i></button>
               <button data-act="wa" data-first="${esc(p.first_name || '')}" title="WhatsApp"><i class="ti ti-brand-whatsapp"></i></button>
               <button data-act="revoke" title="${esc(r.revoked ? tt('video_room.sends_restore', 'Restore link') : tt('video_room.sends_revoke', 'Revoke link'))}"><i class="ti ${r.revoked ? 'ti-rotate' : 'ti-ban'}"></i></button>
             </span>
-          </div>`;
+          </div>
+          ${pg ? `<div class="vr-prog" data-prog="${esc(r.id)}" hidden>
+            ${progressRowsHtml(r, clips, titleOf)}
+            ${pg && pg.estimated ? `<p class="pgnote"><i class="ti ti-info-circle"></i>${esc(tt('video_room.view_estimate_note', 'Estimate = that player reported no playback (Google Drive, or a file that would not open in the page): only the time on screen is known.'))}</p>` : ''}
+          </div>` : ''}`;
       }).join('');
 
       return `
@@ -1755,6 +2011,7 @@
           <div class="sh">
             <h3>${esc(head.title || tt('video_room.send_title', 'Send videos to players'))}</h3>
             <span class="st ${stCls}"><i class="ti ti-eye-check"></i>${esc(stTxt)}</span>
+            ${measured ? `<span class="st ${allDone === live.length && live.length ? 'ok' : allDone ? 'mid' : 'no'}" title="${esc(tt('video_room.view_all_clips_hint', 'Players who played every clip to the end'))}"><i class="ti ti-player-play"></i>${esc(tt('video_room.view_all_clips', `${allDone}/${live.length} saw every clip`, { done: allDone, total: live.length }))}</span>` : ''}
             <button class="more" data-del-batch="${esc(head.batch_id)}" title="${esc(tt('video_room.sends_delete', 'Delete send'))}" style="width:28px;height:28px;border:0;background:transparent;border-radius:var(--cm-r-2);color:var(--cm-fg-faint);display:flex;align-items:center;justify-content:center;cursor:pointer"><i class="ti ti-trash" style="font-size:16px"></i></button>
           </div>
           <div class="smeta">
@@ -1780,6 +2037,14 @@
       if (error) { alert(error.message); return; }
       toast(tt('video_room.sends_deleted', 'Send deleted'));
       await loadSends(); renderSends();
+      return;
+    }
+    // Desplegar el corte por corte de un jugador.
+    const exp = e.target.closest('.vr-recip .exp');
+    if (exp) {
+      const row  = exp.closest('.vr-recip');
+      const prog = row.parentNode.querySelector(`[data-prog="${CSS.escape(row.dataset.share)}"]`);
+      if (prog) { prog.hidden = !prog.hidden; exp.classList.toggle('is-open', !prog.hidden); }
       return;
     }
     const btn = e.target.closest('.vr-recip .ract button'); if (!btn) return;
@@ -1811,7 +2076,9 @@
     if (isCal) { await loadCalMonth(); renderCal(); } else renderSends();
   }
   $('#vrTabs').addEventListener('click', e => {
-    const b = e.target.closest('button[data-tab]'); if (b) setTab(b.dataset.tab);
+    const b = e.target.closest('button[data-tab]'); if (!b) return;
+    calBack = null;
+    setTab(b.dataset.tab);
   });
   document.addEventListener('cm:langchanged', () => {
     if (tab === 'sends') renderSends();
