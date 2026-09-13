@@ -55,11 +55,21 @@ async function mockRoom(page, opts = {}) {
     if (wantsViews && opts.noViewsTable) {
       return r.fulfill({ status: 400, json: { message: "Could not find a relationship between 'video_shares' and 'video_share_views'" } });
     }
-    return r.fulfill({ json: wantsViews ? SHARES : SHARES.map(({ video_share_views, ...rest }) => rest) });
+    const rows = [...SHARES, ...(opts.extraShares || [])];
+    return r.fulfill({ json: wantsViews ? rows : rows.map(({ video_share_views, ...rest }) => rest) });
   });
   await page.route(`${SB}/rest/v1/rpc/my_plan_features**`, r => r.fulfill({ json: ['video-room'] }));
   await page.route(`${SB}/rest/v1/rpc/team_features**`, r => r.fulfill({ json: ['video-room'] }));
 }
+
+// Los dos casos de "todavía no hay medición": el que abrió el link antes de que
+// existiera (no se puede saber) y el que ni lo abrió (el 0/N sí es verdad).
+const SIN_MEDICION = [
+  { ...base, id: 's-4', token: 't-4', player_id: 'p-4', opened_at: '2026-09-01T10:00:00Z', open_count: 3, seen_at: '2026-09-01T10:30:00Z',
+    players: { first_name: 'Tomás', last_name: 'Silva', number: 2 }, video_share_views: [] },
+  { ...base, id: 's-5', token: 't-5', player_id: 'p-5', opened_at: null, open_count: 0, seen_at: null,
+    players: { first_name: 'Iván', last_name: 'Rossi', number: 5 }, video_share_views: [] },
+];
 
 const recip = (page, name) => page.locator('.vr-recip', { hasText: name });
 
@@ -128,4 +138,29 @@ test('sin la tabla de visionado, la pestaña sigue funcionando como antes', asyn
   await expect(page.locator('.vr-recip')).toHaveCount(3);
   await expect(page.locator('.vr-recip .pgsum')).toHaveCount(0);   // sin el dato, sin el chip
   await expect(page.locator('.vr-recip', { hasText: 'López' })).toContainText(/Watched|Visto|Visualizado/);
+});
+
+test.describe('Video Room · envíos anteriores a la medición', () => {
+  test.beforeEach(async ({ page }) => {
+    await injectSession(page);
+    await mockRoom(page, { extraShares: SIN_MEDICION });
+    await page.goto('/Video%20Room?tab=sends');
+    await expect(page.locator('.vr-send')).toHaveCount(1);
+  });
+
+  test('el que abrió el link antes de la medición no muestra un 0/N falso', async ({ page }) => {
+    // Marcó "visto" y abrió tres veces: decir "0/2 cortes abiertos" sería mentir.
+    await expect(recip(page, 'Silva')).toContainText(/Watched|Visto|Visualizado/);
+    await expect(recip(page, 'Silva').locator('.pgsum')).toHaveCount(0);
+    await expect(recip(page, 'Silva').locator('.exp')).toHaveCount(0);
+  });
+
+  test('el que nunca abrió el link sí muestra el cero', async ({ page }) => {
+    await expect(recip(page, 'Rossi').locator('.pgsum')).toContainText('0/2');
+  });
+
+  test('el resumen del envío cuenta sobre los medidos, no sobre todos', async ({ page }) => {
+    // Medibles: García, López, Pérez y Rossi (nunca abrió). Silva queda fuera.
+    await expect(page.locator('.vr-send .st').nth(1)).toContainText('1/4');
+  });
 });

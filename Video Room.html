@@ -1894,6 +1894,12 @@
   //   tracking 'viewport' → sólo tiempo en pantalla (Google Drive): es un indicio,
   //                         no prueba que lo haya reproducido, y se marca como tal.
   const hasViews = r => Array.isArray(r.video_share_views);
+  // Un envío que se abrió ANTES de que existiera la medición no puede mostrar
+  // "0/5 cortes abiertos": no es que el jugador no los abriera, es que en ese
+  // momento no se medía, y al lado de un "Visto" el cero hace desconfiar de todo
+  // el panel. Se resuelve solo: en cuanto vuelva a abrir el link aparece el dato.
+  // Sin fecha de corte a mano: si nunca se abrió, el 0/N sí es verdad.
+  const measurable = r => hasViews(r) && ((r.video_share_views || []).length > 0 || !r.opened_at);
   const viewOf = (r, videoId) => (r.video_share_views || []).find(v => v.video_id === videoId) || null;
   const viewStarted = v => !!v && (v.play_count > 0 || v.visible_seconds > 0 || v.max_position_seconds > 0);
   // Porcentaje sólo cuando hay reproductor y duración: sin las dos cosas, una
@@ -1972,8 +1978,9 @@
       const stTxt   = tt('video_room.sends_seen_of', `${seen}/${live.length} watched`, { seen, total: live.length });
       const clips   = (head.video_share_items || []).slice().sort((a,b) => a.position - b.position);
       // Lo medido, al lado de lo declarado: cuántos terminaron TODOS los cortes.
-      const measured = clips.length && live.some(hasViews);
-      const allDone = measured ? live.filter(r => { const g = recipProgress(r, clips); return g.total && g.done === g.total; }).length : 0;
+      const tracked = clips.length ? live.filter(measurable) : [];
+      const measured = tracked.length > 0;
+      const allDone = tracked.filter(r => { const g = recipProgress(r, clips); return g.total && g.done === g.total; }).length;
       const expired = head.expires_at && new Date(head.expires_at).getTime() < Date.now();
 
       const recips = rows.map(r => {
@@ -1985,7 +1992,7 @@
                    : r.opened_at? { c:'',   i:'ti-eye',           t: tt('video_room.sends_opened', 'Opened') }
                                 : { c:'',   i:'ti-clock',         t: tt('video_room.sends_not_opened', 'Not opened') };
         // El resumen por corte: es la diferencia entre "abrió el link" y "los vio".
-        const pg = clips.length && hasViews(r) ? recipProgress(r, clips) : null;
+        const pg = clips.length && measurable(r) ? recipProgress(r, clips) : null;
         const pgCls = !pg || !pg.started ? '' : pg.done === pg.total ? 'ok' : 'mid';
         return `
           <div class="vr-recip ${r.revoked ? 'is-revoked' : ''}" data-url="${esc(url)}" data-share="${esc(r.id)}">
@@ -2011,7 +2018,7 @@
           <div class="sh">
             <h3>${esc(head.title || tt('video_room.send_title', 'Send videos to players'))}</h3>
             <span class="st ${stCls}"><i class="ti ti-eye-check"></i>${esc(stTxt)}</span>
-            ${measured ? `<span class="st ${allDone === live.length && live.length ? 'ok' : allDone ? 'mid' : 'no'}" title="${esc(tt('video_room.view_all_clips_hint', 'Players who played every clip to the end'))}"><i class="ti ti-player-play"></i>${esc(tt('video_room.view_all_clips', `${allDone}/${live.length} saw every clip`, { done: allDone, total: live.length }))}</span>` : ''}
+            ${measured ? `<span class="st ${allDone === tracked.length ? 'ok' : allDone ? 'mid' : 'no'}" title="${esc(tt('video_room.view_all_clips_hint', 'Players who played every clip to the end'))}"><i class="ti ti-player-play"></i>${esc(tt('video_room.view_all_clips', `${allDone}/${tracked.length} saw every clip`, { done: allDone, total: tracked.length }))}</span>` : ''}
             <button class="more" data-del-batch="${esc(head.batch_id)}" title="${esc(tt('video_room.sends_delete', 'Delete send'))}" style="width:28px;height:28px;border:0;background:transparent;border-radius:var(--cm-r-2);color:var(--cm-fg-faint);display:flex;align-items:center;justify-content:center;cursor:pointer"><i class="ti ti-trash" style="font-size:16px"></i></button>
           </div>
           <div class="smeta">
