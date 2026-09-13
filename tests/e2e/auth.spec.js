@@ -106,6 +106,11 @@ async function fillRegForm(page, overrides = {}) {
   await page.fill('#last-name',  vals.lastName);
   await page.fill('#email',      vals.email);
   await page.fill('#pwd',        vals.password);
+  // El país es obligatorio y su lista se arma por JS: sin elegirlo el formulario no valida y el
+  // envío ni arranca, así que no había llamada de registro ni aviso de error que mirar.
+  await page.waitForFunction(() => (document.getElementById('country')?.options.length || 0) > 1,
+                             null, { timeout: 10_000 });
+  await page.selectOption('#country', { index: 1 });
   await page.check('#terms');
 }
 
@@ -147,7 +152,7 @@ test.describe('Login — Session redirect', () => {
       route.fulfill({ json: { user: { id: 'user-1' } } })
     );
     await page.goto('/Login.html');
-    await page.waitForURL(/Hub\.html/, { timeout: 8000 });
+    await page.waitForURL(/Hub(\.html)?(\?|$)/, { timeout: 8000 });
   });
 });
 
@@ -161,7 +166,7 @@ test.describe('Login — Success', () => {
     await page.fill('#passInput', 'password123');
     await page.click('#loginBtn');
 
-    await page.waitForURL(/Hub\.html/, { timeout: 10_000 });
+    await page.waitForURL(/Hub(\.html)?(\?|$)/, { timeout: 10_000 });
   });
 
   test('button shows loading state while request is in flight', async ({ page }) => {
@@ -238,7 +243,10 @@ test.describe('Login — Forgot password', () => {
       await resetLink.click();
       await page.fill('#emailInput', 'test@test.com');
       await page.keyboard.press('Enter');
-      await expect(page.locator('#errorMsg, .login-alert')).toBeVisible({ timeout: 6000 });
+      // Hay DOS avisos con la misma clase (el de error y el de «te mandamos el mail»), así que
+      // el selector genérico agarraba los dos y Playwright lo rechaza. Acá el que importa es el
+      // de confirmación del reseteo.
+      await expect(page.locator('#resetMsg')).toBeVisible({ timeout: 6000 });
     }
   });
 });
@@ -293,7 +301,7 @@ test.describe('Register — Session redirect', () => {
       route.fulfill({ json: { user: { id: 'user-1' } } })
     );
     await page.goto('/Register.html');
-    await page.waitForURL(/Hub\.html/, { timeout: 8000 });
+    await page.waitForURL(/Hub(\.html)?(\?|$)/, { timeout: 8000 });
   });
 });
 
@@ -332,8 +340,8 @@ test.describe('Register — Email confirmation flow', () => {
 
 test.describe('Register — Error handling', () => {
   test('shows error message on registration failure', async ({ page }) => {
-    await mockRegisterError(page, 'User already registered');
-    await page.route(`${SB}/**`, route => route.fulfill({ json: {} }));
+    await page.route(`${SB}/**`, route => route.fulfill({ json: {} }));   // red de contención
+    await mockRegisterError(page, 'User already registered');                // …y el error encima
     await page.goto('/Register.html');
 
     await fillRegForm(page);
@@ -344,8 +352,8 @@ test.describe('Register — Error handling', () => {
   });
 
   test('button label restored after registration error', async ({ page }) => {
-    await mockRegisterError(page);
-    await page.route(`${SB}/**`, route => route.fulfill({ json: {} }));
+    await page.route(`${SB}/**`, route => route.fulfill({ json: {} }));   // red de contención
+    await mockRegisterError(page);                                           // …y el error encima
     await page.goto('/Register.html');
 
     const btn = page.locator('button[type="submit"], .cm-btn.is-primary').first();
