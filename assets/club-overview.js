@@ -13,7 +13,7 @@
   function safeUrl(u) { const s = String(u == null ? '' : u).trim(); return /^(https?:\/\/|\/|\.\/|#)/i.test(s) ? s : '#'; }
   function initials(n) { n = String(n || '').trim(); if (!n) return '•'; const p = n.split(/\s+/); return ((p[0][0] || '') + (p[1] ? p[1][0] : '')).toUpperCase(); }
 
-  const state = { clubId: null, profile: null, teams: [], scopeTeam: '', refDate: new Date(), week: [], data: null, sel: null, kpi: null, hideTypes: new Set(), density: 'compact' };
+  const state = { clubId: null, profile: null, teams: [], scopeTeam: '', refDate: new Date(), week: [], data: null, sel: null, kpi: null, hideTypes: new Set(), density: 'compact', tab: 'week' };
 
   // ── date helpers (locales, nunca UTC) ──
   function ymd(d) { return window.cmYMD ? window.cmYMD(d) : (d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0')); }
@@ -727,7 +727,55 @@
     const sel = document.getElementById('coTeamSelect');
     sel.innerHTML = ['<option value="">' + esc(tt('club_overview.all_teams', 'All teams')) + '</option>'].concat(state.teams.map(t => '<option value="' + t.id + '">' + esc(t.name) + '</option>')).join('');
     sel.value = state.scopeTeam;
-    sel.onchange = () => { state.scopeTeam = sel.value; state.sel = null; refresh(); };
+    sel.onchange = () => {
+      state.scopeTeam = sel.value; state.sel = null;
+      // El selector de equipo es compartido por las cinco pestañas. La semana se recarga
+      // ya si está visible, y si no queda marcada para recargarse al volver: cambiar de
+      // equipo tres veces desde "Lesiones" no dispara tres fetch de la semana.
+      _weekStale = true;
+      if (state.tab === 'week') refresh();
+      if (window.cmCoDirector) window.cmCoDirector.setScope(state.scopeTeam);
+    };
+  }
+
+  /* ── PESTAÑAS ──────────────────────────────────────────────────────────────
+     "Semana" es todo lo que esta página era. Las otras cuatro son la vista de
+     dirección deportiva y las dibuja assets/club-overview-director.js.
+
+     La semana se carga de forma perezosa igual que las demás: son diez consultas
+     y un director que entra directo a "Temporada" no tiene por qué pagarlas. Se
+     marca stale al cambiar de equipo y se recarga al volver a la pestaña.      */
+  const TAB_KEYS = ['week', 'season', 'injuries', 'squad', 'staff'];
+  const TAB_PANEL = { week: 'coTabWeek', season: 'coTabSeason', injuries: 'coTabInjuries', squad: 'coTabSquad', staff: 'coTabStaff' };
+  let _weekStale = true;
+  function loadTab() { try { const t = localStorage.getItem('co_tab'); return TAB_KEYS.indexOf(t) >= 0 ? t : 'week'; } catch (_) { return 'week'; } }
+  function saveTab(v) { try { localStorage.setItem('co_tab', v); } catch (_) {} }
+
+  async function ensureWeek() {
+    if (!_weekStale) return;
+    _weekStale = false;
+    await refresh();
+    await renderActivity();
+  }
+
+  async function activateTab(key, opts) {
+    if (TAB_KEYS.indexOf(key) < 0) key = 'week';
+    state.tab = key; saveTab(key);
+    document.querySelectorAll('#coTabs button[data-tab]').forEach(b => {
+      const on = b.dataset.tab === key;
+      b.setAttribute('aria-selected', on ? 'true' : 'false');
+      b.tabIndex = on ? 0 : -1;
+    });
+    TAB_KEYS.forEach(t => { const el = document.getElementById(TAB_PANEL[t]); if (el) el.hidden = (t !== key); });
+    const wk = document.getElementById('coWeekCtl'), pb = document.getElementById('coPeriodBar');
+    if (wk) wk.hidden = (key !== 'week');
+    if (pb) pb.hidden = (key === 'week');
+    // El detalle del día pertenece a la semana: dejarlo abierto sobre otra pestaña
+    // mostraría una sesión que ya no está en pantalla.
+    if (key !== 'week') closeDrawer();
+    if (key === 'week') await ensureWeek();
+    else if (window.cmCoDirector) await window.cmCoDirector.show(key);
+    if (opts && opts.focus) { const b = document.getElementById('coTabBtn-' + key); if (b) b.focus(); }
   }
 
   async function refresh() {
@@ -791,10 +839,32 @@
     document.getElementById('coNextWeek').onclick = () => { state.refDate = addDays(mondayOf(state.refDate), 7); state.sel = null; refresh(); };
     document.getElementById('coToday').onclick = () => { state.refDate = new Date(); state.sel = null; refresh(); };
 
-    await refresh();
-    await renderActivity();
+    // Pestañas: se cablean antes de cargar datos para que el click responda enseguida,
+    // incluso si la consulta de la semana todavía está en vuelo.
+    if (window.cmCoDirector) window.cmCoDirector.init({ clubId: clubId, teams: state.teams, scopeTeam: state.scopeTeam, profile: profile });
+    const tabsEl = document.getElementById('coTabs');
+    if (tabsEl) {
+      tabsEl.addEventListener('click', e => { const b = e.target.closest('button[data-tab]'); if (b) activateTab(b.dataset.tab); });
+      // Flechas para moverse entre pestañas, como manda el patrón de tablist.
+      tabsEl.addEventListener('keydown', e => {
+        const dir = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : e.key === 'Home' ? 'first' : e.key === 'End' ? 'last' : 0;
+        if (!dir) return;
+        e.preventDefault();
+        const i = TAB_KEYS.indexOf(state.tab);
+        const next = dir === 'first' ? 0 : dir === 'last' ? TAB_KEYS.length - 1 : (i + dir + TAB_KEYS.length) % TAB_KEYS.length;
+        activateTab(TAB_KEYS[next], { focus: true });
+      });
+    }
 
-    window.addEventListener('cm:langchanged', () => { renderTeamSelect(); renderTypeBar(); renderPulse(); renderGrid(); renderAlerts(); renderReturns(); revalidateSelection(); });
+    await activateTab(loadTab());
+
+    window.addEventListener('cm:langchanged', () => {
+      renderTeamSelect(); renderTypeBar();
+      // Sin datos de la semana todavía (se entró directo a una pestaña de análisis) no hay
+      // nada que repintar acá: renderPulse leería state.data en null.
+      if (state.data) { renderPulse(); renderGrid(); renderAlerts(); renderReturns(); revalidateSelection(); }
+      if (state.tab !== 'week' && window.cmCoDirector) window.cmCoDirector.relang();
+    });
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();

@@ -1243,7 +1243,10 @@
   // Returns all teams for a club, ordered by name.
   window.getTeams = async function (clubId) {
     const { data } = await window.sb.from('teams')
-      .select('id,name,season')
+      // `category` (migración 147) viaja acá porque este helper es la única puerta a teams
+      // en toda la app: sumarla una vez la deja disponible en las 30 páginas sin tocarlas.
+      // Es aditivo — quien no la use no se entera.
+      .select('id,name,season,category')
       .eq('club_id', clubId)
       .is('archived_at', null)
       .order('name');

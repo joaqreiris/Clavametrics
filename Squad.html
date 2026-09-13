@@ -648,7 +648,12 @@
           <label for="sqF_joined_date" data-i18n="player.joined_edit">Joined date</label>
           <input type="date" id="sqF_joined_date">
         </div>
-        <div class="sq-modal-field"></div>
+        <div class="sq-modal-field">
+          <!-- Alimenta el panel de vencimientos de Club Overview → Plantel. Vacío es un
+               estado válido: significa "sin dato", no "sin contrato". -->
+          <label for="sqF_contract_until" data-i18n="squad.contract_until">Contract until</label>
+          <input type="date" id="sqF_contract_until">
+        </div>
       </div>
       <div class="sq-modal-row">
         <div class="sq-modal-field">
@@ -1510,7 +1515,7 @@ async function reloadPlayers() {
   }
   // Roster por categoría vía la junction player_teams (un player puede pertenecer a varios equipos).
   // Sin filtro de equipo ("All teams") seguimos listando todos los players del club tal cual.
-  const _cols = 'id,first_name,last_name,number,position,positions,nationality,date_of_birth,joined_date,height,weight,dominant_foot,wingspan,standing_reach,status,photo_url,team_id,archived_at';
+  const _cols = 'id,first_name,last_name,number,position,positions,nationality,date_of_birth,joined_date,contract_until,height,weight,dominant_foot,wingspan,standing_reach,status,photo_url,team_id,archived_at';
   const _archivedView = _currentTeamId === '__archived__';
   let q = window.sb.from('players')
     .select((_currentTeamId && !_archivedView) ? `${_cols},player_teams!inner(team_id)` : _cols)
@@ -1873,6 +1878,7 @@ async function reloadPlayers() {
     setSecPositions((player?.positions || []).filter(p => p && p !== (player?.position || '')));
     document.getElementById('sqF_dob').value         = player?.date_of_birth   || '';
     document.getElementById('sqF_joined_date').value = player?.joined_date     || '';
+    document.getElementById('sqF_contract_until').value = player?.contract_until || '';
     fillNationalitySelect();
     setNationality(player?.nationality);
     document.getElementById('sqF_height_cm').value   = player?.height          || '';
@@ -1988,6 +1994,7 @@ async function reloadPlayers() {
       })(),
       date_of_birth: document.getElementById('sqF_dob').value || null,
       joined_date:   document.getElementById('sqF_joined_date').value || null,
+      contract_until: document.getElementById('sqF_contract_until').value || null,
       nationality:   document.getElementById('sqF_nationality').value.trim() || null,
       height:        parseFloat(document.getElementById('sqF_height_cm').value) || null,
       weight:        parseFloat(document.getElementById('sqF_weight_kg').value) || null,
