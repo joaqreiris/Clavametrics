@@ -280,9 +280,17 @@
     const roster = new Set(); (D.pteams || []).forEach(p => { if (ids.has(p.team_id)) roster.add(String(p.player_id)); });
     const total = roster.size;
     const OUT = new Set(['injured', 'sick', 'unavailable', 'away']), INJ = new Set(['injured', 'sick']);
-    const outSet = new Set(), injSet = new Set();
-    (D.avail || []).forEach(a => { const pid = String(a.player_id); if (!roster.has(pid)) return; const st = (a.status || '').toLowerCase(); if (OUT.has(st)) outSet.add(pid); if (INJ.has(st)) injSet.add(pid); });
+    /* El modelo de disponibilidad es POR EXCEPCIÓN: se carga a quien está fuera y el resto
+       se da por disponible. Es la definición de la propia pantalla (avDefaultStatus() en
+       Availability.html), así que el cálculo no cambia — pero "nadie está marcado fuera"
+       y "nadie cargó nada" dan el MISMO 38/38, y el segundo no es un plantel sano: es una
+       pantalla sin datos. `recorded` cuenta a cuántos del plantel les consta un parte hoy,
+       para que la tarjeta pueda distinguirlos. Las lesiones activas entran igual aunque
+       nadie abra la pantalla: un trigger de la base les escribe la fila. */
+    const outSet = new Set(), injSet = new Set(), recSet = new Set();
+    (D.avail || []).forEach(a => { const pid = String(a.player_id); if (!roster.has(pid)) return; recSet.add(pid); const st = (a.status || '').toLowerCase(); if (OUT.has(st)) outSet.add(pid); if (INJ.has(st)) injSet.add(pid); });
     const out = outSet.size, injured = injSet.size, available = Math.max(0, total - out);
+    const recorded = recSet.size;
     const injIds = [...injSet], otherIds = [...outSet].filter(id => !injSet.has(id));
 
     let ep = '—', epPct = 0;
@@ -307,35 +315,56 @@
     });
     const comp = exp ? Math.round(got / exp * 100) : null;
 
-    return { sessions: events, noPlan, avgLoad, total, available, out, injured, injIds, otherIds, ep, epPct, comp, rpeSilent: silent };
+    return { sessions: events, noPlan, avgLoad, loadN: auN, total, recorded, available, out, injured, injIds, otherIds, ep, epPct, comp, rpeSilent: silent };
   }
 
-  // ── Wellness de hoy (readiness = estado; distinto del cumplimiento de RPE) ──
+  /* ── Wellness de hoy (readiness = estado; distinto del cumplimiento de RPE) ──
+     Quien está de día libre no entra en el denominador: la RPC lo devuelve marcado con
+     `day_off` en vez de borrarlo, porque un día libre de equipo entero dejaría la tarjeta
+     vacía sin decir por qué. Si cargó su parte igual, cuenta normal — arriba y abajo. */
   function wellnessStats() {
     const W = state.data && state.data.wellness ? state.data.wellness : [];
-    const responded = W.filter(w => w.responded);
+    const expected = W.filter(w => w.responded || !w.day_off);
+    const responded = expected.filter(w => w.responded);
     const rd = responded.map(w => Number(w.readiness)).filter(n => !isNaN(n));
     const avg = rd.length ? (rd.reduce((a, b) => a + b, 0) / rd.length) : null;
     const flags = responded.filter(w => w.readiness != null && Number(w.readiness) <= 4);
-    return { total: W.length, respN: responded.length, avg: avg, flags: flags };
+    return { total: expected.length, respN: responded.length, avg: avg, flags: flags, dayOff: W.length - expected.length };
   }
 
   function renderPulse() {
     const k = state.kpi || (state.kpi = computeKpis());
     const w = wellnessStats();
-    const wSub = (w.respN === 0
+    const wOffChip = w.dayOff
+      ? '<span class="co-chip neutral" title="' + esc(tt('club_overview.w_day_off_hint', 'Players on a day off are left out of the count — unless they checked in anyway, which still counts.')) + '"><i class="ti ti-beach"></i>' + w.dayOff + ' ' + esc(tt('club_overview.w_day_off', 'on a day off')) + '</span>'
+      : '';
+    // Día libre de equipo entero: no queda nadie de quien esperar el parte, y "0 de 0" no dice eso.
+    const wSub = w.total === 0 && w.dayOff > 0
+      ? '<span class="co-chip neutral"><i class="ti ti-beach"></i>' + esc(tt('club_overview.w_all_off', 'Day off — no check-ins expected')) + '</span>'
+      : (w.respN === 0
       ? '<span class="co-chip neutral">' + tt('club_overview.no_wellness', 'No check-ins') + '</span>'
       : (w.flags.length > 0
         ? '<span class="co-chip bad"><i class="ti ti-alert-triangle"></i>' + w.flags.length + ' ' + tt('club_overview.w_flags', 'in the red') + '</span>'
         : '<span class="co-chip good"><i class="ti ti-check"></i>' + tt('club_overview.w_ok', 'All green') + '</span>')
-      ) + '<span class="co-chip neutral">' + w.respN + '/' + w.total + '</span>';
-    const availSub = k.out === 0
-      ? '<span class="co-chip good"><i class="ti ti-check"></i>' + tt('club_overview.all_available', 'All available') + '</span>'
-      : (k.injured > 0 ? '<span class="co-chip warn">' + k.injured + ' ' + tt('club_overview.injured', 'injured') + '</span>' : '') + ((k.out - k.injured) > 0 ? '<span class="co-chip neutral">' + (k.out - k.injured) + ' ' + tt('club_overview.other', 'other') + '</span>' : '');
+      ) + '<span class="co-chip neutral">' + w.respN + '/' + w.total + '</span>' + wOffChip;
+    /* Sin un solo parte cargado, "todos disponibles" es una afirmación que nadie hizo: el
+       verde se reemplaza por el aviso de que no hay datos de hoy. Si hay partes pero no de
+       todos, el resto se sigue contando como disponible (así lo define la pantalla de
+       Disponibilidad) y la cobertura se informa aparte, como el "sin recoger" del RPE. */
+    const avMissing = Math.max(0, k.total - k.recorded);
+    const availSub = (k.recorded === 0
+      ? '<span class="co-chip neutral" title="' + esc(tt('club_overview.av_none_hint', 'No availability was recorded today, so nobody is marked as out. It is not a confirmed clean bill of health.')) + '"><i class="ti ti-user-question"></i>' + esc(tt('club_overview.av_none_today', 'Nothing recorded today')) + '</span>'
+      : (k.out === 0
+        ? '<span class="co-chip good"><i class="ti ti-check"></i>' + tt('club_overview.all_available', 'All available') + '</span>'
+        : (k.injured > 0 ? '<span class="co-chip warn">' + k.injured + ' ' + tt('club_overview.injured', 'injured') + '</span>' : '') + ((k.out - k.injured) > 0 ? '<span class="co-chip neutral">' + (k.out - k.injured) + ' ' + tt('club_overview.other', 'other') + '</span>' : '')
+      ) + (avMissing > 0 ? '<span class="co-chip neutral" title="' + esc(tt('club_overview.av_missing_hint', 'These players have no record for today. They count as available, which is how the Availability screen reads a blank day.')) + '"><i class="ti ti-user-question"></i>' + avMissing + ' ' + esc(tt('club_overview.av_missing', 'without a record')) + '</span>' : ''));
     const cards = [
       { ic: 'ti-calendar-stats', col: 'var(--cm-accent)', bg: 'var(--cm-accent-soft)', lbl: tt('club_overview.k_sessions', 'Sessions this week'), val: String(k.sessions), sub: k.noPlan > 0 ? '<span class="co-chip warn"><i class="ti ti-alert-triangle"></i>' + k.noPlan + ' ' + tt('club_overview.no_plan', 'no plan') + '</span>' : '<span class="co-chip good"><i class="ti ti-check"></i>' + tt('club_overview.all_planned', 'All planned') + '</span>' },
       { ic: 'ti-users-group', col: 'var(--cm-info)', bg: 'var(--cm-info-bg)', lbl: tt('club_overview.k_available', 'Squad available'), val: k.available + '<small>/' + k.total + '</small>', sub: availSub },
-      { ic: 'ti-chart-line', col: 'var(--cm-violet)', bg: 'var(--cm-violet-bg)', lbl: tt('club_overview.k_load', 'Avg session load'), val: k.avgLoad + '<small> AU</small>', bar: { p: Math.min(100, k.avgLoad ? Math.round(k.avgLoad / 900 * 100) : 0), c: 'var(--cm-violet)' } },
+      /* La media sale de las sesiones que TIENEN carga, no de todas: sin el denominador a la
+         vista no se puede juzgar (es lo que faltaba para ver los dos bugs de RPE y wellness).
+         Y sin ninguna, el valor es "—" y no "0 AU", que se leería como una semana suave. */
+      { ic: 'ti-chart-line', col: 'var(--cm-violet)', bg: 'var(--cm-violet-bg)', lbl: tt('club_overview.k_load', 'Avg session load'), val: (k.loadN ? k.avgLoad + '<small> AU</small>' : '—'), sub: (k.loadN ? '<span class="co-chip neutral" title="' + esc(tt('club_overview.load_cover_hint', 'Average over the sessions that have a load recorded, out of the sessions this week.')) + '">' + k.loadN + '/' + k.sessions + ' ' + esc(tt('club_overview.load_cover', 'with load')) + '</span>' : '<span class="co-chip neutral">' + esc(tt('club_overview.load_none', 'No load recorded')) + '</span>'), bar: k.loadN ? { p: Math.min(100, k.avgLoad ? Math.round(k.avgLoad / 900 * 100) : 0), c: 'var(--cm-violet)' } : null },
       { ic: 'ti-chart-histogram', col: 'var(--cm-accent)', bg: 'var(--cm-accent-soft)', lbl: tt('club_overview.k_ep', 'Weekly E:P ratio'), val: k.ep, bar: k.ep !== '—' ? { p: k.epPct, c: 'var(--cm-accent)' } : null },
       { ic: 'ti-activity', col: 'var(--cm-danger)', bg: 'var(--cm-danger-bg)', lbl: tt('club_overview.k_rpe', 'RPE compliance'), val: (k.comp == null ? '—' : k.comp + '<small>%</small>'), sub: (k.rpeSilent > 0 ? '<span class="co-chip warn" title="' + esc(tt('co_dir.silent_hint', 'These sessions collected no RPE at all.')) + '"><i class="ti ti-mail-off"></i>' + k.rpeSilent + ' ' + esc(tt('co_dir.silent_sessions', 'not collected')) + '</span>' : ''), bar: k.comp == null ? null : { p: k.comp, c: k.comp >= 85 ? 'var(--cm-success)' : 'var(--cm-warning)' } },
       { ic: 'ti-battery-charging', col: 'var(--cm-info)', bg: 'var(--cm-info-bg)', lbl: tt('club_overview.k_wellness', 'Wellness / readiness'), val: (w.avg == null ? '—' : w.avg.toFixed(1) + '<small>/10</small>'), sub: wSub, bar: w.avg == null ? null : { p: Math.round(w.avg * 10), c: w.avg >= 6 ? 'var(--cm-success)' : w.avg >= 4 ? 'var(--cm-warning)' : 'var(--cm-danger)' } }

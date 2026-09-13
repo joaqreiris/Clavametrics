@@ -1134,12 +1134,19 @@
   // day-to-day pull — CONFIGURATION (connect/verify/map athletes, saving the API token)
   // stays admin-only in Admin.html. Single source of truth for both UI and (mirrored)
   // the gps-sync START gate in supabase/functions/gps-sync/index.ts.
-  // ⚠️ When the "Head of performance" role ships: map its slug to the 'sc' bucket in
-  //    cmRoleBucket() above (or add its bucket to the check here) AND add the slug to the
-  //    _SYNC_ROLES set in gps-sync/index.ts. Otherwise it will NOT be able to sync.
+  // 'head_performance' entra por SLUG y no por bucket. Su bucket es 'direction' —así lo
+  // mapean cmRoleBucket() acá arriba y role_bucket() en SQL, y de ahí cuelga su acceso al
+  // módulo de dirección—, así que moverlo a 'sc' para habilitarle el sync le sacaría eso.
+  // ⚠️ Los TRES lugares que deciden este permiso tienen que nombrarlo igual, o el rol ve el
+  //    botón y el servidor le devuelve 403: esta función (UI), can_configure_gps() en la
+  //    base (gps-verify / gps-athletes / gps-parameters) y _SYNC_ROLES en gps-sync/index.ts.
+  var _GPS_OP_ROLES = new Set(['head_performance']);
   window.cmCanImportGps = function (profile) {
     var b = window.cmRoleBuckets(profile);
-    return b.has('admin') || b.has('sc');
+    if (b.has('admin') || b.has('sc')) return true;
+    return !!profile && [profile.role, profile.club_role].some(function (r) {
+      return !!r && _GPS_OP_ROLES.has(String(r).toLowerCase());
+    });
   };
   // Club staff profiles whose bucket ∈ `buckets`, as [{id, role}]. Excludes platform
   // super-admins AND any 'player' profile — players are not auth users, so their id

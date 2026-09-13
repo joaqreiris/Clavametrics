@@ -1055,7 +1055,7 @@ Deno.serve(async (req: Request) => {
       const adminClient = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
 
       // Role gate (igual que START): admin/owner + S&C.
-      const _SYNC_ROLES = new Set(['admin', 'owner', 'sc_coach', 'fitness_coach']);
+      const _SYNC_ROLES = new Set(['admin', 'owner', 'sc_coach', 'fitness_coach', 'head_performance']);
       const { data: prof } = await adminClient.from('profiles').select('role, club_role').eq('id', user.id).single();
       const role = String(prof?.role || '').toLowerCase(), clubRole = String(prof?.club_role || '').toLowerCase();
       if (!isSuper && !_SYNC_ROLES.has(role) && !_SYNC_ROLES.has(clubRole)) return json({ error: 'Forbidden' }, 403);
@@ -1121,7 +1121,7 @@ Deno.serve(async (req: Request) => {
     // fitness_coach). Config (connect/verify/map/token) stays admin-only in the UI;
     // this is the daily pull, opened to S&C so they aren't blocked on an admin.
     // Super-admins always pass. ⚠️ When "Head of performance" ships, add its slug here.
-    const _SYNC_ROLES = new Set(['admin', 'owner', 'sc_coach', 'fitness_coach']);
+    const _SYNC_ROLES = new Set(['admin', 'owner', 'sc_coach', 'fitness_coach', 'head_performance']);
     const { data: _isSuper } = await userClient.rpc('is_super_admin');
     const { data: _prof } = await adminClient.from('profiles').select('role, club_role').eq('id', user.id).single();
     const _role = String(_prof?.role || '').toLowerCase(), _clubRole = String(_prof?.club_role || '').toLowerCase();
