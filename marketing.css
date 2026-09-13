@@ -18,6 +18,17 @@ body.cm {
   --cm-focus-ring:    rgba(21,128,61,0.22);
 }
 
+/* ─── Anclas por debajo de la topbar ───
+   La nav es sticky y mide 64px, así que un salto a #modules / #how / #who
+   dejaba el <h2> de la sección 22px POR DEBAJO del borde de la barra: el
+   título quedaba tapado justo al llegar. 88px = 64 de barra + aire. */
+html {
+  scroll-padding-top: 88px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  html { scroll-behavior: smooth; }
+}
+
 /* ───────────────────────── Top navigation ───────────────────────── */
 .mk-nav {
   position: sticky; top: 0; z-index: var(--cm-z-sticky, 50);
