@@ -4,7 +4,7 @@
 // Acá se ejercita el motor directo, sin pasar por ninguna card.
 
 import { test, expect } from '@playwright/test';
-import { SB, injectSession } from './_shared.js';
+import { SB, injectSession, seedGpIds } from './_shared.js';
 
 const CLUB_ID = '11111111-1111-4111-8111-111111111111';
 const PROFILE = { id: 'user-1', club_id: CLUB_ID, first_name: 'T', last_name: 'U', full_name: 'T U', role: 'admin', club_role: 'admin' };
@@ -73,6 +73,7 @@ async function open(page, settings = {}, { topupDay = null } = {}) {
     return r.fulfill({ json: rows });
   });
   await injectSession(page);
+  await seedGpIds(page, CLUB_ID, 'user-1');
   await page.goto('/GPS Analysis.html');
   await page.waitForFunction(() => typeof window.getMatchBaselineBatch === 'function', { timeout: 15_000 });
   await page.evaluate((cid) => { window._gpClubId = cid; window._gpUserId = 'user-1'; }, CLUB_ID);

@@ -84,3 +84,25 @@ export async function mockBase(page) {
   await page.route(`${SB}/rest/v1/profiles**`, uno(PROFILE));
   await page.route(`${SB}/rest/v1/clubs**`, uno(CLUB));
 }
+
+/**
+ * Deja el club (y el usuario) puestos ANTES de que corran los scripts de la página.
+ *
+ * gp-tabs.js arranca en DOMContentLoaded y lo primero que hace es `await waitForClubId()`, que
+ * sondea `window._gpClubId` y a los 12 s SE RINDE: rechaza, el catch lo come con un warning y los
+ * dashboards no se cargan nunca. Sin dashboards no se montan las cards del builder, así que el
+ * spec se queda esperando un canvas que no va a existir.
+ *
+ * Los specs de GPS seteaban el club con un page.evaluate DESPUÉS del goto. En una máquina
+ * descansada llega a tiempo; con varios workers peleándose la CPU, pasarse de los 12 s es fácil —
+ * y ahí el test fallaba por contención con cara de bug del producto. Como cada corrida sorteaba
+ * distinto, el grupo de specs en rojo cambiaba solo y parecía aleatorio.
+ *
+ * Con addInitScript el valor ya está cuando gp-tabs mira, y la carrera desaparece.
+ */
+export async function seedGpIds(page, clubId, userId = 'user-1') {
+  await page.addInitScript(([c, u]) => {
+    window._gpClubId = c;
+    if (u !== null) window._gpUserId = u;
+  }, [clubId, userId]);
+}

@@ -1,6 +1,6 @@
 // @ts-check
 import { test, expect } from '@playwright/test';
-import { SB, PROFILE, CLUB, MICROCYCLE, injectSession, mockBase } from './_shared.js';
+import { SB, PROFILE, CLUB, MICROCYCLE, injectSession, mockBase, seedGpIds } from './_shared.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // QUARANTINED (test.fixme): the "Add metric → flyout → save" flow these cover was
@@ -118,6 +118,7 @@ async function gotoGpsBuilder(page, opts = {}) {
   });
 
   await mockGpsBuilder(page, opts);
+  await seedGpIds(page, 'club-1', 'user-1');
   await page.goto('/GPS Analysis.html');
 
   // Wait for the page structure, then force the globals the builder needs.

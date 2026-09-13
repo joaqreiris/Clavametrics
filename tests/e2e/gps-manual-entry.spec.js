@@ -10,7 +10,7 @@
 // Mock de red al estilo de gps-smoke.spec.js: catch-all vacío primero y rutas específicas encima.
 
 import { test, expect } from '@playwright/test';
-import { SB, injectSession } from './_shared.js';
+import { SB, injectSession, seedGpIds } from './_shared.js';
 
 const CLUB_ID = '11111111-1111-4111-8111-111111111111';
 const SESSION_ID = '22222222-2222-4222-8222-222222222222';
@@ -93,6 +93,7 @@ async function mockGps(page, opts = {}) {
 async function openModal(page, opts) {
   const saved = await mockGps(page, opts);
   await injectSession(page);
+  await seedGpIds(page, CLUB_ID, null);
   await page.goto('/GPS Analysis.html');
   await page.waitForSelector('.gp-sections', { timeout: 15_000 });
   await page.evaluate((cid) => { window._gpClubId = cid; window._gpTeamId = null; }, CLUB_ID);

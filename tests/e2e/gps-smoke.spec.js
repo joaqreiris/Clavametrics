@@ -17,7 +17,7 @@
 // Does NOT touch production code or gps-builder.spec.js.
 
 import { test, expect } from '@playwright/test';
-import { SB, MICROCYCLE, injectSession } from './_shared.js';
+import { SB, MICROCYCLE, injectSession, seedGpIds } from './_shared.js';
 import { SMOKE_SESSIONS, SMOKE_PLAYERS, SMOKE_REPORTS, SMOKE_METRICS, smokePlayerAgg } from './_gps-fixtures.js';
 
 // Real uuid — required by the resolver's isUuid(clubId) guard (lib/gp-card/resolver.js:191).
@@ -87,6 +87,7 @@ async function gotoGps(page) {
 
   await injectSession(page);
   await mockGpsData(page);
+  await seedGpIds(page, CLUB_ID, 'user-1');
   await page.goto('/GPS Analysis.html');
   await page.waitForSelector('.gp-sections', { timeout: 15_000 });
 

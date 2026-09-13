@@ -9,7 +9,7 @@
 // dashboard_cards mockeado.
 
 import { test, expect } from '@playwright/test';
-import { SB, injectSession } from './_shared.js';
+import { SB, injectSession, seedGpIds } from './_shared.js';
 
 const CLUB_ID = '11111111-1111-4111-8111-111111111111';
 const DASH = { id: 'dash-1', club_id: CLUB_ID, report_type: 'mgrp', name: 'Load Monitoring', scope: 'squad', is_shared: true, created_by: null };
@@ -90,6 +90,7 @@ async function openDashboard(page) {
   await page.route(`${SB}/rest/v1/dashboard_cards**`, r => r.fulfill({ json: CARDS }));
 
   await injectSession(page);
+  await seedGpIds(page, CLUB_ID, 'user-1');
   await page.goto('/GPS Analysis.html');
   await page.waitForSelector('.gp-sections', { timeout: 15_000 });
   await page.evaluate((cid) => { window._gpClubId = cid; window._gpUserId = 'user-1'; }, CLUB_ID);

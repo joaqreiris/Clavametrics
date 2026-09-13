@@ -5,7 +5,7 @@
 // ANTERIOR (título y preview se escribían en la equivocada). Además cubre el título
 // editable inline (contenteditable en el header del draft) y el flujo de renombrado.
 import { test, expect } from '@playwright/test';
-import { SB, MICROCYCLE, injectSession } from './_shared.js';
+import { SB, MICROCYCLE, injectSession, seedGpIds } from './_shared.js';
 
 const METRICS = [
   { key: 'total_distance', label: 'Total Distance', unit: 'm',    kind: 'accum', category: 'distance', is_core: true, display_order: 1, squad_rollup: true },
@@ -31,6 +31,7 @@ async function gotoGps(page) {
   await page.route(`${SB}/rest/v1/gps_metric_definitions**`, route => route.fulfill({ json: METRICS }));
   await page.route(`${SB}/rest/v1/microcycles**`, route => route.fulfill({ json: [MICROCYCLE] }));
   await injectSession(page);
+  await seedGpIds(page, 'club-1', null);
   await page.goto('/GPS Analysis.html');
   await page.waitForLoadState('networkidle');
   // el builder espera window._gpClubId (lo setea el boot real de la página) → forzarlo

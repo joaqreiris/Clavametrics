@@ -6,7 +6,7 @@
 // era el problema: el insert de las cards no miraba si había fallado.
 
 import { test, expect } from '@playwright/test';
-import { SB, injectSession } from './_shared.js';
+import { SB, injectSession, seedGpIds } from './_shared.js';
 
 test.describe.configure({ timeout: 90_000 });
 
@@ -62,6 +62,7 @@ async function abrir(page) {
   });
 
   await injectSession(page);
+  await seedGpIds(page, CLUB_ID, 'user-1');
   await page.goto('/GPS Analysis.html');
   await page.waitForSelector('.gp-sections', { timeout: 15_000 });
   await page.evaluate((cid) => { window._gpClubId = cid; window._gpUserId = 'user-1'; }, CLUB_ID);

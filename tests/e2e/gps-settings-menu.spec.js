@@ -7,7 +7,7 @@
 // Y «Manual data» pasó de la barra de acciones al menú: es configuración, no algo de cada visita.
 
 import { test, expect } from '@playwright/test';
-import { SB, injectSession } from './_shared.js';
+import { SB, injectSession, seedGpIds } from './_shared.js';
 
 test.describe.configure({ timeout: 90_000 });
 
@@ -44,6 +44,7 @@ async function abrir(page) {
     r.fulfill({ json: [{ session_id: 's-new' }] }));
   await page.route(`${SB}/rest/v1/dashboard_cards**`, r => r.fulfill({ json: [] }));
   await injectSession(page);
+  await seedGpIds(page, CLUB_ID, 'user-1');
   await page.goto('/GPS Analysis.html');
   await page.waitForSelector('.gp-sections', { timeout: 15_000 });
   await page.evaluate((cid) => { window._gpClubId = cid; window._gpUserId = 'user-1'; }, CLUB_ID);

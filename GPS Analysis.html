@@ -1495,6 +1495,14 @@
 <div id="tweaks-root"></div>
 <div id="settings-host"></div>
 
+<!-- gp-persist.js va ANTES de gps-analysis.js y no es cosmético: define window.loadCardsForView,
+     y el boot de gps-analysis.js monta las cards del builder detrás de un
+     `if (window.loadCardsForView && window.sb)` que NO reintenta. Los defer corren en orden, así
+     que con gp-persist después el boot podía llegar al guardia antes de que la función existiera:
+     se salteaba el montaje en silencio y el usuario se quedaba sin sus cards hasta recargar.
+     Pasaba cuando el boot corría rápido contra una descarga lenta. gp-persist es un IIFE que solo
+     cuelga funciones de window —sin DOM, sin window.sb al cargar—, así que adelantarlo es inocuo. -->
+<script src="assets/gp-builder/gp-persist.js" defer></script>
 <script src="assets/pages/gps-analysis.js" defer></script>
 
 <script src="assets/gps-import-wizard.js"></script>
@@ -1508,7 +1516,6 @@
 <script defer src="tweaks-panel.js"></script>
 <script defer src="theme-tweaks.js"></script>
 <script src="assets/gp-builder/gp-canvas.js" defer></script>
-<script src="assets/gp-builder/gp-persist.js" defer></script>
 <script src="assets/gp-builder/gp-builder.js" defer></script>
 <script src="assets/gp-builder/gp-tabs.js" defer></script>
 <script src="assets/gp-builder/gp-resize.js" defer></script>
