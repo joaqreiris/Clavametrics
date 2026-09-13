@@ -19,6 +19,7 @@
  *   document.addEventListener("cm:langchanged", e => e.detail.lang)
  *
  * Detection priority (first hit wins):
+ *   0. ?lang=es en la URL     -> gana a todo y se persiste (link compartible)
  *   1. explicit user choice   -> localStorage "cm_lang"  (set via setLang)
  *   2. cloud user preference  -> CM_I18N.setUserPref(lang) from profiles.settings.language
  *   3. club country           -> CM_I18N.setClubCountry("BR") -> country->lang map
@@ -38,6 +39,17 @@
   var FALLBACK = "en";
   var LS_KEY = "cm_lang";
   var CACHE_PREFIX = "cm_i18n_cache.v1.";
+
+  // Bundle de diccionario: <script src="assets/i18n.js" data-bundle="marketing">
+  // hace que se cargue /locales/marketing/<lang>.json en vez de /locales/<lang>.json.
+  // Las páginas públicas usan ~280 claves y se bajaban las 10.000 de la app.
+  // Va en el prefijo de caché: si no, la home guardaría el diccionario recortado
+  // bajo la misma llave que usa la app y a la app le faltaría medio vocabulario.
+  var BUNDLE = (function () {
+    var s = document.currentScript;
+    var b = s && s.getAttribute("data-bundle");
+    return b && /^[a-z0-9-]+$/.test(b) ? b : "";
+  })();
 
   // Country (ISO-3166 alpha-2, upper) -> language. Extend as markets open.
   var COUNTRY_LANG = {
@@ -69,6 +81,15 @@
     return null;
   }
 
+  // ?lang=es en la URL. Va por delante de todo lo demás —incluida una elección
+  // guardada— porque es lo que permite mandar un link YA en un idioma: sin esto
+  // el idioma vivía solo en localStorage y no había forma de compartir la home
+  // en español, ni de que Google indexara más que la versión inglesa.
+  function fromQuery() {
+    try {
+      return normalize(new URLSearchParams(location.search).get("lang"));
+    } catch (e) { return null; }
+  }
   function fromLocalStorage() {
     try { return normalize(localStorage.getItem(LS_KEY)); } catch (e) { return null; }
   }
@@ -87,7 +108,8 @@
   }
 
   function detect() {
-    return fromLocalStorage()          // 1. explicit choice
+    return fromQuery()                 // 0. ?lang= en la URL
+      || fromLocalStorage()            // 1. explicit choice
       || normalize(userPref)           // 2. cloud user pref
       || fromCountry(clubCountry)      // 3. club country
       || fromCountry(geoCountry)       // 4. IP geo
@@ -96,14 +118,17 @@
   }
 
   // ── Locale loading (fetch JSON, cache in localStorage to kill FOUC) ──────────
+  function cacheKey(lang) {
+    return CACHE_PREFIX + (BUNDLE ? BUNDLE + "." : "") + lang;
+  }
   function cacheGet(lang) {
     try {
-      var raw = localStorage.getItem(CACHE_PREFIX + lang);
+      var raw = localStorage.getItem(cacheKey(lang));
       return raw ? JSON.parse(raw) : null;
     } catch (e) { return null; }
   }
   function cacheSet(lang, obj) {
-    try { localStorage.setItem(CACHE_PREFIX + lang, JSON.stringify(obj)); } catch (e) {}
+    try { localStorage.setItem(cacheKey(lang), JSON.stringify(obj)); } catch (e) {}
   }
 
   function localesBase() {
@@ -115,7 +140,7 @@
   var BASE = localesBase();
 
   function fetchLocale(lang) {
-    return fetch(BASE + lang + ".json", { cache: "no-cache" })
+    return fetch(BASE + (BUNDLE ? BUNDLE + "/" : "") + lang + ".json", { cache: "no-cache" })
       .then(function (r) { return r.ok ? r.json() : {}; })
       .then(function (json) { cacheSet(lang, json); return json; })
       .catch(function () { return cacheGet(lang) || {}; });
@@ -365,7 +390,11 @@
 
     current = detect();
     wireButton();
-    apply(current, { persistLocal: false }).then(function () {
+    // ?lang= sí se guarda: es una elección explícita, igual que tocar el menú.
+    // Sin guardarla, un link a /?lang=es enseñaba la home en español y al
+    // pulsar Pricing se volvía al inglés. El resto de señales (navegador, geo,
+    // club) siguen sin persistir, para poder re-detectar en cada visita.
+    apply(current, { persistLocal: !!fromQuery() }).then(function () {
       syncMenu();
       readyResolve(current);
     });
