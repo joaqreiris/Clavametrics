@@ -2470,6 +2470,7 @@ function updatePillCounts() {
   el('pillCtRoutine',  allTasks.filter(t => t.category === 'routine'   && t.status !== 'cancelled').length);
 }
 
+let _taskDeepLinkDone = false;
 async function loadTasks() {
   let _tkQ = window.sb.from('tasks')
     .select('id,title,description,status,priority,due_date,assigned_to,assigned_to_name,assigned_roles,created_by,category')
@@ -2481,6 +2482,23 @@ async function loadTasks() {
   updatePillCounts();
   renderChatRightTasks();
   updateTasksBadge();
+
+  /* Deep link ?task=<id>. La cola de decisiones de Load Monitor enlaza acá, y quien la abre
+     tiene que caer EN la tarea, no en un tablero donde vuelve a buscarla. Una sola vez por
+     carga (esto se re-ejecuta en cada refresco) y sólo si la tarea está entre las cargadas:
+     si es de otro equipo o la borraron, se queda el tablero en vez de un error. */
+  if (!_taskDeepLinkDone) {
+    _taskDeepLinkDone = true;
+    try {
+      const _tid = new URLSearchParams(location.search).get('task');
+      if (_tid && allTasks.some(t => t.id === _tid)) {
+        // La pestaña que se ve por defecto es Chat: sin cambiarla, al cerrar el detalle el
+        // usuario queda en el chat y no en el tablero del que salió la tarea.
+        document.querySelector('.ct-tabs .ct-tab[data-view="tasks"]')?.click();
+        openTaskDetail(_tid);
+      }
+    } catch (e) { console.warn('[tasks] deep link ?task= falló:', e && e.message); }
+  }
 }
 
 function renderKanban(tasks) {

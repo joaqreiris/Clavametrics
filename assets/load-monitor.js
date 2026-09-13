@@ -78,7 +78,10 @@
   const state = { clubId:null, teamId:null, players:[], refDate:iso(new Date()), seasonStart:null,
     metric:'srpe', model:'ewma', coupled:false, availWindow:7, chart:null,
     lastSquad:null, lastStress:null, lastExposure:null,
-    catalog:[], cols:[], signalSet:[], sortKey:'risk', sortDir:'desc', availRows:[] };
+    catalog:[], cols:[], signalSet:[], sortKey:'risk', sortDir:'desc', availRows:[],
+    // Cola de decisiones: tareas ya creadas (por source_key), las manuales, y si la base
+    // acepta guardarlas (falso sólo si falta la migración 152 → no se ofrece convertir).
+    dqTasks:{}, dqManual:[], dqStore:true };
 
   // Active season start anchors the GPS-exposure baseline (so a fresh season isn't
   // compared against stray pre-season days). Prefer a season scoped to the active
@@ -872,57 +875,215 @@
     renderAvailRows();
   }
 
-  // ── Decision queue (auto-derived + user-added) ───────────────────────────────
+  /* ── Cola de decisiones ──────────────────────────────────────────────────────
+     Los ítems se derivan del análisis (ACWR en riesgo, mitigación por calor o viaje,
+     progresión de rehab) y hasta acá sólo se dibujaban. Los que agregaba el usuario vivían
+     en localStorage: se perdían al cambiar de navegador, nadie más los veía, y no tenían
+     responsable ni estado. Ahora cada ítem se puede bajar a una tarea de `tasks`, que es lo
+     que mira el resto del club en Chat & Tasks.
+
+     Esto NO convierte la cola en un gestor de tareas: sigue siendo la lista de lo que hay
+     que decidir esta semana, y lo que agrega es mostrar qué ya bajó a tarea y cómo va. El
+     ciclo de vida (reasignar, completar, comentar) vive en Chat & Tasks, que es su lugar. */
+
+  const DQ_PREFIX = 'lm';
+  /* Identidad del ítem, para que convertir dos veces no cree dos tareas: el índice único de
+     la migración 152 lo garantiza en la BASE, no en la UI — dos personas del staff pueden
+     apretar el mismo botón a la vez. Lleva el equipo y la fecha de referencia adentro, así
+     que la semana siguiente la clave es otra y el mismo riesgo vuelve a proponerse en vez de
+     quedar tapado por una tarea vieja ya cerrada. */
+  function dqSourceKey(itemKey, st){ st = st || state; return `${DQ_PREFIX}:${itemKey}:${st.teamId||'noteam'}:${st.refDate}`; }
+
+  // tasks.priority sólo acepta low/medium/high/urgent; la cola habla en high/med/low.
+  const DQ_PRIO = { high:'high', med:'medium', low:'low' };
+
+  // ── Acciones viejas guardadas en el navegador ──
+  // Ya no se escriben. Se siguen LEYENDO para no hacer desaparecer sin aviso lo que alguien
+  // hubiera anotado: se muestran marcadas como locales, con un botón para subirlas.
   function actionsKey(){ return `cm_lm_actions_${state.clubId||'x'}`; }
   function loadActions(){ try{ return JSON.parse(localStorage.getItem(actionsKey())||'[]'); }catch{ return []; } }
   function saveActions(a){ try{ localStorage.setItem(actionsKey(), JSON.stringify(a)); }catch{} }
 
-  function renderDecisionQueue(){
-    const list=$('dqList'); if(!list) return;
-    const squad=state.lastSquad, stress=state.lastStress;
+  /* Los ítems derivados del análisis. Separado del render para poder probarlo sin DOM y para
+     que cada ítem declare a QUÉ ROL le toca: hasta ahora `who` era un texto suelto que no
+     servía para asignar nada. Los slugs son los que acepta tasks.assigned_roles. */
+  function dqItems(st){
+    st = st || state;
+    const squad=st.lastSquad, stress=st.lastStress;
     const items=[];
     const per=squad?.perPlayer||{};
     const danger=Object.entries(per).filter(([,v])=>v.acwr!=null&&v.acwr>1.5).map(([id])=>id);
     const over=Object.entries(per).filter(([,v])=>v.acwr!=null&&v.acwr>1.3&&v.acwr<=1.5);
-    const nameOf=id=>{ const p=state.players.find(x=>x.id===id); return p?`${(p.first_name||'')[0]||''}. ${p.last_name||''}`.trim():'player'; };
+    const nameOf=id=>{ const p=st.players.find(x=>x.id===id); return p?`${(p.first_name||'')[0]||''}. ${p.last_name||''}`.trim():'player'; };
 
-    if(danger.length) items.push({ ic:'ti-alert-triangle', prio:'high',
+    if(danger.length) items.push({ key:'hsr', ic:'ti-alert-triangle', prio:'high',
+      roles:['sc_coach','fitness_coach','head_performance'], cat:'general',
       t:tt('load_monitor.dq_review_hsr', `Review high-speed exposure (${danger.length})`, {n:danger.length}),
       who:`${tt('load_monitor.role_sport_science','Sport Science')} · ${danger.map(nameOf).slice(0,3).join(', ')}${danger.length>3?'…':''}` });
-    if(over.length)   items.push({ ic:'ti-activity', prio:'med',
+    if(over.length)   items.push({ key:'md2', ic:'ti-activity', prio:'med',
+      roles:['fitness_coach','sc_coach'], cat:'general',
       t:tt('load_monitor.dq_adjust_md2', `Adjust MD-2 loading · ${over.length} in overreach`, {n:over.length}),
       who:tt('load_monitor.role_fitness','Fitness coach') });
     const hiStr=(stress?.stressors||[]).filter(s=>s.sev==='high');
-    hiStr.slice(0,2).forEach(s=> items.push({ ic: s.kind==='heat'?'ti-flame':s.kind==='travel'?'ti-plane':'ti-calendar-stats', prio:'med',
+    hiStr.slice(0,2).forEach(s=> items.push({ key:`stress:${s.kind||'x'}:${s.date}`, ic: s.kind==='heat'?'ti-flame':s.kind==='travel'?'ti-plane':'ti-calendar-stats', prio:'med',
+      roles:['sc_coach','fitness_coach','coach'], cat:'general', due:s.date,
       t:tt('load_monitor.dq_mitigation', `Mitigation plan · ${s.title}`, {title:s.title}),
       who:`${new Date(s.date+'T00:00:00').toLocaleDateString(lang(),{day:'numeric',month:'short'})}` }));
-    const restr=state.players.filter(p=>['injured','modified','unavailable','sick'].includes(p.status));
-    if(restr.length) items.push({ ic:'ti-heart-rate-monitor', prio:'med',
+    const restr=st.players.filter(p=>['injured','modified','unavailable','sick'].includes(p.status));
+    if(restr.length) items.push({ key:'rehab', ic:'ti-heart-rate-monitor', prio:'med',
+      roles:['physio'], cat:'medical',
       t:tt('load_monitor.dq_rehab', `Rehab progression update · ${restr.length} players`, {n:restr.length}),
       who:tt('load_monitor.role_medical','Medical') });
-    items.push({ ic:'ti-clipboard-check', prio:'low', t:tt('load_monitor.dq_confirm_xi','Confirm starting XI for MD'), who:tt('load_monitor.role_coach','Head coach') });
+    items.push({ key:'xi', ic:'ti-clipboard-check', prio:'low', roles:['coach'], cat:'match_day',
+      t:tt('load_monitor.dq_confirm_xi','Confirm starting XI for MD'), who:tt('load_monitor.role_coach','Head coach') });
+    return items;
+  }
 
-    // user-added actions (persisted)
+  /* Las tareas que ya salieron de esta cola. Se piden por prefijo y no por claves exactas
+     porque las manuales (lm:manual:…) no las conoce el cliente de antemano. */
+  async function loadDqTasks(){
+    state.dqTasks = {}; state.dqManual = []; state.dqStore = true;
+    if(!state.clubId) return;
+    const { data, error } = await sb().from('tasks')
+      .select('id,title,status,priority,assigned_to_name,assigned_roles,source_key,team_id,created_at')
+      .eq('club_id', state.clubId)
+      .like('source_key', `${DQ_PREFIX}:%`)
+      .neq('status','cancelled')
+      .order('created_at',{ ascending:false })
+      .limit(200);
+    if(error){
+      /* Sin la columna (base sin la migración 152) PostgREST devuelve 400 y `data` viene
+         vacío: la cola se dibujaría igual, con botones que no pueden funcionar. Mejor
+         saberlo y no ofrecer la conversión. */
+      console.warn('[LM] cola de decisiones sin tareas:', error.message);
+      state.dqStore = false; return;
+    }
+    (data||[]).forEach(t=>{
+      if(!t.source_key) return;
+      if(t.source_key.indexOf(`${DQ_PREFIX}:manual:`)===0){
+        // Las manuales no caducan con la fecha de referencia; las cerradas salen de la cola.
+        if(t.status!=='done' && (!t.team_id || t.team_id===state.teamId)) state.dqManual.push(t);
+        return;
+      }
+      if(!state.dqTasks[t.source_key]) state.dqTasks[t.source_key]=t;
+    });
+  }
+
+  const DQ_STATE = {
+    pending:     ['is-pending', 'ti-circle-dashed',  'load_monitor.dq_st_pending',  'Pending'],
+    in_progress: ['is-doing',   'ti-progress',       'load_monitor.dq_st_doing',    'In progress'],
+    done:        ['is-done',    'ti-circle-check',   'load_monitor.dq_st_done',     'Done'],
+  };
+
+  function dqTaskChip(t){
+    const st = DQ_STATE[t.status] || DQ_STATE.pending;
+    const quien = t.assigned_to_name
+      || (t.assigned_roles||[]).map(r=>tt('load_monitor.role_slug_'+r, r)).join(', ')
+      || tt('load_monitor.dq_unassigned','Unassigned');
+    return `<span class="lm-dq-state ${st[0]}" title="${esc(quien)}"><i class="ti ${st[1]}"></i>${esc(tt(st[2], st[3]))}</span>`;
+  }
+
+  function renderDecisionQueue(){
+    const list=$('dqList'); if(!list) return;
+    const items=dqItems();
+
+    // Acciones que ya son tarea (las manuales creadas desde acá).
+    (state.dqManual||[]).forEach(t=> items.push({
+      key:null, ic:'ti-user-plus', prio: t.priority==='high'||t.priority==='urgent'?'high':t.priority==='low'?'low':'med',
+      t:t.title, who:tt('load_monitor.dq_added_by_you','Added by you'), task:t,
+    }));
+
+    // Y las que quedaron en el navegador de antes: se muestran, marcadas, para poder subirlas.
     const ua=loadActions();
-    ua.forEach((a,idx)=> items.push({ ic:'ti-user-plus', prio:a.prio||'low', t:a.t, who:tt('load_monitor.dq_added_by_you','Added by you'), userIdx:idx }));
+    ua.forEach((a,idx)=> items.push({ key:null, ic:'ti-user-plus', prio:a.prio||'low', t:a.t,
+      who:tt('load_monitor.dq_local_only','Only on this browser'), localIdx:idx }));
 
     const pill={ high:'is-prio-high', med:'is-prio-med', low:'is-prio-low' };
     const plab={ high:tt('load_monitor.prio_high','High'), med:tt('load_monitor.prio_med','Medium'), low:tt('load_monitor.prio_low','Low') };
-    list.innerHTML = items.map(i=>`
+
+    list.innerHTML = items.map((i,idx)=>{
+      const t = i.task || (i.key ? state.dqTasks[dqSourceKey(i.key)] : null);
+      let right = '';
+      if(t) right = dqTaskChip(t) + `<a class="cm-btn is-ghost is-sm" href="Chat%20%26%20Tasks.html?task=${encodeURIComponent(t.id)}" title="${esc(tt('load_monitor.dq_open_task','Open in Tasks'))}"><i class="ti ti-external-link"></i></a>`;
+      else if(i.localIdx!=null) right = (state.dqStore
+          ? `<button class="cm-btn is-outline is-sm" data-up="${i.localIdx}"><i class="ti ti-cloud-upload"></i><span>${esc(tt('load_monitor.dq_upload','Make it a task'))}</span></button>`
+          : '')
+        + `<button class="cm-icon-btn is-sm" data-rm="${i.localIdx}" title="${esc(tt('load_monitor.dq_remove','Remove'))}"><i class="ti ti-x"></i></button>`;
+      else if(state.dqStore) right = `<button class="cm-btn is-outline is-sm" data-mk="${idx}"><i class="ti ti-subtask"></i><span>${esc(tt('load_monitor.dq_make_task','Assign as task'))}</span></button>`;
+      return `
       <div class="lm-dq-item">
         <div class="lm-dq-ic"><i class="ti ${i.ic}"></i></div>
         <div class="lm-dq-main"><div class="t">${esc(i.t)}</div><div class="who"><i class="ti ti-user"></i>${esc(i.who)}</div></div>
-        <div class="lm-dq-right"><span class="cm-pill ${pill[i.prio]}">${esc(plab[i.prio])}</span>${i.userIdx!=null?`<button class="cm-icon-btn is-sm" data-rm="${i.userIdx}" title="${esc(tt('load_monitor.dq_remove','Remove'))}"><i class="ti ti-x"></i></button>`:''}</div>
-      </div>`).join('');
+        <div class="lm-dq-right"><span class="cm-pill ${pill[i.prio]}">${esc(plab[i.prio])}</span>${right}</div>
+      </div>`;
+    }).join('');
+
     list.querySelectorAll('[data-rm]').forEach(b=> b.addEventListener('click', ()=>{
       const a=loadActions(); a.splice(+b.dataset.rm,1); saveActions(a); renderDecisionQueue();
     }));
+    list.querySelectorAll('[data-mk]').forEach(b=> b.addEventListener('click', ()=> convertItem(items[+b.dataset.mk], b)));
+    list.querySelectorAll('[data-up]').forEach(b=> b.addEventListener('click', async ()=>{
+      const idx=+b.dataset.up, a=loadActions(), txt=a[idx] && a[idx].t;
+      if(!txt) return;
+      const ok = await createTask({ title:txt, prio:a[idx].prio||'low', roles:null, cat:'general', key:null, who:'' }, b);
+      // Sólo se borra del navegador si la tarea quedó creada: si falla, el texto no se pierde.
+      if(ok){ const cur=loadActions(); cur.splice(idx,1); saveActions(cur); await loadDqTasks(); renderDecisionQueue(); }
+    }));
   }
 
-  function addAction(){
+  async function convertItem(item, btn){
+    if(!item) return;
+    const ok = await createTask({ title:item.t, prio:item.prio, roles:item.roles, cat:item.cat, key:item.key, who:item.who, due:item.due }, btn);
+    if(ok){ await loadDqTasks(); renderDecisionQueue(); }
+  }
+
+  /* Crea la tarea. Devuelve true si quedó creada (o si YA existía: el duplicado no es un
+     error para quien aprieta el botón, es que alguien se le adelantó). */
+  async function createTask(o, btn){
+    if(!state.clubId) return false;
+    /* Sin equipo no se puede asignar por rol: la policy de visibilidad exige que el team_id
+       esté entre los equipos de quien mira, así que una tarea por roles sin equipo sería
+       invisible justo para el destinatario. Mejor decirlo que crear algo que nadie ve. */
+    if(o.roles && !state.teamId){ alert(tt('load_monitor.dq_need_team','Pick a team before assigning a task by role.')); return false; }
+    let prof=null; try{ prof = await window.getProfile?.(); }catch(_e){}
+    if(!prof || !prof.id){ alert(tt('load_monitor.dq_no_profile','Your profile could not be loaded, so the task cannot be created.')); return false; }
+    const nombre = prof.full_name || [prof.first_name,prof.last_name].filter(Boolean).join(' ').trim() || prof.email || '—';
+    const teamName = (()=>{ const sel=$('teamSel'); return sel&&sel.selectedOptions[0]? sel.selectedOptions[0].textContent : ''; })();
+    // Quien la recibe en Chat & Tasks no vio esta pantalla: la descripción dice de dónde salió.
+    const desc = [
+      tt('load_monitor.dq_desc_origin','From the Load Monitor decision queue.'),
+      [teamName, state.refDate].filter(Boolean).join(' · '),
+      o.who || '',
+    ].filter(Boolean).join('\n');
+
+    if(btn) btn.disabled = true;
+    const row = {
+      club_id: state.clubId, created_by: prof.id, created_by_name: nombre,
+      title: o.title, description: desc,
+      priority: DQ_PRIO[o.prio] || 'medium', status: 'pending',
+      category: o.cat || 'general', team_id: state.teamId || null,
+      assigned_roles: o.roles && o.roles.length ? o.roles : null,
+      due_date: o.due || null,
+      source_key: o.key ? dqSourceKey(o.key) : `${DQ_PREFIX}:manual:${Date.now().toString(36)}${Math.random().toString(36).slice(2,8)}`,
+    };
+    const { error } = await sb().from('tasks').insert(row);
+    if(btn) btn.disabled = false;
+    if(error){
+      // 23505 = el índice único: ya había una tarea para este mismo ítem.
+      if(error.code==='23505') return true;
+      console.error('[LM] no se pudo crear la tarea:', error);
+      alert(tt('load_monitor.dq_task_error','The task could not be created.'));
+      return false;
+    }
+    return true;
+  }
+
+  async function addAction(){
     const txt=(window.prompt(tt('load_monitor.dq_add_prompt','Describe the action:'))||'').trim();
     if(!txt) return;
-    const a=loadActions(); a.push({ t:txt, prio:'med' }); saveActions(a); renderDecisionQueue();
+    if(!state.dqStore){ alert(tt('load_monitor.dq_task_error','The task could not be created.')); return; }
+    const ok = await createTask({ title:txt, prio:'med', roles:null, cat:'general', key:null, who:'' });
+    if(ok){ await loadDqTasks(); renderDecisionQueue(); }
   }
 
   // ── Export Markdown report ───────────────────────────────────────────────────
@@ -969,7 +1130,7 @@
     await loadOutOfAvg();                                 // lesionados/limitados fuera de los promedios
     await renderACWR();                                   // sets state.lastSquad
     try { state.lastStress = await window.stressors.build({ clubId:state.clubId, teamId:state.teamId, refStr:state.refDate, days:21, tt }); } catch { state.lastStress=null; }
-    await Promise.all([ renderExposure(), renderStressors(), renderAvailability(state.lastSquad?.perPlayer) ]);
+    await Promise.all([ renderExposure(), renderStressors(), renderAvailability(state.lastSquad?.perPlayer), loadDqTasks() ]);
     renderDecisionQueue();
   }
 
@@ -1046,6 +1207,11 @@
   }
 
   // ── boot ─────────────────────────────────────────────────────────────────────
+  /* Expuesto para tests: derivar los ítems y armar su clave de origen es lógica pura, y
+     probarla sin DOM ni red es lo que permite fijar que la clave lleva equipo y fecha —que es
+     de lo que depende no duplicar tareas. Mismo patrón que window.cmCoDirector. */
+  window.cmLoadMonitor = { _dqItems: dqItems, _dqSourceKey: dqSourceKey, _DQ_PRIO: DQ_PRIO };
+
   (async function boot(){
     try { if(window.guardModule && !(await window.guardModule())) return; } catch {}
     try { await Promise.all([window.getProfile?.(), window.getClub?.()]); } catch {}

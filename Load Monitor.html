@@ -1223,7 +1223,20 @@ body.cm::before {
 .lm-dq-main .t { font: 600 13.5px/1.3 var(--cm-font-sans); color: var(--cm-fg-strong); }
 .lm-dq-main .who { font: var(--cm-mono); color: var(--cm-fg-faint); margin-top: 4px; display: flex; align-items: center; gap: 6px; }
 .lm-dq-main .who .ti { font-size: 13px; }
-.lm-dq-right { display: flex; align-items: center; gap: 12px; }
+.lm-dq-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+/* Estado de la tarea que salió de un ítem de la cola. No reusa .cm-pill porque ésas hablan
+   de prioridad y las dos conviven en la misma fila: si fueran iguales se leerían como una
+   sola cosa. */
+.lm-dq-state {
+  display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+  padding: 3px 9px; border-radius: 999px;
+  font: 600 11.5px/1.5 var(--cm-font-sans);
+  border: var(--cm-bw) solid transparent;
+}
+.lm-dq-state .ti { font-size: 13px; }
+.lm-dq-state.is-pending { background: var(--cm-bg-sunk); color: var(--cm-fg-muted); border-color: var(--cm-border-soft); }
+.lm-dq-state.is-doing   { background: var(--cm-info-bg); color: var(--cm-info); border-color: var(--cm-info-bd); }
+.lm-dq-state.is-done    { background: var(--cm-success-bg); color: var(--cm-success); border-color: var(--cm-success-bd); }
 
 .cm-pill.is-prio-high { background: var(--cm-danger-bg); color: var(--cm-danger); border-color: var(--cm-danger-bd); }
 .cm-pill.is-prio-med  { background: var(--cm-warning-bg); color: var(--cm-warning); border-color: var(--cm-warning-bd); }
