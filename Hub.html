@@ -2380,7 +2380,10 @@ function renderTasks(tasks, view = 'my') {
 
   // wellnessRes now comes from the wellness_status RPC: one row per player expected today,
   // each with `responded` + metric fields for those who submitted.
-  const _wellRows = wellnessRes.data || [];
+  // Quien está de día libre no entra en el denominador: no se le pide el parte. Si lo cargó
+  // igual, cuenta normal. Así "3 de 24" no aparece un día que el equipo tenía libre.
+  const _wellAll = wellnessRes.data || [];
+  const _wellRows = _wellAll.filter(r => r.responded || !r.day_off);
   const _wellDone = _wellRows.filter(r => r.responded);
   if (!wellnessRes.error && _wellDone.length) {
     const avg = _wellDone.reduce((s, r) =>
@@ -2392,6 +2395,8 @@ function renderTasks(tasks, view = 'my') {
   } else if (wellnessRes.error) {
     document.getElementById('kpiWellness').innerHTML = `—<sub>/10</sub>`;
     document.getElementById('wellnessSub').textContent = tt('hub.could_not_load','Could not load');
+  } else if (!_wellRows.length && _wellAll.length) {
+    document.getElementById('wellnessSub').textContent = tt('hub.day_off_today','Day off — no check-in expected');
   } else {
     document.getElementById('wellnessSub').textContent = tt('hub.no_submissions_today','No submissions today');
   }

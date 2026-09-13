@@ -149,13 +149,26 @@ function buildRpe() {
 }
 const RPE = buildRpe();
 
+/* Ocho días libres de EQUIPO ENTERO de la Primera, anotados en el Calendar. No dejan UNA SOLA
+   fila en availability — así funciona el producto (Availability.html deriva el día libre de
+   equipo de calendar_events / training_sessions, y sólo baja a la grilla el parcial). Por eso
+   el criterio del RPE, que mira nada más que availability, no alcanza para el wellness. */
+const DAYOFF_DAYS = [4, 11, 18, 25, 32, 39, 46, 53].map(dayAgo);
+const CAL_EVENTS = DAYOFF_DAYS.map((d, i) => ({
+  id: `ce-${i}`, club_id: CLUB.id, team_id: 'team-a', type: 'day_off', date: d, player_ids: [],
+}));
+
 /** Wellness de los últimos 60 días. */
 function buildWellness() {
   const out = [];
   for (let d = 60; d >= 0; d--) {
     if (shift(-d).getDay() === 0) continue;
+    const day = dayAgo(d), esDiaLibre = DAYOFF_DAYS.includes(day);
     PLAYERS.slice(0, 26).forEach((p, i) => {
-      out.push({ player_id: p.id, readiness: 5 + ((i + d) % 5), submitted_at: dayAgo(d) + 'T07:30:00+00:00', club_id: CLUB.id });
+      // En un día libre de la Primera casi nadie de ese equipo carga el parte, y es lo
+      // esperable: no hay entrenamiento. Contarlo como incumplimiento es el bug.
+      if (esDiaLibre && p.team_id === 'team-a' && i >= 2) return;
+      out.push({ player_id: p.id, readiness: 5 + ((i + d) % 5), submitted_at: day + 'T07:30:00+00:00', club_id: CLUB.id });
     });
   }
   return out;
@@ -223,8 +236,8 @@ const SEASONS = TEAMS.map((t, i) => ({ name: '2026/27', start_date: dayAgo(120 +
 /** Mockea todo lo que la página consulta. `empty` sirve el caso "club recién creado". */
 async function mockAll(page, { empty = false } = {}) {
   const D = empty
-    ? { players: [], pteams: [], sessions: [], avail: [], rpe: [], wellness: [], injuries: [], activity: [], profiles: [ADMIN], teams: [], seasons: [], matches: [], pms: [], sparts: [], exempts: [] }
-    : { players: PLAYERS, pteams: PTEAMS, sessions: SESSIONS, avail: AVAIL, rpe: RPE, wellness: WELLNESS, injuries: INJURIES, activity: ACTIVITY, profiles: STAFF_PROFILES, teams: TEAMS, seasons: SEASONS, matches: MATCH_RESULTS, pms: PMS, sparts: SPARTS, exempts: EXEMPTS };
+    ? { players: [], pteams: [], sessions: [], avail: [], rpe: [], wellness: [], injuries: [], activity: [], profiles: [ADMIN], teams: [], seasons: [], matches: [], pms: [], sparts: [], exempts: [], calevents: [] }
+    : { players: PLAYERS, pteams: PTEAMS, sessions: SESSIONS, avail: AVAIL, rpe: RPE, wellness: WELLNESS, injuries: INJURIES, activity: ACTIVITY, profiles: STAFF_PROFILES, teams: TEAMS, seasons: SEASONS, matches: MATCH_RESULTS, pms: PMS, sparts: SPARTS, exempts: EXEMPTS, calevents: CAL_EVENTS };
 
   const uno = obj => route => {
     const acc = route.request().headers()['accept'] || '';
@@ -265,6 +278,7 @@ async function mockAll(page, { empty = false } = {}) {
     if (t('rpe')) return route.fulfill({ json: D.rpe });
     if (t('wellness')) return route.fulfill({ json: D.wellness });
     if (t('injuries')) return route.fulfill({ json: D.injuries });
+    if (t('calendar_events')) return route.fulfill({ json: D.calevents });
     if (t('activity_log')) return route.fulfill({ json: D.activity });
     if (t('match_results')) return route.fulfill({ json: D.matches });
     if (t('seasons')) return route.fulfill({ json: D.seasons });
@@ -454,6 +468,23 @@ test.describe('Club Overview · Temporada', () => {
        player_teams cargan con SU equipo. Contándolos, el denominador sería 16 y el número
        caería a ~75%. Con el equipo principal tiene que dar 100%. */
     expect(pct, 'los invitados no cargan el parte con este equipo').toBeGreaterThan(90);
+  });
+
+  /* Regresión: el día libre no descontaba del wellness. Un día libre de equipo entero con dos
+     partes cargados contaba como dos de doce, y el número dejaba de medir si los jugadores
+     responden para medir cuántos días libres tuvo el equipo. */
+  test('el día libre de equipo no cuenta como incumplimiento de wellness', async ({ page }) => {
+    await openPage(page, { tab: 'season' });
+    const panel = await waitTab(page, 'coTabSeason');
+    const fila = panel.locator('#coCmpTable tbody tr', { has: page.locator('th:has-text("Primera")') });
+    const pct = parseInt((await fila.locator('td[data-col="well"] .co-chip').innerText()).replace(/[^\d]/g, ''), 10);
+    /* Los ocho días libres están SÓLO en calendar_events: ni una fila en availability. Sin
+       mirarlos, esos días aportan 2 de 12 cada uno y el equipo cae a ~88%. */
+    expect(pct, 'los días libres no pueden hundir el cumplimiento').toBeGreaterThan(95);
+    expect(pct).toBeLessThanOrEqual(100);
+    // Y la tarjeta dice que hubo días libres, en vez de descontarlos en silencio.
+    const kpi = panel.locator('.cod-kpi', { hasText: /Respuesta de wellness/i }).first();
+    await expect(kpi).toContainText(/con día libre/i);
   });
 
   test('la tarjeta de wellness dice sobre cuántos días mide', async ({ page }) => {

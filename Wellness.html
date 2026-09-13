@@ -171,6 +171,11 @@
           <button class="cm-btn is-wa" id="remindBtn"><i class="ti ti-brand-whatsapp"></i>Remind missing (0)</button>
         </div>
         <div class="tr-list" id="listPending" style="gap:8px;"></div>
+        <!-- Día libre: no son pendientes, pero tienen que verse o parecería que faltan jugadores -->
+        <div id="dayOffWrap" style="display:none;margin-top:16px;">
+          <div class="tr-sub" id="dayOffT" data-i18n="wellness.dayOffTitle">On a day off — no check-in expected</div>
+          <div class="tr-list" id="listDayOff" style="gap:8px;margin-top:8px;"></div>
+        </div>
       </div>
 
       <!-- Loading skeleton (unused now — wired on refresh next step) -->
@@ -320,7 +325,7 @@
   // i18n: translated string with interpolation/plurals; English fallback when the runtime
   // isn't ready or the key is missing. Pass a pre-interpolated English fallback for var strings.
   const tt = (k, fb, vars) => { const v = window.CM_I18N ? window.CM_I18N.t(k, vars) : null; return (v && v !== k) ? v : fb; };
-  const state = { tab:'responded', loading:false, error:false, inited:false, cid:null, teams:[], fullAccess:false, responders:[], pending:[], total:0 };
+  const state = { tab:'responded', loading:false, error:false, inited:false, cid:null, teams:[], fullAccess:false, responders:[], pending:[], dayOff:[], total:0 };
 
   const initials = n => { const parts = String(n||'').replace(/\./g,'').trim().split(/\s+/); return (((parts[0]||'')[0]||'') + (parts.length>1 ? (parts[parts.length-1][0]||'') : '')).toUpperCase() || '—'; };
   const numOrNull = v => (v === null || v === undefined || v === '') ? null : Number(v);
@@ -341,6 +346,7 @@
       pain: painLabels(r.body_areas),
       comment: r.note || '',
       time: fmtTime(r.submitted_at),
+      dayOff: !!r.day_off,
     };
   }
 
@@ -471,6 +477,21 @@
     </article>`;
   }
 
+  function dayOffCardHTML(p) {
+    return `
+    <article class="pc is-pending">
+      <div class="pc-pending-head">
+        <div class="pc-id">
+          <span class="cm-avatar is-md" style="opacity:.45;" data-cm-photo="${p.id}">${initials(p.name)}</span>
+          <div class="pc-who">
+            <div class="pc-name">${T.escape(p.name)}</div>
+          </div>
+        </div>
+        <span class="status"><i class="ti ti-beach"></i>${tt('wellness.dayOff','Day off')}</span>
+      </div>
+    </article>`;
+  }
+
   function skeletonHTML() {
     let rows = '';
     for (let i = 0; i < 6; i++) {
@@ -519,8 +540,14 @@
     if (state.loading) { skel.style.display = ''; skel.querySelector('.tr-list').innerHTML = skeletonHTML(); return; }
     if (state.error)   { err.style.display = ''; return; }
     if (total === 0) {
-      document.getElementById('emptyH').textContent = tt('wellness.noPlayersTitle', 'No players in this team');
-      document.getElementById('emptyP').textContent = tt('wellness.noPlayersSub', 'There are no active players to show for the selected team.');
+      // Día libre de equipo entero: no hay a quién esperarle el parte, y eso no es "sin jugadores".
+      const allOff = state.dayOff.length > 0;
+      document.getElementById('emptyH').textContent = allOff
+        ? tt('wellness.allDayOffTitle', 'Day off')
+        : tt('wellness.noPlayersTitle', 'No players in this team');
+      document.getElementById('emptyP').textContent = allOff
+        ? tt('wellness.allDayOffSub', 'The whole squad is off today, so no check-in is expected.')
+        : tt('wellness.noPlayersSub', 'There are no active players to show for the selected team.');
       empty.style.display = ''; return;
     }
 
@@ -530,6 +557,12 @@
     } else {
       pendWrap.style.display = '';
       document.getElementById('listPending').innerHTML = state.pending.map(pendingCardHTML).join('');
+      const offWrap = document.getElementById('dayOffWrap');
+      offWrap.style.display = state.dayOff.length ? '' : 'none';
+      if (state.dayOff.length) {
+        document.getElementById('dayOffT').textContent = tt('wellness.dayOffTitle', 'On a day off — no check-in expected');
+        document.getElementById('listDayOff').innerHTML = state.dayOff.map(dayOffCardHTML).join('');
+      }
     }
   }
   window.renderWellness = renderBoard;
@@ -546,8 +579,13 @@
       const { data, error } = await window.sb.rpc('wellness_status', { p_club_id: state.cid, p_team_id: teamId, p_date: _localDate, p_tz_offset: _now.getTimezoneOffset() });
       if (error) throw error;
       const rows = data || [];
+      /* Quien está de día libre no es un pendiente: no se le reclama el parte ni entra en el
+         denominador. Va a su propia lista para que se vea POR QUÉ no está, en vez de
+         desaparecer — un día libre de equipo entero dejaría el tablero vacío sin explicación.
+         El que cargó su parte estando de día libre cuenta como respondido, como cualquiera. */
       const responders = rows.filter(r => r.responded);
-      const pending = rows.filter(r => !r.responded);
+      const pending = rows.filter(r => !r.responded && !r.day_off);
+      const dayOff = rows.filter(r => !r.responded && r.day_off);
       // worst-first: hooper_index DESC, null hooper last
       responders.sort((a, b) => {
         if (a.hooper_index == null && b.hooper_index == null) return 0;
@@ -557,7 +595,8 @@
       });
       state.responders = responders.map(modelFromRow);
       state.pending = pending.map(modelFromRow);
-      state.total = rows.length;
+      state.dayOff = dayOff.map(modelFromRow);
+      state.total = responders.length + pending.length;
       state.loading = false; state.error = false;
       renderBoard();
     } catch (e) {

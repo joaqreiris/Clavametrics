@@ -6607,18 +6607,29 @@ begin
 end $function$
 ;
 
-CREATE OR REPLACE FUNCTION public.wellness_status(p_club_id uuid, p_team_id uuid DEFAULT NULL::uuid, p_date date DEFAULT CURRENT_DATE, p_tz_offset integer DEFAULT 0)
- RETURNS TABLE(player_id uuid, player_name text, responded boolean, readiness numeric, hooper_index numeric, sleep_quality numeric, fatigue numeric, stress numeric, soreness numeric, mood numeric, note text, body_areas text[], submitted_at timestamp with time zone)
- LANGUAGE plpgsql
- STABLE SECURITY DEFINER
- SET search_path TO 'public'
-AS $function$
+CREATE OR REPLACE FUNCTION public.wellness_status(
+  p_club_id uuid,
+  p_team_id uuid default null,
+  p_date date default current_date,
+  p_tz_offset integer default 0
+)
+returns table(
+  player_id uuid, player_name text, responded boolean, day_off boolean,
+  readiness numeric, hooper_index numeric, sleep_quality numeric, fatigue numeric,
+  stress numeric, soreness numeric, mood numeric, note text,
+  body_areas text[], submitted_at timestamp with time zone
+)
+language plpgsql
+stable
+security definer
+set search_path to 'public'
+as $function$
 -- p_tz_offset = client's Date.getTimezoneOffset() (minutes); lets "today" follow the club's
 -- local calendar day instead of UTC, so the board resets at local midnight (not UTC midnight).
 declare v_date date := coalesce(p_date, current_date);
 begin
   return query
-    select q.player_id, q.player_name, q.responded, q.readiness, q.hooper_index,
+    select q.player_id, q.player_name, q.responded, q.day_off, q.readiness, q.hooper_index,
            q.sleep_quality, q.fatigue, q.stress, q.soreness, q.mood,
            q.note, q.body_areas, q.submitted_at
     from (
@@ -6626,6 +6637,28 @@ begin
         p.id as player_id,
         coalesce(nullif(trim(coalesce(p.first_name,'')||' '||coalesce(p.last_name,'')),''),'Player') as player_name,
         (w.id is not null) as responded,
+        -- Día libre: individual (availability), o de equipo / parcial (calendar_events,
+        -- training_sessions). El de equipo se aplica sólo al equipo del jugador.
+        (
+          exists (
+            select 1 from public.availability a
+            where a.player_id = p.id::text and a.date = v_date
+              and a.status = 'day_off'
+              and (a.team_id is null or p.team_id is null or a.team_id = p.team_id)
+          )
+          or exists (
+            select 1 from public.calendar_events ce
+            where ce.club_id = p_club_id and ce.date = v_date and ce.type = 'day_off'
+              and (ce.team_id is null or p.team_id is null or ce.team_id = p.team_id)
+              and (coalesce(array_length(ce.player_ids, 1), 0) = 0 or p.id = any(ce.player_ids))
+          )
+          or exists (
+            select 1 from public.training_sessions ts
+            where ts.club_id = p_club_id and ts.session_date = v_date
+              and ts.session_type = 'day_off' and ts.is_historical = false
+              and (ts.team_id is null or p.team_id is null or ts.team_id = p.team_id)
+          )
+        ) as day_off,
         w.readiness      as readiness,
         w.hooper_index   as hooper_index,
         w.sleep_quality  as sleep_quality,
@@ -6653,7 +6686,8 @@ begin
         )
       order by p.id, w.submitted_at desc nulls last
     ) q
-    order by q.responded, q.ln nulls last, q.fn nulls last;
+    -- Pendientes reales primero, después los de día libre, al final los que ya cargaron.
+    order by q.responded, q.day_off, q.ln nulls last, q.fn nulls last;
 end; $function$
 ;
 

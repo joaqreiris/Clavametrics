@@ -42,7 +42,7 @@ function sessions(conCarga, total) {
   }));
 }
 
-async function mount(page, { avail = [], sess = [], lang = 'es' } = {}) {
+async function mount(page, { avail = [], sess = [], well = [], lang = 'es' } = {}) {
   await page.addInitScript(l => { try { localStorage.setItem('cm_lang', l); localStorage.setItem('co_tab', 'week'); } catch { /* sin storage */ } }, lang);
   await injectSession(page);
 
@@ -73,6 +73,7 @@ async function mount(page, { avail = [], sess = [], lang = 'es' } = {}) {
   await page.route(`${SB}/rest/v1/rpc/**`, r => r.fulfill({ json: [] }));
   await page.route(`${SB}/rest/v1/rpc/my_plan_features**`, r => r.fulfill({ json: ['club_overview'] }));
   await page.route(`${SB}/rest/v1/rpc/team_features**`, r => r.fulfill({ json: ['club_overview'] }));
+  await page.route(`${SB}/rest/v1/rpc/wellness_status**`, r => r.fulfill({ json: well }));
 
   page.on('dialog', d => d.dismiss().catch(() => {}));
   await page.goto('/Club%20Overview.html', { waitUntil: 'domcontentloaded' });
@@ -132,6 +133,37 @@ test.describe('Semana · carga media', () => {
     await expect(c.locator('.kv')).toHaveText('—');
     await expect(c.locator('.kv')).not.toContainText('0');
     await expect(c.locator('.ks')).toContainText('Sin carga registrada');
+  });
+});
+
+/* El día libre no se le pide a nadie: contarlo como parte faltante convierte una tarjeta de
+   adherencia en un recuento de días libres. La RPC lo devuelve marcado (migración 150) en vez
+   de borrar al jugador, porque si no, un día libre de equipo entero dejaría la tarjeta vacía. */
+const wellRow = (n, o = {}) => ({
+  player_id: 'p-' + n, player_name: 'Juan Pérez ' + n, responded: !!o.responded, day_off: !!o.day_off,
+  readiness: o.responded ? 7 : null, hooper_index: o.responded ? 9 : null,
+  sleep_quality: null, fatigue: null, stress: null, soreness: null, mood: null,
+  note: null, body_areas: [], submitted_at: o.responded ? new Date().toISOString() : null,
+});
+
+test.describe('Semana · wellness y día libre', () => {
+  test('los de día libre no entran en el denominador', async ({ page }) => {
+    const well = [
+      ...[0,1,2,3].map(n => wellRow(n, { responded: true })),
+      wellRow(4),
+      ...[5,6,7].map(n => wellRow(n, { day_off: true })),
+    ];
+    await mount(page, { avail: [], sess: sessions(1, 1), well });
+    const c = card(page, 'Bienestar / preparación');
+    await expect(c.locator('.ks')).toContainText('4/5');       // no 4/8
+    await expect(c.locator('.ks')).toContainText('3 de día libre');
+  });
+
+  test('día libre de equipo entero: lo dice en vez de mostrar 0 de 0', async ({ page }) => {
+    await mount(page, { avail: [], sess: sessions(1, 1), well: [0,1,2].map(n => wellRow(n, { day_off: true })) });
+    const c = card(page, 'Bienestar / preparación');
+    await expect(c.locator('.ks')).toContainText(/D[ií]a libre/);
+    await expect(c.locator('.ks')).not.toContainText('0/0');
   });
 });
 

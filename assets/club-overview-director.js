@@ -369,8 +369,13 @@
        (db/schema.sql), que es la definición que ya usa la pantalla de RPE. */
     const spQ = sb().from('session_participants').select('session_id,player_id').eq('club_id', cid);
     const exQ = sb().from('rpe_exemptions').select('session_id,player_id,kind').eq('club_id', cid);
-    const [sessions, avail, rpe, wellness, injuries, players, pteams, sparts, exempts] =
-      await Promise.all([run(sessQ), run(avQ), run(rpeQ), run(wellQ), run(injQ), run(plQ), run(ptQ), run(spQ), run(exQ)]);
+    /* Día libre del Calendar. Hace falta para el cumplimiento de wellness y no se puede sacar de
+       `availability`: el día libre de EQUIPO ENTERO no deja filas ahí, sólo el parcial las baja
+       a la grilla (Availability.html). El de `training_sessions` ya viene en sessQ. */
+    let coQ = sb().from('calendar_events').select('date,team_id,player_ids').eq('club_id', cid).eq('type', 'day_off').gte('date', from).lte('date', to);
+    if (S.scopeTeam) coQ = coQ.eq('team_id', S.scopeTeam);
+    const [sessions, avail, rpe, wellness, injuries, players, pteams, sparts, exempts, calOff] =
+      await Promise.all([run(sessQ), run(avQ), run(rpeQ), run(wellQ), run(injQ), run(plQ), run(ptQ), run(spQ), run(exQ), run(coQ)]);
     const pmap = {}; (players || []).forEach(p => { pmap[String(p.id)] = p; });
     // Un jugador puede estar en varios equipos (player_teams) y además tener players.team_id.
     // Para atribuir una lesión o una edad a UN equipo hace falta un dueño único: gana
@@ -389,7 +394,16 @@
     (exempts || []).forEach(r => { if (r.kind === 'not_required') (exemptOf[r.session_id] = exemptOf[r.session_id] || new Set()).add(String(r.player_id)); });
     const availOf = {};
     (avail || []).forEach(a => { (availOf[a.date] = availOf[a.date] || []).push(a); });
-    const out = { from, to, sessions, avail, rpe, wellness, injuries, players, pteams, pmap, teamOf, rosterOf, partsOf, exemptOf, availOf };
+    // Día libre por fecha, de las dos fuentes que NO son availability: eventos del Calendar
+    // (equipo entero cuando player_ids viene vacío) y sesiones marcadas como day_off.
+    const calOffOf = {};
+    (calOff || []).forEach(e => { const d = String(e.date || '').slice(0, 10); if (d) (calOffOf[d] = calOffOf[d] || []).push(e); });
+    const sessOffOf = {};
+    (sessions || []).forEach(s => {
+      if ((s.session_type || '').toLowerCase() !== 'day_off') return;
+      (sessOffOf[s.session_date] = sessOffOf[s.session_date] || []).push(s.team_id || null);
+    });
+    const out = { from, to, sessions, avail, rpe, wellness, injuries, players, pteams, pmap, teamOf, rosterOf, partsOf, exemptOf, availOf, calOffOf, sessOffOf };
     S.cache[key] = out; return out;
   }
 
@@ -538,9 +552,20 @@
        team_id y 38 por player_teams — los otros 14 son invitados cuyo parte
        diario lo carga su propio equipo. Contarlos dos veces bajaba el
        cumplimiento del 90% al 45%.
-     · Se descuenta a quien ese día estaba enfermo, no disponible o con la
-       selección. Ojo: el día libre NO se descuenta, a diferencia del RPE — el
-       parte diario lo carga cualquiera, esté o no para entrenar.
+     · Se descuenta a quien ese día estaba enfermo, no disponible, con la
+       selección o de día libre. El día libre se mira en las TRES fuentes,
+       porque cada una guarda un caso distinto: `availability.status` tiene el
+       individual y el parcial que baja de Calendar, `calendar_events` tiene el
+       de equipo entero (player_ids vacío) — que es el más común y el único que
+       no deja rastro en availability — y `training_sessions` el que anota el
+       planificador. Mirar sólo availability, como hace el RPE, no alcanza acá:
+       el RPE cuenta por sesión y un día libre no tiene sesión que contar, pero
+       wellness cuenta por día y el día libre entra igual.
+       Regla: el que está de día libre sale del cálculo, salvo que haya cargado
+       igual — ahí cuenta como respondido, arriba y abajo. Cargar el parte en un
+       día libre no puede empeorar el número, y el porcentaje no puede pasar de
+       100% como pasaría si sumara sólo al numerador. Es la misma regla que
+       devuelve marcada la RPC wellness_status (migración 150).
      · El día se resuelve en hora LOCAL y no cortando el ISO en UTC. Con un club
        en UTC+7, un parte de las 06:00 se contaba en el día anterior.
 
@@ -559,6 +584,33 @@
     });
     return out;
   }
+  /* Jugadores de `inScope` que ese día estaban de día libre. El day off de availability y el
+     de Calendar son relativos a un equipo: aplican al jugador sólo si son de SU equipo (el
+     principal, players.team_id, que es el mismo con el que se armó inScope). */
+  function wellDayOff(core, d, inScope) {
+    const off = new Set();
+    ((core.availOf && core.availOf[d]) || []).forEach(a => {
+      if ((a.status || '').toLowerCase() !== 'day_off') return;
+      const pid = String(a.player_id); if (!inScope.has(pid)) return;
+      const pt = (core.pmap[pid] || {}).team_id || null;
+      if (a.team_id == null || pt == null || a.team_id === pt) off.add(pid);
+    });
+    const evs = (core.calOffOf && core.calOffOf[d]) || [];
+    const sess = (core.sessOffOf && core.sessOffOf[d]) || [];
+    if (!evs.length && !sess.length) return off;
+    inScope.forEach(pid => {
+      if (off.has(pid)) return;
+      const pt = (core.pmap[pid] || {}).team_id || null;
+      const byEvent = evs.some(e => {
+        if (!(e.team_id == null || pt == null || e.team_id === pt)) return false;
+        // Sin player_ids el día libre es del equipo entero; con ellos, sólo de los nombrados.
+        const ids = Array.isArray(e.player_ids) ? e.player_ids : null;
+        return !ids || !ids.length || ids.some(x => String(x) === pid);
+      });
+      if (byEvent || sess.some(t => t == null || pt == null || t === pt)) off.add(pid);
+    });
+    return off;
+  }
   function wellStats(core, teamIds, from, to) {
     const inScope = wellRoster(core, teamIds);
     const days = {}; let rows = 0; const rd = [];
@@ -571,18 +623,28 @@
       rows++;
       const r = Number(w.readiness); if (!isNaN(r)) rd.push(r);
     });
-    let expected = 0, submitted = 0;
+    let expected = 0, submitted = 0, offDays = 0;
     Object.keys(days).forEach(d => {
       const outToday = new Set();
       ((core.availOf && core.availOf[d]) || []).forEach(a => {
         if (WELL_OUT_AV.has((a.status || '').toLowerCase())) outToday.add(String(a.player_id));
       });
-      let n = 0; inScope.forEach(pid => { if (!outToday.has(pid)) n++; });
+      const offToday = wellDayOff(core, d, inScope), got = days[d];
+      let n = 0;
+      inScope.forEach(pid => {
+        if (outToday.has(pid)) return;
+        if (offToday.has(pid) && !got.has(pid)) return;
+        n++;
+      });
       expected += n;
-      submitted += days[d].size;
+      /* El numerador sale de los mismos que el denominador: quien figuraba enfermo o con la
+         selección y aun así cargó no suma acá, o el porcentaje podría pasar de 100%. */
+      let s = 0; got.forEach(pid => { if (!outToday.has(pid)) s++; });
+      submitted += s;
+      if (offToday.size) offDays++;
     });
     const nDays = Object.keys(days).length;
-    return { pct: pct(submitted, expected), days: nDays, rows: rows, expected: expected, got: submitted, avg: rd.length ? rd.reduce((a, b) => a + b, 0) / rd.length : null };
+    return { pct: pct(submitted, expected), days: nDays, offDays: offDays, rows: rows, expected: expected, got: submitted, avg: rd.length ? rd.reduce((a, b) => a + b, 0) / rd.length : null };
   }
 
   function sessionStats(core, teamIds, from, to) {
@@ -737,6 +799,7 @@
         sub: deltaChip(cW.pct, pW.pct, { unit: '%' }) +
           '<span class="co-chip neutral">' + esc(nf(W.got) + '/' + nf(W.expected)) + '</span>' +
           (W.days ? '<span class="co-chip neutral">' + esc(nf(W.days) + ' ' + tt('co_dir.well_days', 'days with check-ins')) + '</span>' : '') +
+          (W.offDays ? '<span class="co-chip neutral" title="' + esc(tt('co_dir.well_off_hint', 'Players on a day off are left out of the percentage — unless they checked in anyway, which still counts.')) + '"><i class="ti ti-beach"></i>' + esc(nf(W.offDays) + ' ' + tt('co_dir.well_off_days', 'with a day off')) + '</span>' : '') +
           (W.avg == null ? '' : '<span class="co-chip neutral">' + esc(tt('co_dir.readiness', 'readiness') + ' ' + nf(W.avg, 1)) + '</span>'),
         spark: sparkline(series.map(s => s.well), { color: 'var(--cm-info)' })
       })
@@ -1230,7 +1293,7 @@
     },
     setTeams(teams) { S.teams = teams || []; },
     relang() { renderPeriodBar(); if (S.tab) show(S.tab); },
-    // Sólo para tests: deja inspeccionar la normalización sin abrir la página.
-    _normArea: normArea, _lineOf: lineOf
+    // Sólo para tests: deja inspeccionar la normalización y el cumplimiento sin abrir la página.
+    _normArea: normArea, _lineOf: lineOf, _wellStats: wellStats, _wellDayOff: wellDayOff
   };
 })();
