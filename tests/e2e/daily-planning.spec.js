@@ -160,6 +160,8 @@ test.describe('Daily Planning — Auth guard', () => {
       route.fulfill({ status: 401, json: { error: 'not authenticated' } })
     );
     await page.goto('/Daily%20Planning.html');
-    await page.waitForURL(/Login\.html/, { timeout: 8000 });
+    // El servidor de pruebas sirve las páginas sin «.html», así que el redirect llega a
+    // /Login y no a /Login.html. Se aceptan las dos formas.
+    await page.waitForURL(/Login(\.html)?(\?|$)/, { timeout: 8000 });
   });
 });

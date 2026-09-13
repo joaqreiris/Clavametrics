@@ -34,7 +34,14 @@ async function gotoSquad(page, opts = {}) {
   await injectSession(page);
   await mockSquad(page, opts);
   await page.goto('/Squad.html');
-  await page.waitForSelector('#sqTbody', { timeout: 10_000 });
+  // Se espera la TABLA, no el tbody: un tbody sin filas no tiene caja y Playwright no lo da por
+  // visible, así que el caso «plantel vacío» —que es un test— moría esperando para siempre.
+  await page.waitForSelector('#sqTbody', { state: 'attached', timeout: 10_000 });
+  await page.waitForFunction(() => {
+    const tb = document.getElementById('sqTbody');
+    // Ya pintó: o hay filas, o la tabla dejó de decir que está cargando.
+    return !!tb && !/loading|cargando/i.test(tb.textContent || '');
+  }, null, { timeout: 10_000 });
 }
 
 // ── 1. Render ─────────────────────────────────────────────────────────────────
@@ -47,7 +54,7 @@ test.describe('Squad — Render', () => {
 
   test('renders one row per player', async ({ page }) => {
     await gotoSquad(page, { players: [PLAYER, { ...PLAYER, id: 'p-2', first_name: 'Marco', number: 9 }] });
-    await expect(page.locator('#sqTbody tr')).toHaveCount(2);
+    await expect(page.locator('#sqTbody tr:not(.is-group)')).toHaveCount(2);
   });
 
   test('shows player name in row', async ({ page }) => {
@@ -62,7 +69,7 @@ test.describe('Squad — Render', () => {
 
   test('empty state when no players', async ({ page }) => {
     await gotoSquad(page, { players: [] });
-    await expect(page.locator('#sqTbody tr')).toHaveCount(0);
+    await expect(page.locator('#sqTbody tr:not(.is-group)')).toHaveCount(0);
   });
 
   test('sidebar shows club name', async ({ page }) => {
@@ -78,7 +85,7 @@ test.describe('Squad — Modal open/close', () => {
 
   test('clicking "Add player" opens modal with "Add player" title', async ({ page }) => {
     await page.locator('button', { hasText: /add player/i }).first().click();
-    await expect(page.locator('#sqModalBackdrop')).toBeVisible();
+    await expect(page.locator('#sqModalBackdrop')).toHaveClass(/is-open/);
     await expect(page.locator('#sqModalTitle')).toContainText('Add player');
   });
 
@@ -90,13 +97,13 @@ test.describe('Squad — Modal open/close', () => {
   test('Cancel button closes modal', async ({ page }) => {
     await page.locator('button', { hasText: /add player/i }).first().click();
     await page.click('#sqModalCancel');
-    await expect(page.locator('#sqModalBackdrop')).toBeHidden();
+    await expect(page.locator('#sqModalBackdrop')).not.toHaveClass(/is-open/);
   });
 
   test('X button closes modal', async ({ page }) => {
     await page.locator('button', { hasText: /add player/i }).first().click();
     await page.click('#sqModalClose');
-    await expect(page.locator('#sqModalBackdrop')).toBeHidden();
+    await expect(page.locator('#sqModalBackdrop')).not.toHaveClass(/is-open/);
   });
 });
 
@@ -147,7 +154,7 @@ test.describe('Squad — Form validation', () => {
 
   test('modal stays open after failed validation', async ({ page }) => {
     await page.click('#sqModalSave');
-    await expect(page.locator('#sqModalBackdrop')).toBeVisible();
+    await expect(page.locator('#sqModalBackdrop')).toHaveClass(/is-open/);
   });
 });
 
@@ -160,9 +167,12 @@ test.describe('Squad — Save new player', () => {
     await page.fill('#sqF_first_name', 'Marco');
     await page.fill('#sqF_last_name',  'Silva');
     await page.fill('#sqF_number',     '9');
+    // La posición pasó a ser obligatoria: sin ella el formulario responde «Position is required»
+    // y no guarda nada. El test la daba por opcional, como cuando se escribió.
+    await page.selectOption('#sqF_position', 'CB');
     await page.click('#sqModalSave');
 
-    await expect(page.locator('#sqModalBackdrop')).toBeHidden({ timeout: 8000 });
+    await expect(page.locator('#sqModalBackdrop')).not.toHaveClass(/is-open/, { timeout: 8000 });
     await expect(page.locator('#sqToast')).toBeVisible();
   });
 
@@ -178,10 +188,11 @@ test.describe('Squad — Save new player', () => {
     });
 
     await page.goto('/Squad.html');
-    await page.waitForSelector('#sqTbody');
+    await page.waitForSelector('#sqTbody', { state: 'attached' });
     await page.locator('button', { hasText: /add player/i }).first().click();
     await page.fill('#sqF_first_name', 'Marco');
     await page.fill('#sqF_last_name',  'Silva');
+    await page.selectOption('#sqF_position', 'CB');   // obligatoria: sin ella no llega a guardar
     await page.click('#sqModalSave');
 
     await expect(page.locator('#sqModalSaving')).toBeVisible();
@@ -198,7 +209,7 @@ test.describe('Squad — Delete player', () => {
     await abrirEdicion(page);
     page.on('dialog', d => d.dismiss());
     await page.click('#sqModalDelete');
-    await expect(page.locator('#sqModalBackdrop')).toBeVisible();
+    await expect(page.locator('#sqModalBackdrop')).toHaveClass(/is-open/);
   });
 
   test('confirming delete closes modal and shows toast', async ({ page }) => {
@@ -206,7 +217,7 @@ test.describe('Squad — Delete player', () => {
     await abrirEdicion(page);
     page.on('dialog', d => d.accept());
     await page.click('#sqModalDelete');
-    await expect(page.locator('#sqModalBackdrop')).toBeHidden({ timeout: 8000 });
+    await expect(page.locator('#sqModalBackdrop')).not.toHaveClass(/is-open/, { timeout: 8000 });
     await expect(page.locator('#sqToast')).toBeVisible();
   });
 });
@@ -219,6 +230,8 @@ test.describe('Squad — Auth guard', () => {
       route.fulfill({ status: 401, json: { error: 'not authenticated' } })
     );
     await page.goto('/Squad.html');
-    await page.waitForURL(/Login\.html/, { timeout: 8000 });
+    // El servidor de pruebas sirve las páginas sin «.html», así que el redirect llega a
+    // /Login y no a /Login.html. Se aceptan las dos formas.
+    await page.waitForURL(/Login(\.html)?(\?|$)/, { timeout: 8000 });
   });
 });

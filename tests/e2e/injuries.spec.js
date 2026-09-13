@@ -3,11 +3,20 @@ import { test, expect } from '@playwright/test';
 import { SB, PLAYER, INJURY, injectSession, mockBase } from './_shared.js';
 
 async function mockInjuries(page, opts = {}) {
+  // La consulta trae el jugador embebido (`players:player_id(...)`) y la tarjeta lo usa para
+  // pintar la fila. Sin ese objeto la lesión no se dibuja y la página dice «No injuries in this
+  // category», que es lo que tenía en rojo a la mitad de este spec.
+  const conJugador = (inj) => ({
+    ...inj,
+    players: inj.players || { first_name: PLAYER.first_name, last_name: PLAYER.last_name,
+                              number: PLAYER.number, position: PLAYER.position },
+  });
   const {
     injuries   = [INJURY],
     players    = [PLAYER],
     saveError  = false,
   } = opts;
+  const _injuries = injuries.map(conJugador);
 
   await mockBase(page);
 
@@ -16,7 +25,7 @@ async function mockInjuries(page, opts = {}) {
     const method = route.request().method();
 
     if (url.includes('/injuries')) {
-      if (method === 'GET')   return route.fulfill({ json: injuries });
+      if (method === 'GET')   return route.fulfill({ json: _injuries });
       if (saveError)          return route.fulfill({ status: 400, json: { message: 'DB error' } });
       if (method === 'POST')  return route.fulfill({ status: 201, json: [{ ...INJURY, id: 'inj-new' }] });
       if (method === 'PATCH') return route.fulfill({ json: [{ ...INJURY, status: 'discharged' }] });
@@ -83,7 +92,7 @@ test.describe('Injuries — Log modal open/close', () => {
     await page.locator('button', { hasText: /log injury/i }).click();
     await expect(page.locator('#logPlayer')).toBeVisible();
     await expect(page.locator('#logType')).toBeVisible();
-    await expect(page.locator('#logArea')).toBeVisible();
+    await expect(page.locator('#logAreaSel')).toBeVisible();
     await expect(page.locator('#logSev')).toBeVisible();
     await expect(page.locator('#logStart')).toBeVisible();
     await expect(page.locator('#logReturn')).toBeVisible();
@@ -112,7 +121,7 @@ test.describe('Injuries — Log save', () => {
 
     await page.selectOption('#logPlayer', 'p-1');
     await page.fill('#logType',   'Knee sprain');
-    await page.fill('#logArea',   'Left knee');
+    await page.selectOption('#logAreaSel', 'Left Knee');
     await page.fill('#logStart',  '2026-05-18');
 
     await page.locator('#modalLogInj button', { hasText: /save|log/i }).last().click();
@@ -125,7 +134,7 @@ test.describe('Injuries — Log save', () => {
 
     await page.selectOption('#logPlayer', 'p-1');
     await page.fill('#logType',  'Knee sprain');
-    await page.fill('#logArea',  'Left knee');
+    await page.selectOption('#logAreaSel', 'Left Knee');
     await page.fill('#logStart', '2026-05-18');
 
     await page.locator('#modalLogInj button', { hasText: /save|log/i }).last().click();
@@ -165,6 +174,8 @@ test.describe('Injuries — Auth guard', () => {
       route.fulfill({ status: 401, json: { error: 'not authenticated' } })
     );
     await page.goto('/Injuries.html');
-    await page.waitForURL(/Login\.html/, { timeout: 8000 });
+    // El servidor de pruebas sirve las páginas sin «.html», así que el redirect llega a
+    // /Login y no a /Login.html. Se aceptan las dos formas.
+    await page.waitForURL(/Login(\.html)?(\?|$)/, { timeout: 8000 });
   });
 });
