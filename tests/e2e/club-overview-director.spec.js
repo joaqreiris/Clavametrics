@@ -57,6 +57,12 @@ function buildPlayers() {
 }
 const PLAYERS = buildPlayers();
 const PTEAMS = PLAYERS.map(p => ({ player_id: p.id, team_id: p.team_id, club_id: CLUB.id }));
+/* Cuatro juveniles que además entrenan con la Primera: quedan ligados a team-a por
+   player_teams pero su players.team_id sigue siendo team-c. El RPE de una sesión de la
+   Primera sí los espera (entrenan ahí); el parte diario de wellness NO, porque lo cargan
+   con su propio equipo. Es la diferencia que hundía el wellness del primer equipo. */
+PLAYERS.filter(p => p.team_id === 'team-c').slice(0, 4)
+  .forEach(p => PTEAMS.push({ player_id: p.id, team_id: 'team-a', club_id: CLUB.id }));
 
 /** Sesiones de los últimos 100 días, con duración (hace falta para la exposición). */
 function buildSessions() {
@@ -117,9 +123,12 @@ const EXEMPTS = (() => {
   return s && p ? [{ session_id: s.id, player_id: p.id, club_id: CLUB.id, kind: 'not_required', reason: 'gym_only' }] : [];
 })();
 
-/** A quién se le pide RPE en una sesión: los convocados si los hay, si no el plantel. */
+/* A quién se le pide RPE en una sesión: los convocados si los hay, si no el plantel del equipo
+   vía player_teams — que INCLUYE a los invitados de otras categorías, porque entrenan ahí.
+   Es la regla de session_rpe_status, y es distinta de la de wellness a propósito. */
+const ROSTER_OF = PTEAMS.reduce((m, r) => { (m[r.team_id] = m[r.team_id] || []).push(r.player_id); return m; }, {});
 function expectedIds(s) {
-  return PARTS_OF[s.id] || PLAYERS.filter(p => p.team_id === s.team_id).map(p => p.id);
+  return PARTS_OF[s.id] || ROSTER_OF[s.team_id] || [];
 }
 
 /* RPE: cumplimiento alto en Primera, medio en Reserva, flojo en el juvenil. Las tasas se
@@ -165,6 +174,13 @@ const INJURIES = [
   { id: 'i6', club_id: CLUB.id, player_id: 'p-2-5', body_area: 'Gemelo (sóleo)', severity: 'minor', status: 'cleared', start_date: dayAgo(30), returned_date: dayAgo(22), expected_return: null, injury_category: 'muscular', injury_mechanism: null, injury_type: 'Strain' },
   { id: 'i7', club_id: CLUB.id, player_id: 'p-0-9', body_area: 'Cuádriceps', severity: 'minor', status: 'returning', start_date: dayAgo(12), returned_date: null, expected_return: dayAgo(-4), injury_category: 'muscular', injury_mechanism: 'overuse', injury_type: 'Strain' },
   { id: 'i8', club_id: CLUB.id, player_id: 'p-1-1', body_area: 'Lower Back', severity: 'minor', status: 'active', start_date: dayAgo(-1), returned_date: null, expected_return: null, injury_category: null, injury_mechanism: null, injury_type: 'Lumbago' },
+  /* Las cuatro de abajo usan la columna LEGACY `mechanism`, que es la que de verdad escribe el
+     formulario de Injuries.html (un <select> que guarda 'non-contact' CON GUION). Mirando sólo
+     injury_mechanism, un club que carga por el formulario veía "Sin registrar" en todo. */
+  { id: 'i9', club_id: CLUB.id, player_id: 'p-0-4', body_area: 'Right Ankle', severity: 'minor', status: 'cleared', start_date: dayAgo(50), returned_date: dayAgo(44), expected_return: null, injury_category: 'ligament', injury_mechanism: null, mechanism: 'non-contact', injury_type: 'Sprain' },
+  { id: 'i10', club_id: CLUB.id, player_id: 'p-0-6', body_area: 'Left Knee', severity: 'moderate', status: 'cleared', start_date: dayAgo(66), returned_date: dayAgo(50), expected_return: null, injury_category: 'ligament', injury_mechanism: null, mechanism: 'contact', injury_type: 'Sprain' },
+  { id: 'i11', club_id: CLUB.id, player_id: 'p-1-9', body_area: 'Right Calf', severity: 'minor', status: 'cleared', start_date: dayAgo(35), returned_date: dayAgo(29), expected_return: null, injury_category: 'muscular', injury_mechanism: null, mechanism: 'overuse', injury_type: 'Strain' },
+  { id: 'i12', club_id: CLUB.id, player_id: 'p-2-8', body_area: 'Lower Back', severity: 'minor', status: 'cleared', start_date: dayAgo(25), returned_date: dayAgo(20), expected_return: null, injury_category: 'other', injury_mechanism: null, mechanism: 'training', injury_type: 'Overload' },
 ];
 
 /* activity_log: acciones de staff (con actor_id) mezcladas con envíos de jugadores (sin él).
@@ -425,6 +441,29 @@ test.describe('Club Overview · Temporada', () => {
     await expect(fila.locator('td[data-col="rpe"] .cod-subnum')).toHaveCount(1);
   });
 
+  /* Regresión: el wellness esperaba el plantel de player_teams (con los invitados de otros
+     equipos) en vez del equipo principal, que es lo que mira wellness_status. En MOI eso
+     convertía un 90% real en un 45%. */
+  test('el wellness no espera a los invitados de otro equipo', async ({ page }) => {
+    await openPage(page, { tab: 'season' });
+    const panel = await waitTab(page, 'coTabSeason');
+    const fila = panel.locator('#coCmpTable tbody tr', { has: page.locator('th:has-text("Primera")') });
+    const pct = parseInt((await fila.locator('td[data-col="well"] .co-chip').innerText()).replace(/[^\d]/g, ''), 10);
+    /* Los 12 de la Primera cargan parte todos los días; los 4 juveniles ligados por
+       player_teams cargan con SU equipo. Contándolos, el denominador sería 16 y el número
+       caería a ~75%. Con el equipo principal tiene que dar 100%. */
+    expect(pct, 'los invitados no cargan el parte con este equipo').toBeGreaterThan(90);
+  });
+
+  test('la tarjeta de wellness dice sobre cuántos días mide', async ({ page }) => {
+    await openPage(page, { tab: 'season' });
+    const panel = await waitTab(page, 'coTabSeason');
+    const kpi = panel.locator('.cod-kpi', { hasText: /Respuesta de wellness/i }).first();
+    // Sin saber el denominador ni los días, un porcentaje de adherencia no se puede juzgar.
+    await expect(kpi).toContainText(/d[ií]as con partes/i);
+    await expect(kpi).toContainText(/\d+\/\d+/);
+  });
+
   test('ordenar por una columna reordena las filas', async ({ page }) => {
     await openPage(page, { tab: 'season' });
     const panel = await waitTab(page, 'coTabSeason');
@@ -506,6 +545,36 @@ test.describe('Club Overview · Lesiones', () => {
     await openPage(page, { tab: 'injuries' });
     const panel = await waitTab(page, 'coTabInjuries');
     await expect(panel).toContainText('Sin registrar');
+  });
+
+  /* Regresión: el panel decía "Sin registrar" en lesiones que SÍ tenían mecanismo. Hay dos
+     columnas y el formulario de Injuries.html escribe la vieja (`mechanism`, con guion);
+     leyendo sólo `injury_mechanism` no se veía ninguna. */
+  test('lee el mecanismo de la columna que escribe el formulario, no sólo del enum', async ({ page }) => {
+    await openPage(page, { tab: 'injuries' });
+    const panel = await waitTab(page, 'coTabInjuries');
+    const mech = panel.locator('.cod-panel', { hasText: /Por mecanismo/i }).first();
+    const filas = await mech.locator('.cod-bar').all();
+    const leidas = {};
+    for (const f of filas) {
+      // .cod-bar-v lleva el conteo y, en un <small>, los días ("3 · 28 d"). Sin cortar en el
+      // separador, un replace(/\D/g,'') pega los dos números y devuelve 328.
+      const bruto = (await f.locator('.cod-bar-v').innerText()).split('·')[0];
+      leidas[(await f.locator('.cod-bar-l').innerText()).trim()] = parseInt(bruto.replace(/[^\d]/g, ''), 10);
+    }
+    // 'non-contact' (guion, legacy) y 'non_contact' (enum) tienen que caer en la MISMA barra.
+    const sinContacto = Object.keys(leidas).find(k => /sin contacto/i.test(k));
+    expect(sinContacto, `barras: ${Object.keys(leidas).join(' | ')}`).toBeTruthy();
+    // i1 + i3(overuse no) … del fixture: non_contact enum (i1) + non-contact legacy (i9) = 2.
+    expect(leidas[sinContacto]).toBeGreaterThanOrEqual(2);
+
+    // 'training' del formulario es "Carga de entrenamiento", no "Sin registrar".
+    expect(Object.keys(leidas).some(k => /carga de entrenamiento/i.test(k)),
+      `barras: ${Object.keys(leidas).join(' | ')}`).toBe(true);
+
+    // Y "Sin registrar" sólo puede contar las que de verdad no tienen ninguna de las dos.
+    const sinReg = Object.keys(leidas).find(k => /sin registrar/i.test(k));
+    if (sinReg) expect(leidas[sinReg]).toBeLessThanOrEqual(3);
   });
 });
 

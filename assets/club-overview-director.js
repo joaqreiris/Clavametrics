@@ -126,8 +126,43 @@
     const FB = { muscular: 'Muscular', acl: 'ACL', ligament: 'Ligament', tendon: 'Tendon', bone: 'Bone', other: 'Other', unknown: 'Not recorded' };
     return tt('co_dir.cat_' + (k || 'unknown'), FB[k] || k);
   }
+  /* ── MECANISMO ────────────────────────────────────────────────────────────
+     Hay DOS columnas y cada una la escribe una pantalla distinta:
+
+       · injuries.injury_mechanism — enum con CHECK (contact / non_contact /
+         overuse / unknown). Es la que trae la data sembrada.
+       · injuries.mechanism — la que de verdad escribe el formulario de
+         Injuries.html, con un <select> que guarda 'contact', 'non-contact'
+         (CON GUION), 'overuse', 'training' y 'other'.
+
+     Mirando sólo la primera, un club que carga sus lesiones por el formulario
+     ve "Sin registrar" en todo — que es justo lo que pasaba: de 25 lesiones en
+     la base, 11 tienen sólo `mechanism` y ninguna de esas se estaba leyendo.
+     Se prefiere el enum y se cae al texto libre, normalizado: si no, el guion
+     y el guion bajo dibujan dos barras para lo mismo. Mismo criterio que usa
+     clinical-record.js, que ya hacía el fallback (pero sin normalizar).       */
+  const MECH_EXACT = {
+    contact: 'contact', contacto: 'contact', contato: 'contact',
+    non_contact: 'non_contact', noncontact: 'non_contact', sin_contacto: 'non_contact', sem_contato: 'non_contact', no_contacto: 'non_contact',
+    overuse: 'overuse', sobrecarga: 'overuse', sobreuso: 'overuse', sobreesfuerzo: 'overuse',
+    training: 'training_load', training_load: 'training_load', carga: 'training_load', carga_de_entrenamiento: 'training_load', entrenamiento: 'training_load', treino: 'training_load',
+    other: 'other', otro: 'other', otra: 'other', outro: 'other',
+    unknown: 'unknown', desconocido: 'unknown', desconhecido: 'unknown'
+  };
+  function normMech(inj) {
+    const raw = inj && (inj.injury_mechanism || inj.mechanism);
+    let s = deaccent(raw).toLowerCase().trim().replace(/[\s-]+/g, '_').replace(/[^a-z_]/g, '');
+    if (!s) return 'unknown';
+    if (MECH_EXACT[s]) return MECH_EXACT[s];
+    // El orden importa: "non_contact" contiene "contact", así que lo negado va primero.
+    if (s.indexOf('non_contact') !== -1 || s.indexOf('sin_contact') !== -1 || s.indexOf('sem_contat') !== -1) return 'non_contact';
+    if (s.indexOf('contact') !== -1 || s.indexOf('contat') !== -1 || s.indexOf('trauma') !== -1 || s.indexOf('golpe') !== -1 || s.indexOf('choque') !== -1) return 'contact';
+    if (s.indexOf('overuse') !== -1 || s.indexOf('sobrecarga') !== -1 || s.indexOf('repetit') !== -1) return 'overuse';
+    if (s.indexOf('train') !== -1 || s.indexOf('carga') !== -1 || s.indexOf('treino') !== -1) return 'training_load';
+    return 'other';   // se cargó algo que no se supo clasificar — distinto de no cargar nada
+  }
   function mechLabel(k) {
-    const FB = { contact: 'Contact', non_contact: 'Non-contact', overuse: 'Overuse', unknown: 'Not recorded' };
+    const FB = { contact: 'Contact', non_contact: 'Non-contact', overuse: 'Overuse', training_load: 'Training load', other: 'Other', unknown: 'Not recorded' };
     return tt('co_dir.mech_' + (k || 'unknown'), FB[k] || k);
   }
   function sevLabel(s) {
@@ -343,7 +378,10 @@
     let sessQ = sb().from('training_sessions').select('id,team_id,session_type,session_date,duration,estimated_rpe').eq('club_id', cid).eq('is_historical', false).gte('session_date', from).lte('session_date', to);
     let avQ = sb().from('availability').select('player_id,team_id,status,date').eq('club_id', cid).gte('date', from).lte('date', to);
     let rpeQ = sb().from('rpe').select('session_id,player_id,session_date,load').eq('club_id', cid).gte('session_date', from).lte('session_date', to);
-    let wellQ = sb().from('wellness').select('player_id,readiness,submitted_at').eq('club_id', cid).gte('submitted_at', from).lte('submitted_at', to + 'T23:59:59');
+    // Un día de margen a cada lado: el día se resuelve después en hora LOCAL, y con un club
+    // en UTC+7 los partes del borde caen fuera de una ventana recortada en UTC.
+    const wellFrom = ymd(addDays(parseYMD(from), -1)), wellTo = ymd(addDays(parseYMD(to), 1));
+    let wellQ = sb().from('wellness').select('player_id,readiness,submitted_at').eq('club_id', cid).gte('submitted_at', wellFrom).lte('submitted_at', wellTo + 'T23:59:59');
     if (S.scopeTeam) { sessQ = sessQ.eq('team_id', S.scopeTeam); avQ = avQ.eq('team_id', S.scopeTeam); }
     // Lesiones: todas las que SOLAPAN el período (abiertas, o cerradas después de `from`),
     // no sólo las que empiezan dentro. El burden de un período incluye los días que aporta
@@ -516,26 +554,62 @@
     return { pct: pct(got, exp), expected: exp, got: got, silentSessions, silentExpected, sessions };
   }
 
-  // Respuesta de wellness: partes cargados ÷ (jugadores × días con al menos un parte).
-  // Los días sin ningún parte no se cuentan: casi siempre son días libres, y meterlos
-  // hundiría el porcentaje por una razón que no es incumplimiento.
+  /* ── RESPUESTA DE WELLNESS ─────────────────────────────────────────────────
+     Réplica de wellness_status (db/schema.sql), que es lo que usa el tablero de
+     wellness. Tres diferencias con lo que hacía antes, y las tres inflaban el
+     denominador:
+
+     · El plantel esperado es el del equipo PRINCIPAL (players.team_id), no la
+       unión con player_teams. No es un capricho: wellness_status filtra por
+       `p.team_id = p_team_id`. En MOI el primer equipo tiene 24 jugadores por
+       team_id y 38 por player_teams — los otros 14 son invitados cuyo parte
+       diario lo carga su propio equipo. Contarlos dos veces bajaba el
+       cumplimiento del 90% al 45%.
+     · Se descuenta a quien ese día estaba enfermo, no disponible o con la
+       selección. Ojo: el día libre NO se descuenta, a diferencia del RPE — el
+       parte diario lo carga cualquiera, esté o no para entrenar.
+     · El día se resuelve en hora LOCAL y no cortando el ISO en UTC. Con un club
+       en UTC+7, un parte de las 06:00 se contaba en el día anterior.
+
+     Los días sin ningún parte siguen sin contarse: casi siempre son descanso, y
+     meterlos hundiría el número por una razón que no es incumplimiento. Por eso
+     la tarjeta muestra sobre cuántos días se está midiendo.                    */
+  const WELL_OUT_AV = new Set(['sick', 'unavailable', 'away']);
+  function localDay(ts) { const d = new Date(ts); return isNaN(d.getTime()) ? '' : ymd(d); }
+  function wellRoster(core, teamIds) {
+    const out = new Set();
+    (core.players || []).forEach(p => {
+      if (p.team_id) { if (teamIds.has(p.team_id)) out.add(String(p.id)); }
+      // Sin equipo asignado sólo entra cuando no se está filtrando por uno concreto,
+      // igual que wellness_status con p_team_id = null.
+      else if (!S.scopeTeam) out.add(String(p.id));
+    });
+    return out;
+  }
   function wellStats(core, teamIds, from, to) {
-    const inScope = new Set();
-    teamIds.forEach(id => rosterFor(core, id).forEach(p => inScope.add(p)));
+    const inScope = wellRoster(core, teamIds);
     const days = {}; let rows = 0; const rd = [];
     (core.wellness || []).forEach(w => {
-      const day = String(w.submitted_at || '').slice(0, 10);
+      const day = localDay(w.submitted_at);
       if (!day || day < from || day > to) return;
       const pid = String(w.player_id);
-      if (inScope.size && !inScope.has(pid)) return;
+      if (!inScope.has(pid)) return;
       (days[day] = days[day] || new Set()).add(pid);
       rows++;
       const r = Number(w.readiness); if (!isNaN(r)) rd.push(r);
     });
+    let expected = 0, submitted = 0;
+    Object.keys(days).forEach(d => {
+      const outToday = new Set();
+      ((core.availOf && core.availOf[d]) || []).forEach(a => {
+        if (WELL_OUT_AV.has((a.status || '').toLowerCase())) outToday.add(String(a.player_id));
+      });
+      let n = 0; inScope.forEach(pid => { if (!outToday.has(pid)) n++; });
+      expected += n;
+      submitted += days[d].size;
+    });
     const nDays = Object.keys(days).length;
-    const expected = nDays * (inScope.size || 0);
-    let submitted = 0; Object.keys(days).forEach(d => { submitted += days[d].size; });
-    return { pct: pct(submitted, expected), days: nDays, rows: rows, avg: rd.length ? rd.reduce((a, b) => a + b, 0) / rd.length : null };
+    return { pct: pct(submitted, expected), days: nDays, rows: rows, expected: expected, got: submitted, avg: rd.length ? rd.reduce((a, b) => a + b, 0) / rd.length : null };
   }
 
   function sessionStats(core, teamIds, from, to) {
@@ -687,7 +761,10 @@
       kpiCard({
         ic: 'ti-battery-charging', col: 'var(--cm-info)', bg: 'var(--cm-info-bg)', lbl: tt('co_dir.k_well_resp', 'Wellness response'),
         val: W.pct == null ? '—' : nf(W.pct, 0), unit: W.pct == null ? '' : '%',
-        sub: deltaChip(cW.pct, pW.pct, { unit: '%' }) + (W.avg == null ? '' : '<span class="co-chip neutral">' + esc(tt('co_dir.readiness', 'readiness') + ' ' + nf(W.avg, 1)) + '</span>'),
+        sub: deltaChip(cW.pct, pW.pct, { unit: '%' }) +
+          '<span class="co-chip neutral">' + esc(nf(W.got) + '/' + nf(W.expected)) + '</span>' +
+          (W.days ? '<span class="co-chip neutral">' + esc(nf(W.days) + ' ' + tt('co_dir.well_days', 'days with check-ins')) + '</span>' : '') +
+          (W.avg == null ? '' : '<span class="co-chip neutral">' + esc(tt('co_dir.readiness', 'readiness') + ' ' + nf(W.avg, 1)) + '</span>'),
         spark: sparkline(series.map(s => s.well), { color: 'var(--cm-info)' })
       })
     ].join('');
@@ -794,7 +871,7 @@
     const catRows = groupCount(list, i => i.injury_category || 'unknown', from, to)
       .sort((a, b) => b.count - a.count)
       .map(g => ({ label: catLabel(g.key), value: g.count, display: nf(g.count), sub: ' · ' + nf(g.days) + ' d', color: 'var(--cm-violet)' }));
-    const mechRows = groupCount(list, i => i.injury_mechanism || 'unknown', from, to)
+    const mechRows = groupCount(list, i => normMech(i), from, to)
       .sort((a, b) => b.count - a.count)
       .map(g => ({ label: mechLabel(g.key), value: g.count, display: nf(g.count), sub: ' · ' + nf(g.days) + ' d', color: 'var(--cm-info)' }));
     const sevRows = ['severe', 'moderate', 'minor'].map(s => {
