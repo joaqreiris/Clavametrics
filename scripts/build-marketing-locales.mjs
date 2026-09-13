@@ -39,10 +39,15 @@ function keysUsedInPages() {
   const attr = /data-i18n(?:-html|-ph)?=["']([^"']+)["']/g;
   const attrList = /data-i18n-attr=["']([^"']+)["']/g;
   const tCall = /(?:CM_I18N\.)?\bt\(\s*["']([a-zA-Z0-9_.]+)["']/g;
+  // CM_I18N.how / CM_I18N.rotator leen la clave "_how" / "_rotator".
+  const prop = /CM_I18N\.([a-zA-Z][a-zA-Z0-9_]*)/g;
+  const NOT_KEYS = new Set(['t', 'current', 'setLang', 'ready', 'setUserPref',
+    'setClubCountry', 'setGeoCountry', 'dump']);
   for (const page of PAGES) {
     const src = readFileSync(join(ROOT, page), 'utf8');
     for (const m of src.matchAll(attr)) used.add(m[1]);
     for (const m of src.matchAll(tCall)) used.add(m[1]);
+    for (const m of src.matchAll(prop)) if (!NOT_KEYS.has(m[1])) used.add('_' + m[1]);
     for (const m of src.matchAll(attrList)) {
       for (const part of m[1].split(';')) {
         const i = part.indexOf(':');
@@ -53,7 +58,15 @@ function keysUsedInPages() {
   return used;
 }
 
-const inBundle = (key) => PREFIXES.includes(key.split('.')[0]);
+/**
+ * Las claves que empiezan por "_" no son texto suelto: son objetos que el JS
+ * de la página lee por CM_I18N.<nombre> (_how son los cuatro pasos del loop,
+ * _rotator las palabras que rotan en el H1). No aparecen en ningún data-i18n,
+ * así que el recorte por prefijo las dejaba fuera y la home se quedaba con el
+ * texto inglés incrustado en el HTML — traducido en el diccionario y perdido
+ * por el camino. Entran todas: son dos y pesan 2 KB.
+ */
+const inBundle = (key) => key.startsWith('_') || PREFIXES.includes(key.split('.')[0]);
 
 const outDir = join(ROOT, 'locales', 'marketing');
 if (!check && !existsSync(outDir)) mkdirSync(outDir, { recursive: true });
