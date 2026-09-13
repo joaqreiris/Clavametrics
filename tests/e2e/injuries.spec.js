@@ -2,6 +2,16 @@
 import { test, expect } from '@playwright/test';
 import { SB, PLAYER, INJURY, injectSession, mockBase } from './_shared.js';
 
+// La pestaña de una lesión se calcula con el tiempo transcurrido: pasado el 60% del camino hacia
+// la fecha de alta prevista, pasa de «Active» a «Returning». La lesión de prueba tenía fechas
+// FIJAS de mayo de 2026 —escritas cuando eso era el presente— así que hoy aparece como
+// «Returning» y todo lo que este spec busca en «Active» no está. Se calculan desde hoy: empezó
+// hace una semana y vuelve en tres, o sea recién arrancada.
+const diasDesdeHoy = (n) => {
+  const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10);
+};
+const LESION_ACTIVA = { ...INJURY, start_date: diasDesdeHoy(-7), expected_return: diasDesdeHoy(21) };
+
 async function mockInjuries(page, opts = {}) {
   // La consulta trae el jugador embebido (`players:player_id(...)`) y la tarjeta lo usa para
   // pintar la fila. Sin ese objeto la lesión no se dibuja y la página dice «No injuries in this
@@ -12,7 +22,7 @@ async function mockInjuries(page, opts = {}) {
                               number: PLAYER.number, position: PLAYER.position },
   });
   const {
-    injuries   = [INJURY],
+    injuries   = [LESION_ACTIVA],
     players    = [PLAYER],
     saveError  = false,
   } = opts;
@@ -53,7 +63,7 @@ test.describe('Injuries — Render', () => {
   });
 
   test('KPI shows count matching active injuries', async ({ page }) => {
-    await gotoInjuries(page, { injuries: [INJURY, { ...INJURY, id: 'inj-2' }] });
+    await gotoInjuries(page, { injuries: [LESION_ACTIVA, { ...LESION_ACTIVA, id: 'inj-2' }] });
     await expect(page.locator('#kpiInjActive')).toContainText('2', { timeout: 8000 });
   });
 
@@ -85,7 +95,7 @@ test.describe('Injuries — Log modal open/close', () => {
 
   test('"Log injury" button opens modal', async ({ page }) => {
     await page.locator('button', { hasText: /log injury/i }).click();
-    await expect(page.locator('#modalLogInj')).toBeVisible();
+    await expect(page.locator('#modalLogInj')).toHaveClass(/is-open/);
   });
 
   test('modal has all required fields', async ({ page }) => {
@@ -115,6 +125,11 @@ test.describe('Injuries — Log modal open/close', () => {
 // ── 3. Log injury — save ─────────────────────────────────────────────────────
 
 test.describe('Injuries — Log save', () => {
+  // PENDIENTE. El modal no se cierra y no sale ningún POST a injuries, así que el guardado ni
+  // arranca. Descartado: campos obligatorios vacíos (no hay), el botón equivocado (es «Save
+  // injury»), y elegir el modo «Active injury» antes de guardar (tampoco alcanza). Falta
+  // averiguar qué más pide el flujo — probablemente algo del formulario que cambió y no salta a
+  // la vista desde afuera.
   test('saves injury and hides modal on success', async ({ page }) => {
     await gotoInjuries(page);
     await page.locator('button', { hasText: /log injury/i }).click();
@@ -122,10 +137,13 @@ test.describe('Injuries — Log save', () => {
     await page.selectOption('#logPlayer', 'p-1');
     await page.fill('#logType',   'Knee sprain');
     await page.selectOption('#logAreaSel', 'Left Knee');
-    await page.fill('#logStart',  '2026-05-18');
+    await page.fill('#logStart',  diasDesdeHoy(-3));
 
-    await page.locator('#modalLogInj button', { hasText: /save|log/i }).last().click();
-    await expect(page.locator('#modalLogInj')).toBeHidden({ timeout: 8000 });
+    // El modal ahora pregunta primero qué se está cargando: una lesión ACTIVA o un registro
+    // histórico. Cada modo tiene su propio botón de guardar, así que sin elegir no guarda nada.
+    await page.locator('#modalLogInj button', { hasText: /^active injury/i }).first().click();
+    await page.locator('#modalLogInj button', { hasText: /save injury/i }).first().click();
+    await expect(page.locator('#modalLogInj')).not.toHaveClass(/is-open/, { timeout: 8000 });
   });
 
   test('shows error toast on save failure', async ({ page }) => {
@@ -140,7 +158,7 @@ test.describe('Injuries — Log save', () => {
     await page.locator('#modalLogInj button', { hasText: /save|log/i }).last().click();
     // Modal should NOT close and should show some error state
     await page.waitForTimeout(2000);
-    await expect(page.locator('#modalLogInj')).toBeVisible();
+    await expect(page.locator('#modalLogInj')).toHaveClass(/is-open/);
   });
 });
 
