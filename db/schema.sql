@@ -13,6 +13,10 @@
 -- clear_gps_credential y toggle_adaptation_applied. Los GRANT/REVOKE que las acompanan
 -- (revoke de PUBLIC y de anon) quedan fuera del alcance de este archivo.
 --
+-- Parche manual 2026-09-13 (migracion 149, una sola columna para el mecanismo de lesion):
+-- injuries.injury_mechanism y su CHECK se eliminaron; sus 9 filas se volcaron a
+-- injuries.mechanism, que es la columna que escribe el formulario de Injuries.html.
+--
 -- 118 tablas | 247 FKs | 5 vistas | 75 funciones
 -- | 39 triggers | 273 politicas RLS
 -- Incluye: tablas, tipos, PK/UNIQUE/CHECK, FK (con ON DELETE), indices,
@@ -1350,12 +1354,10 @@ create table if not exists public.injuries (
   created_by uuid,
   mechanism text,
   bamic_grade text,
-  injury_mechanism text,
   injury_category text,
   sub_classification text,
   constraint injuries_pkey primary key (id),
   constraint injuries_severity_check CHECK ((severity = ANY (ARRAY['minor'::text, 'moderate'::text, 'severe'::text]))),
-  constraint injuries_injury_mechanism_check CHECK ((injury_mechanism = ANY (ARRAY['contact'::text, 'non_contact'::text, 'overuse'::text, 'unknown'::text]))),
   constraint injuries_injury_category_check CHECK ((injury_category = ANY (ARRAY['muscular'::text, 'acl'::text, 'ligament'::text, 'tendon'::text, 'bone'::text, 'other'::text]))),
   constraint injuries_status_check CHECK ((status = ANY (ARRAY['active'::text, 'cleared'::text, 'returning'::text])))
 );

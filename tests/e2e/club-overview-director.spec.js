@@ -2,7 +2,7 @@
 // Club Overview — pestañas de dirección deportiva (Temporada / Lesiones / Plantel / Staff).
 //
 // El fixture imita la base REAL, no una base ideal: body_area viene en texto libre y en dos
-// idiomas ("Left Hamstring", "hamstring", "Isquiotibial"), injury_mechanism viene en NULL en
+// idiomas ("Left Hamstring", "hamstring", "Isquiotibial"), el mecanismo viene sin cargar en
 // la mitad de los casos, y el activity_log mezcla acciones de staff (con actor_id) con envíos
 // de jugadores (sin actor_id). Si el test pasara con datos limpios no probaría nada: los bugs
 // de esta pantalla viven justamente ahí.
@@ -166,21 +166,22 @@ const WELLNESS = buildWellness();
    distintas, mecanismo en NULL a veces, y una con start_date en el FUTURO (se carga una baja
    con fecha de mañana) que no debe producir días perdidos negativos. */
 const INJURIES = [
-  { id: 'i1', club_id: CLUB.id, player_id: 'p-0-2', body_area: 'Left Hamstring', severity: 'moderate', status: 'cleared', start_date: dayAgo(80), returned_date: dayAgo(60), expected_return: dayAgo(62), injury_category: 'muscular', injury_mechanism: 'non_contact', injury_type: 'Strain' },
-  { id: 'i2', club_id: CLUB.id, player_id: 'p-0-2', body_area: 'hamstring', severity: 'moderate', status: 'active', start_date: dayAgo(18), returned_date: null, expected_return: dayAgo(-10), injury_category: 'muscular', injury_mechanism: null, injury_type: 'Strain' },
-  { id: 'i3', club_id: CLUB.id, player_id: 'p-1-4', body_area: 'Isquiotibial derecho', severity: 'minor', status: 'cleared', start_date: dayAgo(45), returned_date: dayAgo(38), expected_return: null, injury_category: 'muscular', injury_mechanism: 'overuse', injury_type: 'Overload' },
-  { id: 'i4', club_id: CLUB.id, player_id: 'p-1-7', body_area: 'Rodilla (LCM)', severity: 'severe', status: 'active', start_date: dayAgo(55), returned_date: null, expected_return: null, injury_category: 'ligament', injury_mechanism: 'contact', injury_type: 'MCL' },
-  { id: 'i5', club_id: CLUB.id, player_id: 'p-2-1', body_area: 'Tobillo (LLE)', severity: 'moderate', status: 'cleared', start_date: dayAgo(70), returned_date: dayAgo(40), expected_return: null, injury_category: 'ligament', injury_mechanism: 'contact', injury_type: 'Sprain' },
-  { id: 'i6', club_id: CLUB.id, player_id: 'p-2-5', body_area: 'Gemelo (sóleo)', severity: 'minor', status: 'cleared', start_date: dayAgo(30), returned_date: dayAgo(22), expected_return: null, injury_category: 'muscular', injury_mechanism: null, injury_type: 'Strain' },
-  { id: 'i7', club_id: CLUB.id, player_id: 'p-0-9', body_area: 'Cuádriceps', severity: 'minor', status: 'returning', start_date: dayAgo(12), returned_date: null, expected_return: dayAgo(-4), injury_category: 'muscular', injury_mechanism: 'overuse', injury_type: 'Strain' },
-  { id: 'i8', club_id: CLUB.id, player_id: 'p-1-1', body_area: 'Lower Back', severity: 'minor', status: 'active', start_date: dayAgo(-1), returned_date: null, expected_return: null, injury_category: null, injury_mechanism: null, injury_type: 'Lumbago' },
-  /* Las cuatro de abajo usan la columna LEGACY `mechanism`, que es la que de verdad escribe el
-     formulario de Injuries.html (un <select> que guarda 'non-contact' CON GUION). Mirando sólo
-     injury_mechanism, un club que carga por el formulario veía "Sin registrar" en todo. */
-  { id: 'i9', club_id: CLUB.id, player_id: 'p-0-4', body_area: 'Right Ankle', severity: 'minor', status: 'cleared', start_date: dayAgo(50), returned_date: dayAgo(44), expected_return: null, injury_category: 'ligament', injury_mechanism: null, mechanism: 'non-contact', injury_type: 'Sprain' },
-  { id: 'i10', club_id: CLUB.id, player_id: 'p-0-6', body_area: 'Left Knee', severity: 'moderate', status: 'cleared', start_date: dayAgo(66), returned_date: dayAgo(50), expected_return: null, injury_category: 'ligament', injury_mechanism: null, mechanism: 'contact', injury_type: 'Sprain' },
-  { id: 'i11', club_id: CLUB.id, player_id: 'p-1-9', body_area: 'Right Calf', severity: 'minor', status: 'cleared', start_date: dayAgo(35), returned_date: dayAgo(29), expected_return: null, injury_category: 'muscular', injury_mechanism: null, mechanism: 'overuse', injury_type: 'Strain' },
-  { id: 'i12', club_id: CLUB.id, player_id: 'p-2-8', body_area: 'Lower Back', severity: 'minor', status: 'cleared', start_date: dayAgo(25), returned_date: dayAgo(20), expected_return: null, injury_category: 'other', injury_mechanism: null, mechanism: 'training', injury_type: 'Overload' },
+  { id: 'i1', club_id: CLUB.id, player_id: 'p-0-2', body_area: 'Left Hamstring', severity: 'moderate', status: 'cleared', start_date: dayAgo(80), returned_date: dayAgo(60), expected_return: dayAgo(62), injury_category: 'muscular', mechanism: 'non-contact', injury_type: 'Strain' },
+  { id: 'i2', club_id: CLUB.id, player_id: 'p-0-2', body_area: 'hamstring', severity: 'moderate', status: 'active', start_date: dayAgo(18), returned_date: null, expected_return: dayAgo(-10), injury_category: 'muscular', injury_type: 'Strain' },
+  { id: 'i3', club_id: CLUB.id, player_id: 'p-1-4', body_area: 'Isquiotibial derecho', severity: 'minor', status: 'cleared', start_date: dayAgo(45), returned_date: dayAgo(38), expected_return: null, injury_category: 'muscular', mechanism: 'overuse', injury_type: 'Overload' },
+  { id: 'i4', club_id: CLUB.id, player_id: 'p-1-7', body_area: 'Rodilla (LCM)', severity: 'severe', status: 'active', start_date: dayAgo(55), returned_date: null, expected_return: null, injury_category: 'ligament', mechanism: 'contact', injury_type: 'MCL' },
+  { id: 'i5', club_id: CLUB.id, player_id: 'p-2-1', body_area: 'Tobillo (LLE)', severity: 'moderate', status: 'cleared', start_date: dayAgo(70), returned_date: dayAgo(40), expected_return: null, injury_category: 'ligament', mechanism: 'contact', injury_type: 'Sprain' },
+  { id: 'i6', club_id: CLUB.id, player_id: 'p-2-5', body_area: 'Gemelo (sóleo)', severity: 'minor', status: 'cleared', start_date: dayAgo(30), returned_date: dayAgo(22), expected_return: null, injury_category: 'muscular', injury_type: 'Strain' },
+  { id: 'i7', club_id: CLUB.id, player_id: 'p-0-9', body_area: 'Cuádriceps', severity: 'minor', status: 'returning', start_date: dayAgo(12), returned_date: null, expected_return: dayAgo(-4), injury_category: 'muscular', mechanism: 'overuse', injury_type: 'Strain' },
+  { id: 'i8', club_id: CLUB.id, player_id: 'p-1-1', body_area: 'Lower Back', severity: 'minor', status: 'active', start_date: dayAgo(-1), returned_date: null, expected_return: null, injury_category: null, injury_type: 'Lumbago' },
+  /* Los valores tal cual los escribe el <select> de Injuries.html, incluido 'non-contact' CON
+     GUION. Antes había una segunda columna (injury_mechanism, un enum) y la pantalla leía esa
+     mientras el formulario llenaba ésta: un club que cargaba a mano veía "Sin registrar" en
+     todo. La migración 149 la volcó y la borró. */
+  { id: 'i9', club_id: CLUB.id, player_id: 'p-0-4', body_area: 'Right Ankle', severity: 'minor', status: 'cleared', start_date: dayAgo(50), returned_date: dayAgo(44), expected_return: null, injury_category: 'ligament', mechanism: 'non-contact', injury_type: 'Sprain' },
+  { id: 'i10', club_id: CLUB.id, player_id: 'p-0-6', body_area: 'Left Knee', severity: 'moderate', status: 'cleared', start_date: dayAgo(66), returned_date: dayAgo(50), expected_return: null, injury_category: 'ligament', mechanism: 'contact', injury_type: 'Sprain' },
+  { id: 'i11', club_id: CLUB.id, player_id: 'p-1-9', body_area: 'Right Calf', severity: 'minor', status: 'cleared', start_date: dayAgo(35), returned_date: dayAgo(29), expected_return: null, injury_category: 'muscular', mechanism: 'overuse', injury_type: 'Strain' },
+  { id: 'i12', club_id: CLUB.id, player_id: 'p-2-8', body_area: 'Lower Back', severity: 'minor', status: 'cleared', start_date: dayAgo(25), returned_date: dayAgo(20), expected_return: null, injury_category: 'other', mechanism: 'training', injury_type: 'Overload' },
 ];
 
 /* activity_log: acciones de staff (con actor_id) mezcladas con envíos de jugadores (sin él).
@@ -549,7 +550,7 @@ test.describe('Club Overview · Lesiones', () => {
 
   /* Regresión: el panel decía "Sin registrar" en lesiones que SÍ tenían mecanismo. Hay dos
      columnas y el formulario de Injuries.html escribe la vieja (`mechanism`, con guion);
-     leyendo sólo `injury_mechanism` no se veía ninguna. */
+     leyendo sólo el enum `injury_mechanism` (ya eliminado) no se veía ninguna. */
   test('lee el mecanismo de la columna que escribe el formulario, no sólo del enum', async ({ page }) => {
     await openPage(page, { tab: 'injuries' });
     const panel = await waitTab(page, 'coTabInjuries');

@@ -127,39 +127,12 @@
     return tt('co_dir.cat_' + (k || 'unknown'), FB[k] || k);
   }
   /* ── MECANISMO ────────────────────────────────────────────────────────────
-     Hay DOS columnas y cada una la escribe una pantalla distinta:
-
-       · injuries.injury_mechanism — enum con CHECK (contact / non_contact /
-         overuse / unknown). Es la que trae la data sembrada.
-       · injuries.mechanism — la que de verdad escribe el formulario de
-         Injuries.html, con un <select> que guarda 'contact', 'non-contact'
-         (CON GUION), 'overuse', 'training' y 'other'.
-
-     Mirando sólo la primera, un club que carga sus lesiones por el formulario
-     ve "Sin registrar" en todo — que es justo lo que pasaba: de 25 lesiones en
-     la base, 11 tienen sólo `mechanism` y ninguna de esas se estaba leyendo.
-     Se prefiere el enum y se cae al texto libre, normalizado: si no, el guion
-     y el guion bajo dibujan dos barras para lo mismo. Mismo criterio que usa
-     clinical-record.js, que ya hacía el fallback (pero sin normalizar).       */
-  const MECH_EXACT = {
-    contact: 'contact', contacto: 'contact', contato: 'contact',
-    non_contact: 'non_contact', noncontact: 'non_contact', sin_contacto: 'non_contact', sem_contato: 'non_contact', no_contacto: 'non_contact',
-    overuse: 'overuse', sobrecarga: 'overuse', sobreuso: 'overuse', sobreesfuerzo: 'overuse',
-    training: 'training_load', training_load: 'training_load', carga: 'training_load', carga_de_entrenamiento: 'training_load', entrenamiento: 'training_load', treino: 'training_load',
-    other: 'other', otro: 'other', otra: 'other', outro: 'other',
-    unknown: 'unknown', desconocido: 'unknown', desconhecido: 'unknown'
-  };
+     La normalización vive en assets/injury-mechanism.js, compartida con la ficha
+     clínica: es una taxonomía, y dos copias se separan sola. Acá sólo se traduce
+     la clave que devuelve. Si el script no cargó, todo cae en "sin registrar" en
+     vez de romper la pestaña.                                                  */
   function normMech(inj) {
-    const raw = inj && (inj.injury_mechanism || inj.mechanism);
-    let s = deaccent(raw).toLowerCase().trim().replace(/[\s-]+/g, '_').replace(/[^a-z_]/g, '');
-    if (!s) return 'unknown';
-    if (MECH_EXACT[s]) return MECH_EXACT[s];
-    // El orden importa: "non_contact" contiene "contact", así que lo negado va primero.
-    if (s.indexOf('non_contact') !== -1 || s.indexOf('sin_contact') !== -1 || s.indexOf('sem_contat') !== -1) return 'non_contact';
-    if (s.indexOf('contact') !== -1 || s.indexOf('contat') !== -1 || s.indexOf('trauma') !== -1 || s.indexOf('golpe') !== -1 || s.indexOf('choque') !== -1) return 'contact';
-    if (s.indexOf('overuse') !== -1 || s.indexOf('sobrecarga') !== -1 || s.indexOf('repetit') !== -1) return 'overuse';
-    if (s.indexOf('train') !== -1 || s.indexOf('carga') !== -1 || s.indexOf('treino') !== -1) return 'training_load';
-    return 'other';   // se cargó algo que no se supo clasificar — distinto de no cargar nada
+    return window.cmInjuryMechanism ? window.cmInjuryMechanism(inj) : 'unknown';
   }
   function mechLabel(k) {
     const FB = { contact: 'Contact', non_contact: 'Non-contact', overuse: 'Overuse', training_load: 'Training load', other: 'Other', unknown: 'Not recorded' };
@@ -386,7 +359,7 @@
     // Lesiones: todas las que SOLAPAN el período (abiertas, o cerradas después de `from`),
     // no sólo las que empiezan dentro. El burden de un período incluye los días que aporta
     // una lesión vieja que sigue abierta.
-    const injQ = sb().from('injuries').select('id,player_id,body_area,severity,status,start_date,expected_return,returned_date,injury_category,injury_mechanism,mechanism,injury_type')
+    const injQ = sb().from('injuries').select('id,player_id,body_area,severity,status,start_date,expected_return,returned_date,injury_category,mechanism,injury_type')
       .eq('club_id', cid).or('returned_date.is.null,returned_date.gte.' + from);
     const plQ = sb().from('players').select('id,first_name,last_name,position,positions,team_id,date_of_birth,status').eq('club_id', cid).is('archived_at', null);
     const ptQ = sb().from('player_teams').select('player_id,team_id').eq('club_id', cid);

@@ -225,8 +225,8 @@ function getBodyCoords(area) {
   // visible text is translated via tt() at render time (data-vs-UI: keys stay EN).
   const TISSUE = { muscular: 'Muscle', acl: 'ACL', ligament: 'Ligament', tendon: 'Tendon', bone: 'Bone', other: 'Other' };
   const TISSUE_KEY = { muscular: 'muscle', acl: 'acl', ligament: 'ligament', tendon: 'tendon', bone: 'bone', other: 'other' };
-  const MECH = { contact: 'Contact', non_contact: 'Non-contact', overuse: 'Overuse', unknown: '—' };
-  const MECH_KEY = { contact: 'mech_contact', non_contact: 'mech_non_contact', overuse: 'mech_overuse', unknown: null };
+  const MECH = { contact: 'Contact', non_contact: 'Non-contact', overuse: 'Overuse', training_load: 'Training load', other: 'Other', unknown: '—' };
+  const MECH_KEY = { contact: 'mech_contact', non_contact: 'mech_non_contact', overuse: 'mech_overuse', training_load: 'mech_training_load', other: 'mech_other', unknown: null };
   const SEV_PILL = { minor: '', moderate: 'is-warning', severe: 'is-danger' };
   const SEV_LABEL_KEY = { minor: 'sev_minor', moderate: 'sev_moderate', severe: 'sev_severe' };
   const STATUS_PILL = { active: ['is-danger', 'Active'], returning: ['is-warning', 'Returning'], cleared: ['is-success', 'Resolved'] };
@@ -251,13 +251,14 @@ function getBodyCoords(area) {
   function tissueLabel(inj) { return inj.injury_category ? (TISSUE[inj.injury_category] || 'Other') : null; }
   function tissueDisplay(inj) { return inj.injury_category ? tTissue(inj.injury_category) : null; }
 
+  /* Una sola columna (migración 149 volcó y borró injury_mechanism) y una sola taxonomía:
+     assets/injury-mechanism.js, compartida con Club overview. Antes esto leía el enum y caía
+     al texto libre SIN normalizar, así que 'non-contact' del formulario se mostraba crudo
+     mientras 'non_contact' de la data sembrada salía traducido. */
   function mechLabel(inj) {
-    if (inj.injury_mechanism) {
-      const k = MECH_KEY[inj.injury_mechanism];
-      return k ? tt('clinical_record.' + k, MECH[inj.injury_mechanism] || '—') : (MECH[inj.injury_mechanism] || '—');
-    }
-    if (inj.mechanism) return inj.mechanism;   // free-text data → intact
-    return '—';
+    const k = window.cmInjuryMechanism ? window.cmInjuryMechanism(inj) : null;
+    if (!k || k === 'unknown') return '—';
+    return tt('clinical_record.' + (MECH_KEY[k] || 'mech_other'), MECH[k] || '—');
   }
 
   function daysOut(inj) {
@@ -2106,7 +2107,7 @@ function getBodyCoords(area) {
       // ── Injuries → Overview heatmap + Injury history tab (fetched once) ──
       try {
         const { data } = await window.sb.from('injuries')
-          .select('id,start_date,body_area,severity,status,injury_category,sub_classification,injury_type,injury_mechanism,mechanism,returned_date,expected_return')
+          .select('id,start_date,body_area,severity,status,injury_category,sub_classification,injury_type,mechanism,returned_date,expected_return')
           .eq('club_id', clubId).eq('player_id', playerId);
         _injuries = arr(data);
       } catch (_) { _injuries = []; }

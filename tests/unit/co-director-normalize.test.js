@@ -75,6 +75,65 @@ describe('normArea', () => {
   });
 });
 
+describe('cmInjuryMechanism', () => {
+  /* Taxonomía compartida por Club overview y la ficha clínica (assets/injury-mechanism.js).
+     Hasta la migración 149 había DOS columnas para esto y cada pantalla leía una distinta:
+     un club que cargaba sus lesiones por el formulario veía "Sin registrar" en todas. Ahora
+     queda `mechanism` sola, con los valores que escribe el <select> de Injuries.html. */
+  let mech;
+  beforeAll(async () => { await import('../../assets/injury-mechanism.js'); mech = global.window.cmInjuryMechanism; });
+
+  it('resuelve los valores que escribe el formulario de Injuries.html', () => {
+    // 'non-contact' va CON GUION en el <select>; el enum viejo lo tenía con guion bajo.
+    const esperado = {
+      contact: ['contact'], non_contact: ['non-contact'], overuse: ['overuse'],
+      training_load: ['training'], other: ['other'],
+    };
+    const fallos = [];
+    for (const [k, vals] of Object.entries(esperado)) {
+      for (const v of vals) { const got = mech({ mechanism: v }); if (got !== k) fallos.push(`"${v}" → ${got} (se esperaba ${k})`); }
+    }
+    expect(fallos, `\n${fallos.join('\n')}\n`).toEqual([]);
+  });
+
+  it('el guion y el guion bajo son el mismo mecanismo', () => {
+    // Si no, el gráfico dibuja dos barras para lo mismo.
+    expect(mech({ mechanism: 'non-contact' })).toBe(mech({ mechanism: 'non_contact' }));
+    expect(mech({ mechanism: 'Non-Contact' })).toBe('non_contact');
+  });
+
+  it('entiende el texto escrito a mano en los tres idiomas', () => {
+    expect(mech({ mechanism: 'Sin contacto' })).toBe('non_contact');
+    expect(mech({ mechanism: 'Sem contato' })).toBe('non_contact');
+    expect(mech({ mechanism: 'Sobrecarga' })).toBe('overuse');
+    expect(mech({ mechanism: 'Traumatismo directo' })).toBe('contact');
+  });
+
+  it('lo negado gana a lo afirmado', () => {
+    // "non_contact" contiene "contact": si el orden se invierte, todo cae en contacto.
+    expect(mech({ mechanism: 'non-contact' })).not.toBe('contact');
+  });
+
+  it('distingue "no se cargó" de "no supe clasificar"', () => {
+    for (const v of [null, undefined, '', '   ']) expect(mech({ mechanism: v })).toBe('unknown');
+    expect(mech({ mechanism: 'qwerty' })).toBe('other');
+  });
+
+  it('todavía lee un dump anterior a la migración 149', () => {
+    // La columna ya no existe, pero un export viejo puede traerla.
+    expect(mech({ mechanism: null, injury_mechanism: 'non_contact' })).toBe('non_contact');
+    // Con las dos, manda la que el producto escribe hoy.
+    expect(mech({ mechanism: 'contact', injury_mechanism: 'overuse' })).toBe('contact');
+  });
+
+  it('no se cae con entradas raras', () => {
+    for (const v of [123, {}, [], '---', 'LEFT']) {
+      expect(() => mech({ mechanism: v })).not.toThrow();
+      expect(typeof mech({ mechanism: v })).toBe('string');
+    }
+  });
+});
+
 describe('lineOf', () => {
   it('mapea las posiciones canónicas a su línea', () => {
     const casos = {
