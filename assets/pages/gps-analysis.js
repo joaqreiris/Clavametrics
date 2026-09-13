@@ -4672,8 +4672,11 @@ document.addEventListener('gpfilter:change', () => _renderGenericExampleCards())
 // ── Smart default — detect what data is available ─────────────
 async function _detectSmartDefault(clubId, userId) {
   // 1. Try saved prefs (by club + user)
-  window._gpClubId = clubId;
-  window._gpUserId = userId;
+  // Mismo cuidado que en la carga inicial: recibe el clubId de afuera y si viene vacío NO hay que
+  // pisar el que ya esté resuelto. Sin esta guardia, un getClubId() lento dejaba en null el club
+  // que la página ya tenía, y gp-builder / gp-tabs / gp-ai se rendían esperándolo.
+  if (clubId) window._gpClubId = clubId;
+  if (userId) window._gpUserId = userId;
   const saved = loadGpsPrefs();
   if (saved) return saved;
 
@@ -4709,8 +4712,14 @@ async function _detectSmartDefault(clubId, userId) {
   const [profile, club] = await Promise.all([window.getProfile(), window.getClub()]);
   const clubId = await window.getClubId();
   if (club) window.applyClubTheme();
-  window._gpClubId = clubId;
-  window._gpUserId = profile?.id || null;
+  // No pisar con null. getClubId() puede volver vacío por una consulta lenta, y acá se asignaba sin
+  // comprobar: eso BORRABA un club ya resuelto. Detrás de window._gpClubId esperan gp-builder,
+  // gp-tabs y gp-ai, y los tres se RINDEN a los 8-12 s con sólo un warning en consola. El que mira
+  // la página se queda sin el botón del builder, sin las pestañas de sus dashboards y sin la IA, y
+  // no hay forma de saber por qué: hay que recargar. Las otras dos asignaciones de _gpClubId
+  // (refreshDashboard, _detectSmartDefault) ya venían protegidas; ésta era la que faltaba.
+  if (clubId) window._gpClubId = clubId;
+  if (profile?.id) window._gpUserId = profile.id;
   // Ceba la caché de fotos de jugador (id→foto) para pintar caras en las tablas (data-cm-photo). Fire-and-forget.
   window.cmLoadPlayerPhotos?.(clubId);
 

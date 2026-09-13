@@ -33,15 +33,20 @@ async function open(page) {
   await page.waitForSelector('.gp-sections', { timeout: 15_000 });
   await page.evaluate((cid) => { window._gpClubId = cid; window._gpUserId = 'user-1'; }, CLUB_ID);
   await page.locator('#gpbOpenBtn').first().click();
-  await page.waitForTimeout(600);
+  // #gpbPanel nace con [hidden]; la señal real es que se vea y ya tenga los botones de tipo
+  // dibujados, que es lo que clickean los helpers de abajo. Eran 600 ms a ojo.
+  await expect(page.locator('#gpbPanel')).toBeVisible();
+  await expect(page.locator('#gpbPanel [data-type]').first()).toBeVisible();
 }
 
 /** Interruptores del panel de estilo visibles para el tipo elegido. */
 async function togglesDe(page, tipo) {
+  // El tipo queda marcado con .is-on y el pane de estilo se activa con la misma clase: dos
+  // condiciones reales en lugar de 250 ms + 250 ms de fe.
   await page.locator(`[data-type="${tipo}"]`).first().click();
-  await page.waitForTimeout(250);
+  await expect(page.locator(`[data-type="${tipo}"]`).first()).toHaveClass(/is-on/);
   await page.locator('[data-tab="style"]').first().click();
-  await page.waitForTimeout(250);
+  await expect(page.locator('.pane[data-pane="style"]')).toHaveClass(/is-on/);
   return page.evaluate(() => [...document.querySelectorAll('[data-toggle]')]
     .filter(b => b.offsetParent !== null)
     .map(b => b.dataset.toggle));
@@ -88,10 +93,12 @@ test.describe('GPS · el panel de estilo no ofrece botones muertos', () => {
 
 /** Títulos de grupo VISIBLES del panel de estilo, en orden. */
 const gruposDe = async (page, tipo) => {
+  // El tipo queda marcado con .is-on y el pane de estilo se activa con la misma clase: dos
+  // condiciones reales en lugar de 250 ms + 250 ms de fe.
   await page.locator(`[data-type="${tipo}"]`).first().click();
-  await page.waitForTimeout(250);
+  await expect(page.locator(`[data-type="${tipo}"]`).first()).toHaveClass(/is-on/);
   await page.locator('[data-tab="style"]').first().click();
-  await page.waitForTimeout(250);
+  await expect(page.locator('.pane[data-pane="style"]')).toHaveClass(/is-on/);
   return page.evaluate(() => [...document.querySelectorAll('.pane[data-pane="style"] .es-sec')]
     .filter(sec => sec.offsetParent !== null)
     .map(sec => sec.querySelector('.lab')?.textContent?.trim() || '')
@@ -137,9 +144,9 @@ test.describe('GPS · líneas de referencia', () => {
   test('un gráfico de línea también las ofrece', async ({ page }) => {
     await open(page);
     await page.locator('[data-type="line"]').first().click();
-    await page.waitForTimeout(250);
+    await expect(page.locator('[data-type="line"]').first()).toHaveClass(/is-on/);
     await page.locator('[data-tab="style"]').first().click();
-    await page.waitForTimeout(250);
+    await expect(page.locator('.pane[data-pane="style"]')).toHaveClass(/is-on/);
     const visible = await page.evaluate(() => {
       const sec = [...document.querySelectorAll('.pane[data-pane="style"] .es-sec')]
         .find(s => /reference lines|líneas de referencia/i.test(s.querySelector('.lab')?.textContent || ''));
@@ -151,9 +158,9 @@ test.describe('GPS · líneas de referencia', () => {
   test('un radar no: no tiene eje de valores donde apoyarlas', async ({ page }) => {
     await open(page);
     await page.locator('[data-type="radar"]').first().click();
-    await page.waitForTimeout(250);
+    await expect(page.locator('[data-type="radar"]').first()).toHaveClass(/is-on/);
     await page.locator('[data-tab="style"]').first().click();
-    await page.waitForTimeout(250);
+    await expect(page.locator('.pane[data-pane="style"]')).toHaveClass(/is-on/);
     const visible = await page.evaluate(() => {
       const sec = [...document.querySelectorAll('.pane[data-pane="style"] .es-sec')]
         .find(s => /reference lines|líneas de referencia/i.test(s.querySelector('.lab')?.textContent || ''));
