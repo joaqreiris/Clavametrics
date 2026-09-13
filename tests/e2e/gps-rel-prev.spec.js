@@ -92,7 +92,13 @@ async function open(page, esc = ESC.porFecha) {
   await expect.poll(async () => page.evaluate(() =>
     document.querySelectorAll('.gp-view.is-on .gp-c[data-card-id="card-rel"] canvas').length
   ), { timeout: 30_000 }).toBeGreaterThan(0);
-  await page.waitForTimeout(900);
+  // Igual que en gps-demand: el canvas aparece antes que los datos. La señal real es el dataset
+  // que lleva _relPct, que es justo lo que lee deltas() abajo.
+  await expect.poll(async () => page.evaluate(() => {
+    const cv = document.querySelector('.gp-view.is-on .gp-c[data-card-id="card-rel"] canvas');
+    const ds = cv && window.Chart?.getChart(cv)?.data?.datasets?.find(d => d._relPct);
+    return (ds?._relPct || []).length;
+  }), { timeout: 30_000 }).toBeGreaterThan(0);
 }
 
 /** El Δ% que quedó pegado a cada barra (_relPct del dataset). */

@@ -89,7 +89,14 @@ async function open(page, cards, { sessions = SESSIONS, reports = REPORTS } = {}
   await expect.poll(async () => page.evaluate(() =>
     document.querySelectorAll('.gp-view.is-on .gp-c[data-card-id="card-dem"] canvas').length
   ), { timeout: 30_000 }).toBeGreaterThan(0);
-  await page.waitForTimeout(800);
+  // Que el canvas exista no quiere decir que el plugin ya tenga sus filas: el dibujo llega
+  // después. Acá se esperaba 800 ms a ojo, y bajo carga (5 workers peleándose la máquina) no
+  // alcanzaban: el test leía `rows` vacío y fallaba por contención, no por el producto.
+  await expect.poll(async () => page.evaluate(() => {
+    const cv = document.querySelector('.gp-view.is-on .gp-c[data-card-id="card-dem"] canvas');
+    const o  = cv && window.Chart?.getChart(cv)?.options?.plugins?.gpbDemand;
+    return (o?.rows || []).length;
+  }), { timeout: 30_000 }).toBeGreaterThan(0);
 }
 
 /** Las filas ya calculadas, tal como las recibió el plugin que las dibuja. */

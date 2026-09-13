@@ -65,7 +65,9 @@ async function abrir(page) {
   await page.goto('/GPS Analysis.html');
   await page.waitForSelector('.gp-sections', { timeout: 15_000 });
   await page.evaluate((cid) => { window._gpClubId = cid; window._gpUserId = 'user-1'; }, CLUB_ID);
-  await page.waitForTimeout(900);
+  // Lo que hacía falta esperar es que la pestaña del dashboard propio esté dibujada — su kebab es
+  // el que clickean los tests de abajo. Eran 900 ms a ojo.
+  await page.waitForSelector('#sections .gp-sec[data-custom] .gpt-kb', { timeout: 15_000 });
 }
 
 test.describe('GPS · duplicar un dashboard', () => {
@@ -73,7 +75,8 @@ test.describe('GPS · duplicar un dashboard', () => {
     await abrir(page);
     await page.evaluate(async ([src, club]) =>
       window.duplicateDashboard(src, club, 'user-1', window.sb), [SRC, CLUB_ID]);
-    await page.waitForTimeout(600);
+    await expect.poll(() => page.evaluate(() => (window.__insCards || []).length),
+      { timeout: 15_000 }).toBeGreaterThanOrEqual(3);
     const cards = await page.evaluate(() => window.__insCards);
     expect(cards).toHaveLength(3);
     expect(cards.every(c => c.dashboard_id === NUEVO)).toBe(true);
@@ -119,12 +122,16 @@ test.describe('GPS · duplicar un dashboard', () => {
       const kb = document.querySelector('#sections .gp-sec[data-custom] .gpt-kb');
       kb?.click();
     });
-    await page.waitForTimeout(400);
+    await page.waitForSelector('[data-act="duplicate"]', { timeout: 15_000 });
     await page.evaluate(() => {
       const b = [...document.querySelectorAll('[data-act="duplicate"]')][0];
       b?.click();
     });
-    await page.waitForTimeout(2500);
+    // La pestaña nueva aparece antes que sus cards, así que la señal es la primera card dibujada
+    // dentro de ella. Eran 2500 ms a ojo: de lejos la espera más cara de la suite.
+    await expect.poll(() => page.evaluate((nuevo) =>
+      document.querySelectorAll(`.gp-view[data-view="db-${nuevo}"] .gp-c[data-card-id]`).length, NUEVO),
+      { timeout: 30_000 }).toBeGreaterThan(0);
 
     const vista = await page.evaluate((nuevo) => {
       const v = document.querySelector(`.gp-view[data-view="db-${nuevo}"]`);
@@ -147,9 +154,11 @@ test.describe('GPS · duplicar un dashboard', () => {
     }, SRC);
     await abrir(page);
     await page.evaluate(() => document.querySelector('#sections .gp-sec[data-custom] .gpt-kb')?.click());
-    await page.waitForTimeout(400);
+    await page.waitForSelector('[data-act="duplicate"]', { timeout: 15_000 });
     await page.evaluate(() => document.querySelector('[data-act="duplicate"]')?.click());
-    await page.waitForTimeout(2000);
+    // Que exista la pestaña nueva dice que la duplicación terminó; los filtros se chequean abajo
+    // con su propio mensaje, que es más claro que un timeout de poll.
+    await page.waitForSelector(`.gp-view[data-view="db-${NUEVO}"]`, { timeout: 30_000 });
 
     const copiado = await page.evaluate((nuevo) => {
       const raw = localStorage.getItem(`cm_gpfilters_user-1_db-${nuevo}`);
@@ -163,9 +172,9 @@ test.describe('GPS · duplicar un dashboard', () => {
   test('sin filtros en el original, la copia arranca limpia y no rompe nada', async ({ page }) => {
     await abrir(page);
     await page.evaluate(() => document.querySelector('#sections .gp-sec[data-custom] .gpt-kb')?.click());
-    await page.waitForTimeout(400);
+    await page.waitForSelector('[data-act="duplicate"]', { timeout: 15_000 });
     await page.evaluate(() => document.querySelector('[data-act="duplicate"]')?.click());
-    await page.waitForTimeout(1800);
+    await page.waitForSelector(`.gp-view[data-view="db-${NUEVO}"]`, { timeout: 30_000 });
     const hayPestana = await page.evaluate((nuevo) =>
       !!document.querySelector(`.gp-view[data-view="db-${nuevo}"]`), NUEVO);
     expect(hayPestana).toBe(true);
