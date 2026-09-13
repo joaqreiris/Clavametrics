@@ -228,10 +228,10 @@ test.describe('Login — Forgot password', () => {
   });
 
   test('reset password request shows confirmation', async ({ page }) => {
-    await page.route(`${SB}/auth/v1/recover`, route =>
+    await page.route(`${SB}/**`, route => route.fulfill({ json: {} }));   // red de contención
+    await page.route(`${SB}/auth/v1/recover`, route =>                     // …y el reseteo encima
       route.fulfill({ status: 200, json: {} })
     );
-    await page.route(`${SB}/**`, route => route.fulfill({ json: {} }));
     await page.goto('/Login.html');
 
     const resetLink = page.locator('a', { hasText: /forgot|reset/i }).first();
@@ -307,8 +307,8 @@ test.describe('Register — Session redirect', () => {
 
 test.describe('Register — Email confirmation flow', () => {
   test('shows check-email message when session is null after signup', async ({ page }) => {
-    await mockRegisterEmailConfirmation(page);
-    await page.route(`${SB}/**`, route => route.fulfill({ json: {} }));
+    await page.route(`${SB}/**`, route => route.fulfill({ json: {} }));   // red de contención
+    await mockRegisterEmailConfirmation(page);                             // …y el signup encima
     await page.goto('/Register.html');
 
     await fillRegForm(page);
