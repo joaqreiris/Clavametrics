@@ -36,7 +36,8 @@ Deno.serve(async (req) => {
     if (clubId && (isSuper || clubId === caller?.club_id)) targetClub = clubId;
     if (!targetClub) return json({ error: 'No target club' }, 400);
 
-    // ── Límite de staff del plan (workspace, plan más alto). Super-admin exento. ──
+    // ── Límite de staff: suma de plazas de las categorías de pago del club
+    //    (club_staff_limit). Super-admin exento. ──
     if (!isSuper) {
       const [{ data: lim }, { data: cnt }] = await Promise.all([
         admin.rpc('club_staff_limit', { p_club_id: targetClub }),
