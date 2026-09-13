@@ -49,6 +49,29 @@
   .gl-sel{height:32px;padding:0 12px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:var(--cm-r-3);color:var(--cm-fg);font:500 12.5px/1 var(--cm-font-sans);cursor:pointer;outline:none}
   .gl-sel:hover{border-color:var(--cm-border-strong)}
   .gl-sel:disabled{opacity:.45;cursor:not-allowed}
+  .gl-sel.is-on{border-color:var(--cm-accent);color:var(--cm-fg-strong);font-weight:600}
+  /* Tag search: typeahead over the tags actually present in this library */
+  .gl-search{position:relative}
+  .gl-sug{display:none;position:absolute;left:0;right:0;top:38px;z-index:20;background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-3);box-shadow:0 12px 32px rgba(0,0,0,.16);overflow:hidden}
+  .gl-sugitem{display:flex;align-items:center;gap:8px;width:100%;padding:8px 10px;border:0;background:transparent;cursor:pointer;text-align:left}
+  .gl-sugitem:hover,.gl-sugitem.is-on{background:var(--cm-bg-soft)}
+  .gl-sugname{font:600 12.5px/1 var(--cm-font-sans);color:var(--cm-fg-strong)}
+  .gl-sugdim{font:500 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted);text-transform:uppercase;letter-spacing:.04em}
+  .gl-sugn{margin-left:auto;font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)}
+  /* Active filters + the two-level filter row */
+  #gl-filters{margin:-4px 0 12px}
+  .gl-chiprow{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:8px}
+  .gl-chip{display:inline-flex;align-items:center;gap:5px;height:28px;padding:0 10px;border-radius:999px;border:1px solid var(--cm-accent);background:var(--cm-accent-soft);color:var(--cm-fg-strong);font:600 12px/1 var(--cm-font-sans);cursor:pointer}
+  .gl-chip .ti-x{font-size:13px;color:var(--cm-fg-muted)}
+  .gl-chip:hover .ti-x{color:var(--cm-danger,#B91C1C)}
+  .gl-chip.is-text{border-color:var(--cm-border-strong);background:var(--cm-bg-soft)}
+  .gl-chip-dim{font:500 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted);text-transform:uppercase;letter-spacing:.04em}
+  .gl-filterrow{display:flex;flex-wrap:wrap;gap:8px}
+  .gl-filterrow.is-more{margin-top:8px}
+  .gl-more{display:inline-flex;align-items:center;gap:5px;height:32px;padding:0 12px;border-radius:var(--cm-r-3);border:1px dashed var(--cm-border-strong);background:transparent;color:var(--cm-fg-muted);font:500 12.5px/1 var(--cm-font-sans);cursor:pointer}
+  .gl-more:hover,.gl-more.is-on{border-style:solid;color:var(--cm-fg)}
+  .gl-undo{display:block;margin:12px auto 0;height:32px;padding:0 14px;border-radius:var(--cm-r-3);border:1px solid var(--cm-border);background:var(--cm-bg-soft);color:var(--cm-fg);font:600 12px/1 var(--cm-font-sans);cursor:pointer}
+  .gl-undo:hover{border-color:var(--cm-accent)}
   .gl-toolbar .grow{flex:1}
   .gl-segs{display:inline-flex;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:var(--cm-r-3);padding:3px;gap:2px}
   .gl-segs button{border:0;background:transparent;padding:0 11px;height:26px;border-radius:5px;color:var(--cm-fg-muted);cursor:pointer;font:500 12px/1 var(--cm-font-sans);display:inline-flex;align-items:center;gap:5px}
@@ -202,6 +225,7 @@
 <script src="assets/sport.js"></script>
 <script src="assets/sidebar.js" defer></script>
 <script src="lib/exercise-taxonomy.js"></script>
+<script src="lib/exercise-filter.js"></script>
 <script src="assets/global-search.js" defer></script>
 </head>
 <body class="cm">
@@ -235,17 +259,11 @@
       </header>
 
       <div class="gl-toolbar">
-        <div class="gl-search"><i class="ti ti-search"></i><input id="gl-search-input" placeholder="Search exercise name, cues, muscles…" data-i18n-ph="gym_library.search_ph"></div>
-        <select class="gl-sel" id="gl-sel-muscle"><option value="">All muscles</option></select>
-        <select class="gl-sel" id="gl-sel-complexity">
-          <option value="" data-i18n="gym_library.all_complexity">All complexity</option>
-          <option value="Low" data-i18n="gym_library.complexity_low">Low</option>
-          <option value="Medium" data-i18n="gym_library.complexity_medium">Medium</option>
-          <option value="High" data-i18n="gym_library.complexity_high">High</option>
-        </select>
-        <select class="gl-sel" id="gl-sel-equipment"><option value="">All equipment</option></select>
-        <select class="gl-sel" id="gl-sel-purpose"><option value="">All purposes</option></select>
-        <select class="gl-sel" id="gl-sel-pattern"><option value="">All patterns</option></select>
+        <div class="gl-search">
+          <i class="ti ti-search"></i>
+          <input id="gl-search-input" autocomplete="off" placeholder="Search by name or tag…" data-i18n-ph="gym_filter.search_ph">
+          <div id="gl-sug" class="gl-sug"></div>
+        </div>
         <select class="gl-sel" id="gl-sel-usable">
           <option value="" data-i18n="gym_library.all_modules">All modules</option>
           <option value="gym" data-i18n="gym_library.module_gym">Gym</option>
@@ -260,6 +278,8 @@
           <button data-view="muscle"><i class="ti ti-layout-rows"></i><span data-i18n="gym_library.view_muscle">By muscle</span></button>
         </div>
       </div>
+
+      <div id="gl-filters"></div>
 
       <div class="gl-muscles" id="gl-muscles-strip"></div>
 
@@ -490,9 +510,21 @@ let ALL_EXERCISES = [];
 let FOLDERS_GYM = [];
 let CLUB_ID = null;
 let CUSTOM_EQUIP = {};   // club custom materials: slug -> label (merged with the static taxonomy)
-let activeFilters = { search:'', muscle:'', complexity:'', category:'', equipment:'', purpose:'', pattern:'', usableIn:'', view:'grid' };
+// Tag filters live as chips — { <dimension>: [tokens…] } — handled by the
+// shared engine in lib/exercise-filter.js. Category and module stay local:
+// one is a legacy axis shown as its own strip, the other is screen-specific.
+let activeFilters = { search:'', chips:{}, category:'', usableIn:'', view:'grid' };
+let glSug = [], glSugIdx = -1;
 // Equipment label resolves a club custom material first, then the static taxonomy.
-const equipLabel = t => CUSTOM_EQUIP[t] || CMTaxonomy.label('equipment', t);
+const equipLabel = t => CUSTOM_EQUIP[t] || taxLabel('equipment', t);
+// tt('taxonomy.<dim>.<token>') → English taxonomy label → prettified slug.
+function taxLabel(dimension, token) {
+  if (!token) return token;
+  const eng = CMTaxonomy.label(dimension, token);
+  const localized = tt('taxonomy.' + dimension + '.' + token, eng);
+  if (localized && localized !== eng) return localized;
+  return (eng === token) ? (token[0].toUpperCase() + token.slice(1)) : eng;
+}
 async function loadCustomEquip(){
   try {
     const { data } = await window.sb.from('club_equipment').select('slug,label').eq('club_id', CLUB_ID);
@@ -547,7 +579,7 @@ async function boot() {
 
 async function reloadExercises(rebuild = true) {
   const { data } = await window.sb.from('gym_exercises')
-    .select('id,name,description,muscle_group,category,complexity,equipment,usable_in,video_url,is_default,media_type,media_ref,primary_purpose,purposes,equipment_tags,muscle_groups,movement_patterns,video_id,source,folder_id')
+    .select('id,name,description,muscle_group,category,complexity,equipment,usable_in,video_url,is_default,media_type,media_ref,primary_purpose,purposes,equipment_tags,muscle_groups,movement_patterns,myofascial_chains,contraction_types,movement_speeds,planes,video_id,source,folder_id')
     .eq('club_id', CLUB_ID)
     .order('name');
   ALL_EXERCISES = data || [];
@@ -560,9 +592,7 @@ async function reloadExercises(rebuild = true) {
   if (rebuild) {
     renderStats();
     renderCategoryChips();
-    renderMuscleSelect();
-    renderEquipmentSelect();
-    renderPurposeSelect(); renderPatternSelect();
+    renderFilterRow();
     applyFilters();
   } else {
     buildUI();
@@ -572,9 +602,7 @@ async function reloadExercises(rebuild = true) {
 function buildUI() {
   renderStats();
   renderCategoryChips();
-  renderMuscleSelect();
-  renderEquipmentSelect();
-  renderPurposeSelect(); renderPatternSelect();
+  renderFilterRow();
   applyFilters();
 }
 
@@ -620,26 +648,147 @@ function renderCategoryChips() {
   strip.querySelectorAll('.gl-m-chip').forEach(ch => ch.addEventListener('click', () => {
     activeFilters.category = ch.dataset.category;
     syncChips();
+    renderFilterRow();
     applyFilters();
   }));
 }
 
-function tokenCounts(col) {
-  const counts = {};
-  for (const e of ALL_EXERCISES) for (const t of (e[col] || [])) counts[t] = (counts[t]||0)+1;
-  return counts;
+const glEF = () => window.CMExerciseFilter;
+const glDimLabel = key => tt('gym_filter.dim_' + key, key);
+function glTokenLabel(key, token){
+  const EF = glEF();
+  if (EF && token === EF.UNTAGGED) return tt('gym_filter.untagged','Untagged');
+  if (key === 'complexity') return tt('gym_library.complexity_' + String(token).toLowerCase(), token);
+  const d = EF && EF.BY_KEY[key];
+  if (!d || !d.dim) return token;
+  return d.dim === 'equipment' ? equipLabel(token) : taxLabel(d.dim, token);
 }
-function fillCanonSelect(selId, dimension, col, curVal, allLabel) {
-  const counts = tokenCounts(col);
-  const order = CMTaxonomy.tokens(dimension).filter(t => counts[t] != null);
-  const sel = document.getElementById(selId);
-  sel.innerHTML = `<option value="">${allLabel} · ${order.length}</option>` +
-    order.map(t => `<option value="${esc(t)}"${curVal===t?' selected':''}>${esc(CMTaxonomy.label(dimension,t))} · ${counts[t]}</option>`).join('');
+
+// Category and module are not taxonomy axes; they ride along as an extra
+// predicate so the engine stays the single place filtering happens.
+function glExtra(){
+  const { category, usableIn } = activeFilters;
+  if (!category && !usableIn) return null;
+  return e => (!category || (e.category || 'other') === category)
+           && (!usableIn || (e.usable_in || []).includes(usableIn));
 }
-function renderMuscleSelect()    { fillCanonSelect('gl-sel-muscle','muscle_group','muscle_groups',activeFilters.muscle,tt('gym_library.all_muscles','All muscles')); }
-function renderEquipmentSelect() { fillCanonSelect('gl-sel-equipment','equipment','equipment_tags',activeFilters.equipment,tt('gym_library.all_equipment','All equipment')); }
-function renderPurposeSelect()   { fillCanonSelect('gl-sel-purpose','purpose','purposes',activeFilters.purpose,tt('gym_library.all_purposes','All purposes')); }
-function renderPatternSelect()   { fillCanonSelect('gl-sel-pattern','movement_pattern','movement_patterns',activeFilters.pattern,tt('gym_library.all_patterns','All patterns')); }
+function glState(){
+  const st = { chips: activeFilters.chips, search: activeFilters.search };
+  const extra = glExtra(); if (extra) st.extra = extra;
+  return st;
+}
+function glHasFilters(){
+  const EF = glEF();
+  return !!(activeFilters.search.trim() || activeFilters.category || activeFilters.usableIn
+         || (EF && EF.countChips(activeFilters.chips)));
+}
+
+// Same two-level filter row as the planner's picker: the axes coaches already
+// use stay out, the rest sit behind "More filters". Counts are computed against
+// everything except the dimension being counted.
+let glMore = false;
+function renderFilterRow() {
+  const EF = glEF();
+  const wrap = document.getElementById('gl-filters'); if (!wrap || !EF) return;
+  const state = glState();
+
+  const chipPills = [];
+  EF.DIMENSIONS.forEach(d => {
+    (activeFilters.chips[d.key] || []).forEach(token => {
+      chipPills.push(`<button class="gl-chip" data-rm-key="${esc(d.key)}" data-rm-token="${esc(token)}" title="${esc(tt('gym_filter.remove_filter','Remove filter'))}">
+        <span class="gl-chip-dim">${esc(glDimLabel(d.key))}</span>${esc(glTokenLabel(d.key, token))}<i class="ti ti-x"></i></button>`);
+    });
+  });
+  if (activeFilters.search.trim()) {
+    chipPills.push(`<button class="gl-chip is-text" data-rm-search="1"><i class="ti ti-search"></i>${esc(activeFilters.search.trim())}<i class="ti ti-x"></i></button>`);
+  }
+
+  const selectFor = d => {
+    const pool = EF.filterExcept(ALL_EXERCISES, state, d.key);
+    const { options, untagged } = EF.optionsFor(pool, d.key);
+    const active = activeFilters.chips[d.key] || [];
+    const free = options.filter(o => !active.includes(o.token));
+    const showUntagged = untagged > 0 && untagged < pool.length && !active.includes(EF.UNTAGGED);
+    if (!free.length && !showUntagged) return '';
+    const n = active.length;
+    return `<select class="gl-sel${n ? ' is-on' : ''}" data-dim="${esc(d.key)}">
+      <option value="">${esc(glDimLabel(d.key))}${n ? ` · ${n}` : ''}</option>
+      ${free.map(o => `<option value="${esc(o.token)}">${esc(glTokenLabel(d.key, o.token))} · ${o.count}</option>`).join('')}
+      ${showUntagged ? `<option value="${esc(EF.UNTAGGED)}">${esc(tt('gym_filter.untagged','Untagged'))} · ${untagged}</option>` : ''}
+    </select>`;
+  };
+
+  const primary = EF.DIMENSIONS.filter(d => d.level === 'primary').map(selectFor).filter(Boolean);
+  const more = EF.DIMENSIONS.filter(d => d.level === 'more').map(selectFor).filter(Boolean);
+  const moreActive = EF.DIMENSIONS.filter(d => d.level === 'more')
+    .reduce((n, d) => n + (activeFilters.chips[d.key] || []).length, 0);
+
+  wrap.innerHTML = `
+    ${chipPills.length ? `<div class="gl-chiprow">${chipPills.join('')}</div>` : ''}
+    <div class="gl-filterrow">
+      ${primary.join('')}
+      ${more.length ? `<button class="gl-more${glMore ? ' is-on' : ''}" data-more="1">
+        <i class="ti ti-${glMore ? 'chevron-up' : 'plus'}"></i>${esc(glMore ? tt('gym_filter.fewer_filters','Fewer filters') : tt('gym_filter.more_filters','More filters'))}${(!glMore && moreActive) ? ` · ${moreActive}` : ''}</button>` : ''}
+    </div>
+    ${(glMore && more.length) ? `<div class="gl-filterrow is-more">${more.join('')}</div>` : ''}`;
+
+  wrap.querySelectorAll('.gl-sel[data-dim]').forEach(sel => sel.onchange = () => {
+    const key = sel.dataset.dim, token = sel.value;
+    sel.value = '';
+    if (!token) return;
+    activeFilters.chips = EF.toggleChip(activeFilters.chips, key, token);
+    renderFilterRow(); applyFilters();
+  });
+  wrap.querySelectorAll('[data-rm-key]').forEach(b => b.onclick = () => {
+    activeFilters.chips = EF.toggleChip(activeFilters.chips, b.dataset.rmKey, b.dataset.rmToken);
+    renderFilterRow(); applyFilters();
+  });
+  const rmSearch = wrap.querySelector('[data-rm-search]');
+  if (rmSearch) rmSearch.onclick = () => { glSetSearch(''); };
+  const moreBtn = wrap.querySelector('[data-more]');
+  if (moreBtn) moreBtn.onclick = () => { glMore = !glMore; renderFilterRow(); };
+}
+
+// ── Search box + typeahead ────────────────────────────────────────────
+function glSetSearch(value){
+  activeFilters.search = value || '';
+  const input = document.getElementById('gl-search-input');
+  if (input && input.value !== activeFilters.search) input.value = activeFilters.search;
+  renderSuggest(); renderFilterRow(); applyFilters();
+}
+function renderSuggest(){
+  const EF = glEF();
+  const box = document.getElementById('gl-sug'); if (!box || !EF) return;
+  const pool = EF.filter(ALL_EXERCISES, Object.assign({}, glState(), { search: '' }));
+  glSug = EF.suggest(activeFilters.search, ALL_EXERCISES, { chips: activeFilters.chips, pool, limit: 6 });
+  glSugIdx = -1;
+  if (!glSug.length) { box.style.display = 'none'; box.innerHTML = ''; return; }
+  box.innerHTML = glSug.map((sg, i) => `<button class="gl-sugitem" data-i="${i}">
+      <span class="gl-sugname">${esc(glTokenLabel(sg.key, sg.token))}</span>
+      <span class="gl-sugdim">${esc(glDimLabel(sg.key))}</span>
+      <span class="gl-sugn">${sg.count}</span>
+    </button>`).join('');
+  box.style.display = 'block';
+  box.querySelectorAll('.gl-sugitem').forEach(b =>
+    b.onmousedown = ev => { ev.preventDefault(); glAcceptSuggestion(+b.dataset.i); });
+}
+function glAcceptSuggestion(i){
+  const EF = glEF(); const sg = glSug[i]; if (!sg || !EF) return;
+  activeFilters.chips = EF.toggleChip(activeFilters.chips, sg.key, sg.token);
+  glSetSearch(EF.stripLastWord(activeFilters.search));
+  const input = document.getElementById('gl-search-input'); if (input) input.focus();
+}
+function glHighlightSuggest(){
+  const box = document.getElementById('gl-sug'); if (!box) return;
+  box.querySelectorAll('.gl-sugitem').forEach((b, i) => b.classList.toggle('is-on', i === glSugIdx));
+}
+function glSearchKey(e){
+  if (!glSug.length) return;
+  if (e.key === 'ArrowDown') { e.preventDefault(); glSugIdx = (glSugIdx + 1) % glSug.length; glHighlightSuggest(); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); glSugIdx = (glSugIdx - 1 + glSug.length) % glSug.length; glHighlightSuggest(); }
+  else if (e.key === 'Enter' && glSugIdx >= 0) { e.preventDefault(); glAcceptSuggestion(glSugIdx); }
+  else if (e.key === 'Escape') { const box = document.getElementById('gl-sug'); if (box) box.style.display = 'none'; glSug = []; }
+}
 
 function syncChips() {
   document.getElementById('gl-muscles-strip').querySelectorAll('.gl-m-chip').forEach(c => {
@@ -648,32 +797,38 @@ function syncChips() {
 }
 
 function applyFilters() {
-  const search = activeFilters.search.toLowerCase();
-  const muscle = activeFilters.muscle;
-  const complexity = activeFilters.complexity;
-  const category = activeFilters.category;
-  const equipment = activeFilters.equipment;
-  const purpose = activeFilters.purpose;
-  const pattern = activeFilters.pattern;
-  const usableIn = activeFilters.usableIn;
-
-  const visible = ALL_EXERCISES.filter(e => {
-    if (muscle && !(e.muscle_groups || []).includes(muscle)) return false;
-    if (complexity && e.complexity !== complexity) return false;
-    if (category && e.category !== category) return false;
-    if (equipment && !(e.equipment_tags || []).includes(equipment)) return false;
-    if (purpose && !(e.purposes || []).includes(purpose)) return false;
-    if (pattern && !(e.movement_patterns || []).includes(pattern)) return false;
-    if (usableIn && !(e.usable_in || []).includes(usableIn)) return false;
-    if (search) {
-      const hay = `${e.name||''} ${e.description||''} ${e.muscle_group||''}`.toLowerCase();
-      if (!hay.includes(search)) return false;
-    }
-    return true;
-  });
-
+  const EF = glEF();
+  const visible = EF ? EF.filter(ALL_EXERCISES, glState()) : ALL_EXERCISES;
   renderGrid(visible);
   updateCount(visible.length, ALL_EXERCISES.length);
+}
+
+// Why the grid is empty, and the one click that undoes it.
+function glEmptyHtml(){
+  const EF = glEF();
+  const why = EF ? EF.explainEmpty(ALL_EXERCISES, glState()) : { reason:'no_match' };
+  let msg = tt('gym_library.no_match','No exercises match your filters.'), undo = '';
+  if (why.reason === 'empty_library') msg = tt('gym_filter.empty_library','This library has no exercises yet.');
+  else if (why.reason === 'chip') {
+    const label = `${glDimLabel(why.key)}: ${glTokenLabel(why.key, why.tokens[0])}`;
+    msg = tt('gym_filter.empty_chip', `No exercise matches every filter. Removing "${label}" brings results back.`, { label });
+    undo = `<button class="gl-undo" data-undo-key="${esc(why.key)}">${esc(tt('gym_filter.undo_last','Remove it'))}</button>`;
+  } else if (why.reason === 'term') {
+    msg = tt('gym_filter.empty_term', `Nothing matches "${why.term}". Remove that word to see results.`, { term: why.term });
+  } else if (why.reason === 'search') {
+    msg = tt('gym_filter.empty_search', `Nothing matches "${why.search}".`, { term: why.search });
+    undo = `<button class="gl-undo" data-undo-search="1">${esc(tt('gym_filter.undo_last','Remove it'))}</button>`;
+  }
+  return `<div class="gl-empty">${esc(msg)}${undo}</div>`;
+}
+function glBindEmpty(root){
+  const byChip = root.querySelector('[data-undo-key]');
+  if (byChip) byChip.onclick = () => {
+    const next = Object.assign({}, activeFilters.chips); delete next[byChip.dataset.undoKey];
+    activeFilters.chips = next; renderFilterRow(); applyFilters();
+  };
+  const bySearch = root.querySelector('[data-undo-search]');
+  if (bySearch) bySearch.onclick = () => glSetSearch('');
 }
 
 function renderGrid(exercises) {
@@ -689,7 +844,8 @@ function renderGrid(exercises) {
   grid.className = view === 'list' ? 'gl-grid is-list' : 'gl-grid';
 
   if (!exercises.length) {
-    grid.innerHTML = `<div class="gl-empty">${esc(tt('gym_library.no_match','No exercises match your filters.'))}</div>`;
+    grid.innerHTML = glEmptyHtml();
+    glBindEmpty(grid);
     appendAddCard(grid);
     return;
   }
@@ -736,7 +892,8 @@ function renderByMuscle(exercises, grid) {
   }
 
   if (!exercises.length) {
-    grid.innerHTML = `<div class="gl-empty">${esc(tt('gym_library.no_match','No exercises match your filters.'))}</div>`;
+    grid.innerHTML = glEmptyHtml();
+    glBindEmpty(grid);
     appendAddCard(grid);
     return;
   }
@@ -762,12 +919,12 @@ function appendAddCard(grid) {
 
 function labelsFor(e, dimension, col, legacy) {
   const toks = e[col] || [];
-  const lab = dimension === 'equipment' ? equipLabel : (t => CMTaxonomy.label(dimension, t));
+  const lab = dimension === 'equipment' ? equipLabel : (t => taxLabel(dimension, t));
   if (toks.length) return toks.map(lab);
   return legacy ? [legacy] : [];
 }
 function purposeLabel(e) {
-  if (e.primary_purpose) return CMTaxonomy.label('purpose', e.primary_purpose);
+  if (e.primary_purpose) return taxLabel('purpose', e.primary_purpose);
   return e.category ? cap(e.category) : '';
 }
 
@@ -786,7 +943,7 @@ function cardHTML(e) {
         : vidId
           ? `<img src="https://img.youtube.com/vi/${vidId}/hqdefault.jpg" alt="" loading="lazy">`
           : `<div class="gl-thumb-ph"><span>${initials}</span></div>`}
-      ${e.complexity ? `<span class="gl-cplx-badge ${cplxCss}">${esc(e.complexity)}</span>` : ''}
+      ${e.complexity ? `<span class="gl-cplx-badge ${cplxCss}">${esc(glTokenLabel('complexity', e.complexity))}</span>` : ''}
       ${e.is_default ? `<span class="gl-default-pill">${esc(tt('gym_library.default','Default'))}</span>` : ''}
       ${hasVideo ? `<span class="gl-video-tag"><i class="ti ti-brand-youtube"></i>${esc(tt('gym_library.video','Video'))}</span><button class="gl-thumb-play btn-play" data-video="${videoEsc}"><i class="ti ti-player-play"></i></button>` : ''}
     </div>
@@ -1050,7 +1207,7 @@ async function saveExercise() {
   const speeds = readChipCloud('gm-speed-chips');
   const planesSel = readChipCloud('gm-plane-chips');
   const chains = readChipCloud('gm-chain-chips');
-  const lbl = (dim, toks) => toks.map(t => dim === 'equipment' ? equipLabel(t) : CMTaxonomy.label(dim, t));
+  const lbl = (dim, toks) => toks.map(t => dim === 'equipment' ? equipLabel(t) : taxLabel(dim, t));
 
   const payload = {
     club_id: CLUB_ID,
@@ -1144,23 +1301,23 @@ async function doDelete() {
   await reloadExercises();
 }
 
+// The filter row and the cards are built in JS, so nothing re-translates them
+// later: redraw when the dictionary lands or the language changes.
+document.addEventListener('cm:langchanged', () => {
+  if (!ALL_EXERCISES.length) return;
+  renderFilterRow(); applyFilters();
+});
+
 function clearFilters() {
   activeFilters.search = '';
-  activeFilters.muscle = '';
-  activeFilters.complexity = '';
+  activeFilters.chips = {};
   activeFilters.category = '';
-  activeFilters.equipment = '';
-  activeFilters.purpose = '';
-  activeFilters.pattern = '';
   activeFilters.usableIn = '';
   document.getElementById('gl-search-input').value = '';
-  document.getElementById('gl-sel-muscle').value = '';
-  document.getElementById('gl-sel-complexity').value = '';
-  document.getElementById('gl-sel-equipment').value = '';
-  document.getElementById('gl-sel-purpose').value = '';
-  document.getElementById('gl-sel-pattern').value = '';
   document.getElementById('gl-sel-usable').value = '';
   syncChips();
+  renderSuggest();
+  renderFilterRow();
   applyFilters();
 }
 
@@ -1426,38 +1583,15 @@ function attachListeners() {
     const chip = e.target.closest('.gm-chip');
     if (chip) chip.classList.toggle('is-on');
   });
-  document.getElementById('gl-search-input').addEventListener('input', e => {
-    activeFilters.search = e.target.value;
-    applyFilters();
-  });
-
-  document.getElementById('gl-sel-muscle').addEventListener('change', e => {
-    activeFilters.muscle = e.target.value;
-    applyFilters();
-  });
-
-  document.getElementById('gl-sel-complexity').addEventListener('change', e => {
-    activeFilters.complexity = e.target.value;
-    applyFilters();
-  });
-
-  document.getElementById('gl-sel-equipment').addEventListener('change', e => {
-    activeFilters.equipment = e.target.value;
-    applyFilters();
-  });
-
-  document.getElementById('gl-sel-purpose').addEventListener('change', e => {
-    activeFilters.purpose = e.target.value;
-    applyFilters();
-  });
-
-  document.getElementById('gl-sel-pattern').addEventListener('change', e => {
-    activeFilters.pattern = e.target.value;
-    applyFilters();
-  });
+  const glSearch = document.getElementById('gl-search-input');
+  glSearch.addEventListener('input', e => glSetSearch(e.target.value));
+  glSearch.addEventListener('keydown', glSearchKey);
+  glSearch.addEventListener('focus', renderSuggest);
+  glSearch.addEventListener('blur', () => { const box = document.getElementById('gl-sug'); if (box) box.style.display = 'none'; });
 
   document.getElementById('gl-sel-usable').addEventListener('change', e => {
     activeFilters.usableIn = e.target.value;
+    renderFilterRow();
     applyFilters();
   });
 

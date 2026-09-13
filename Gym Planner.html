@@ -46,6 +46,7 @@
 <script defer src="assets/gps-acwr.js"></script>
 <script src="assets/global-search.js" defer></script>
 <script src="lib/exercise-taxonomy.js"></script>
+<script src="lib/exercise-filter.js"></script>
 <!-- Export PDF libs — loaded as globals (same proven pattern as Daily Planning) instead of dynamic import -->
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
@@ -1004,11 +1005,17 @@ function gpApplyContent(content) {
 }
 
 // ── Exercise library picker ──
-let _gpLib = null, _gpLibCtx = null, _gpLibBuilt = false, _gpLibCat = '', _gpLibMuscle = '', _gpLibEquip = '', _gpLibComplexity = '';
+// Picker state. Filters live as chips — { <dimension>: [tokens…] } — which OR
+// inside a dimension and AND across dimensions; the search box is a second,
+// equal-rank input resolved against the taxonomy (see lib/exercise-filter.js).
+let _gpLib = null, _gpLibCtx = null, _gpLibBuilt = false;
+let _gpLibChips = {}, _gpLibSearch = '', _gpLibMore = false, _gpLibSug = [], _gpLibSugIdx = -1, _gpLibCtxKey = 'default';
+const GP_LIB_RECENT_KEY = 'cm.gp.lib.recent';   // exercise ids, most recent first
+const GP_LIB_FILTER_KEY = 'cm.gp.lib.filters';  // per-context chip state
 async function gpEnsureLib() {
   if (_gpLib) return _gpLib;
   const { data } = await window.sb.from('gym_exercises')
-    .select('id,name,muscle_group,muscle_groups,category,primary_purpose,purposes,complexity,equipment,equipment_tags,media_type,media_ref,video_url')
+    .select('id,name,description,muscle_group,muscle_groups,category,primary_purpose,purposes,complexity,equipment,equipment_tags,movement_patterns,myofascial_chains,contraction_types,movement_speeds,planes,media_type,media_ref,video_url')
     .eq('club_id', _gpClubId).order('name');
   _gpLib = data || [];
   return _gpLib;
@@ -1201,27 +1208,61 @@ function gpBuildLibModal() {
     <div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-4);width:560px;max-width:94vw;max-height:78vh;display:flex;flex-direction:column;box-shadow:0 24px 80px rgba(0,0,0,.2)">
       <div style="display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--cm-border)">
         <i class="ti ti-list-tree" style="font-size:16px;color:var(--cm-accent)"></i>
-        <div style="font:600 14px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">${tt('gym_planner.exercises_library','Exercises Library')}</div>
-        <input id="gpLibSearch" type="text" placeholder="${tt('gym_planner.search_exercises_ph','Search exercises…')}" style="margin-left:auto;height:30px;padding:0 10px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:6px;font:var(--cm-body-sm);color:var(--cm-fg);outline:none;width:200px">
+        <div style="font:600 14px/1 var(--cm-font-sans);color:var(--cm-fg-strong);margin-right:auto">${tt('gym_planner.exercises_library','Exercises Library')}</div>
         <button onclick="gpOpenExCreate()" title="${tt('gym_planner.new_exercise','New exercise')}" style="display:flex;align-items:center;justify-content:center;width:30px;height:30px;background:var(--cm-accent);border:0;border-radius:6px;cursor:pointer;color:#fff;font-size:16px"><i class="ti ti-plus"></i></button>
         <button onclick="gpCloseLib()" style="background:transparent;border:0;cursor:pointer;color:var(--cm-fg-muted);font-size:18px"><i class="ti ti-x"></i></button>
       </div>
       <style>
+        .gp-lib-searchwrap{position:relative;padding:10px 18px 2px}
+        .gp-lib-searchicon{position:absolute;left:28px;top:19px;font-size:14px;color:var(--cm-fg-muted);pointer-events:none}
+        .gp-lib-searchwrap input{width:100%;height:34px;padding:0 10px 0 30px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:8px;font:var(--cm-body-sm);color:var(--cm-fg);outline:none}
+        .gp-lib-searchwrap input:focus{border-color:var(--cm-accent)}
+        .gp-lib-sug{display:none;position:absolute;left:18px;right:18px;top:46px;z-index:5;background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:8px;box-shadow:0 12px 32px rgba(0,0,0,.16);overflow:hidden}
+        .gp-lib-sugitem{display:flex;align-items:center;gap:8px;width:100%;padding:7px 10px;border:0;background:transparent;cursor:pointer;text-align:left}
+        .gp-lib-sugitem:hover,.gp-lib-sugitem.is-on{background:var(--cm-bg-soft)}
+        .gp-lib-sugname{font:600 12px/1 var(--cm-font-sans);color:var(--cm-fg-strong)}
+        .gp-lib-sugdim{font:500 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted);text-transform:uppercase;letter-spacing:.04em}
+        .gp-lib-sugn{margin-left:auto;font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)}
+        .gp-lib-chiprow{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:8px 18px 0}
+        .gp-lib-chip{display:inline-flex;align-items:center;gap:5px;height:26px;padding:0 8px;border-radius:13px;border:1px solid var(--cm-accent);background:color-mix(in srgb,var(--cm-accent) 10%,transparent);color:var(--cm-fg-strong);font:600 11px/1 var(--cm-font-sans);cursor:pointer}
+        .gp-lib-chip .ti-x{font-size:12px;color:var(--cm-fg-muted)}
+        .gp-lib-chip:hover .ti-x{color:var(--cm-danger,#B91C1C)}
+        .gp-lib-chip.is-text{border-color:var(--cm-border-strong);background:var(--cm-bg-soft)}
+        .gp-lib-chip-dim{font:500 9.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted);text-transform:uppercase;letter-spacing:.04em}
+        .gp-lib-clear{margin-left:auto;height:26px;padding:0 6px;border:0;background:transparent;color:var(--cm-fg-muted);font:600 11px/1 var(--cm-font-sans);cursor:pointer;text-decoration:underline}
+        .gp-lib-clear:hover{color:var(--cm-fg)}
         .gp-lib-filterrow{display:flex;flex-wrap:wrap;gap:6px;padding:8px 18px}
+        .gp-lib-filterrow.is-more{padding-top:0}
         .gp-lib-sel{height:28px;padding:0 8px;border-radius:6px;border:1px solid var(--cm-border);background:var(--cm-bg-soft);color:var(--cm-fg);font:600 11px/1 var(--cm-font-sans);cursor:pointer;outline:none;max-width:150px}
         .gp-lib-sel:hover{border-color:var(--cm-border-strong)}
         .gp-lib-sel:focus{border-color:var(--cm-accent)}
+        .gp-lib-sel.is-on{border-color:var(--cm-accent);color:var(--cm-fg-strong)}
+        .gp-lib-more{display:inline-flex;align-items:center;gap:4px;height:28px;padding:0 9px;border-radius:6px;border:1px dashed var(--cm-border-strong);background:transparent;color:var(--cm-fg-muted);font:600 11px/1 var(--cm-font-sans);cursor:pointer}
+        .gp-lib-more:hover,.gp-lib-more.is-on{border-style:solid;color:var(--cm-fg)}
+        .gp-lib-sechead{padding:10px 10px 4px;font:600 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted);text-transform:uppercase;letter-spacing:.06em}
+        .gp-lib-empty{padding:24px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)}
+        .gp-lib-undo{display:block;margin:10px auto 0;height:28px;padding:0 12px;border-radius:6px;border:1px solid var(--cm-border);background:var(--cm-bg-soft);color:var(--cm-fg);font:600 11px/1 var(--cm-font-sans);cursor:pointer}
+        .gp-lib-undo:hover{border-color:var(--cm-accent)}
         .gp-lib-item{display:flex;align-items:center;gap:10px}
         .gp-lib-thumb{width:46px;height:34px;border-radius:5px;overflow:hidden;flex:0 0 auto;background:var(--cm-bg-soft);display:flex;align-items:center;justify-content:center}
         .gp-lib-prev{display:flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:6px;flex:0 0 auto;color:var(--cm-fg-muted);font-size:15px}
         .gp-lib-prev:hover{background:var(--cm-accent);color:#fff}
       </style>
-      <div id="gpLibChips" style="padding-top:8px;border-bottom:1px solid var(--cm-border-soft)"></div>
+      <div class="gp-lib-searchwrap">
+        <i class="ti ti-search gp-lib-searchicon"></i>
+        <input id="gpLibSearch" type="text" autocomplete="off" placeholder="${tt('gym_filter.search_ph','Search by name or tag…')}">
+        <div id="gpLibSug" class="gp-lib-sug"></div>
+      </div>
+      <div id="gpLibChips" style="border-bottom:1px solid var(--cm-border-soft)"></div>
       <div id="gpLibList" style="overflow-y:auto;flex:1;padding:8px"></div>
       <div id="gpLibFoot" style="padding:10px 18px;border-top:1px solid var(--cm-border);font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">${tt('common.loading','Loading…')}</div>
     </div>`;
   document.body.appendChild(ov);
-  ov.querySelector('#gpLibSearch').addEventListener('input', gpRenderLibList);
+  const search = ov.querySelector('#gpLibSearch');
+  search.addEventListener('input', () => gpLibSetSearch(search.value));
+  search.addEventListener('keydown', gpLibSearchKey);
+  search.addEventListener('blur', () => { const box = document.getElementById('gpLibSug'); if (box) box.style.display = 'none'; });
+  search.addEventListener('focus', gpRenderLibSuggest);
 }
 // Picker facets read the modern array tags (purposes[]/muscle_groups[]) and fall
 // back to the legacy singular columns so older libraries still filter. Exercises
@@ -1256,63 +1297,238 @@ function gpFacetLabel(dim, token){
   if (localized && localized !== eng) return localized;
   return (eng === token) ? (token[0].toUpperCase() + token.slice(1)) : eng;
 }
-// Filter row: dropdowns (purpose / muscle / equipment / complexity), options drawn
-// from what's actually in the club library and ordered by the canonical taxonomy.
-function gpRenderLibChips() {
-  const esc = s => String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const wrap = document.getElementById('gpLibChips'); if (!wrap) return;
-  const lib = _gpLib || [];
-  const purpOpts = gpFacetTokens('purpose', lib.flatMap(gpExPurposes));
-  const musOpts  = gpFacetTokens('muscle_group', lib.flatMap(gpExMuscles));
-  const eqOpts   = gpFacetTokens('equipment', lib.flatMap(gpExEquip));
-  const cxOpts   = ['Low','Medium','High'].filter(c => lib.some(e => e.complexity === c));
-  const sel = (f, cur, allLabel, opts, labelFn) =>
-    `<select class="gp-lib-sel" data-f="${f}">
-      <option value="">${esc(allLabel)}</option>
-      ${opts.map(t => `<option value="${esc(t)}"${cur===t?' selected':''}>${esc(labelFn(t))}</option>`).join('')}
-    </select>`;
-  wrap.innerHTML = `<div class="gp-lib-filterrow">
-    ${sel('cat', _gpLibCat, tt('gym_library.all_purposes','All purposes'), purpOpts, t => gpFacetLabel('purpose', t))}
-    ${musOpts.length ? sel('muscle', _gpLibMuscle, tt('gym_planner.all_muscles','All muscles'), musOpts, t => gpFacetLabel('muscle_group', t)) : ''}
-    ${eqOpts.length ? sel('equip', _gpLibEquip, tt('gym_library.all_equipment','All equipment'), eqOpts, t => gpEqLabel(t)) : ''}
-    ${cxOpts.length ? sel('cx', _gpLibComplexity, tt('gym_library.all_complexity','All complexity'), cxOpts, c => tt('gym_library.complexity_' + c.toLowerCase(), c)) : ''}
-  </div>`;
-  wrap.querySelectorAll('.gp-lib-sel').forEach(s => s.onchange = () => {
-    const f = s.dataset.f, v = s.value;
-    if (f === 'cat') _gpLibCat = v;
-    else if (f === 'muscle') _gpLibMuscle = v;
-    else if (f === 'equip') _gpLibEquip = v;
-    else if (f === 'cx') _gpLibComplexity = v;
-    gpRenderLibList();
-  });
+// ── Picker filtering ──────────────────────────────────────────────────
+// All of it runs on CMExerciseFilter, shared with the Gym Library screen.
+const gpEF = () => window.CMExerciseFilter;
+const gpEscH = s => String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const gpDimLabel = key => tt('gym_filter.dim_' + key, key);
+
+// Token → label, routed per dimension: club-custom equipment names win, the
+// three complexity values have their own keys, everything else is taxonomy.
+function gpTokenLabel(key, token){
+  const EF = gpEF();
+  if (EF && token === EF.UNTAGGED) return tt('gym_filter.untagged','Untagged');
+  if (key === 'complexity') return tt('gym_library.complexity_' + String(token).toLowerCase(), token);
+  if (key === 'equipment') return gpEqLabel(token);
+  const d = EF && EF.BY_KEY[key];
+  return d && d.dim ? gpFacetLabel(d.dim, token) : token;
 }
-function gpRenderLibList() {
-  const list = document.getElementById('gpLibList'), foot = document.getElementById('gpLibFoot');
-  const escH = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
-  const q = (document.getElementById('gpLibSearch').value || '').toLowerCase().trim();
-  const items = (_gpLib || []).filter(e => {
-    if (_gpLibCat && !gpExPurposes(e).includes(_gpLibCat)) return false;
-    if (_gpLibMuscle && !gpExMuscles(e).includes(_gpLibMuscle)) return false;
-    if (_gpLibEquip && !gpExEquip(e).includes(_gpLibEquip)) return false;
-    if (_gpLibComplexity && e.complexity !== _gpLibComplexity) return false;
-    if (!q) return true;
-    const hay = `${e.name||''} ${gpExMuscles(e).map(m => gpFacetLabel('muscle_group',m)).join(' ')} ${gpExPurposes(e).map(p => gpFacetLabel('purpose',p)).join(' ')}`.toLowerCase();
-    return hay.includes(q);
+
+function gpLibState(){ return { chips: _gpLibChips, search: _gpLibSearch }; }
+function gpLibItems(){ const EF = gpEF(); return EF ? EF.filter(_gpLib || [], gpLibState()) : (_gpLib || []); }
+function gpLibHasFilters(){ const EF = gpEF(); return !!(_gpLibSearch.trim() || (EF && EF.countChips(_gpLibChips))); }
+
+// ── Per-context filter memory ─────────────────────────────────────────
+// Coaches reach the picker from different places and want different things
+// there: a Myofascial block and the main-lift table are not the same search.
+// Remember the chips per context, keyed by warm-up block type or section.
+function gpLibCtxKeyOf(ctx){
+  if (!ctx) return 'default';
+  if (ctx.section) return 'section:' + ctx.section;
+  const el = ctx.warmupBody || ctx.input;
+  const bl = el && el.closest ? el.closest('.gp-wu-block') : null;
+  if (bl) return 'wu:' + (bl.dataset.type || 'custom');
+  const tr = ctx.input && ctx.input.closest ? ctx.input.closest('tr') : null;
+  if (tr && tr.closest('#gpPlyoBody')) return 'section:plyo';
+  if (tr && tr.closest('#gpMainBody')) return 'section:main';
+  return 'default';
+}
+// The warm-up block a row belongs to says what the coach is looking for; the
+// picker opens on that purpose unless they've already set their own chips here.
+function gpLibDefaultPurposes(ctx){
+  if (ctx && Array.isArray(ctx.libPurposes)) return ctx.libPurposes.slice();
+  const el = ctx && (ctx.warmupBody || ctx.input);
+  const bl = el && el.closest ? el.closest('.gp-wu-block') : null;
+  const type = bl && GP_WU_TYPES[bl.dataset.type] ? bl.dataset.type : null;
+  return type ? (GP_WU_TYPES[type].libPurposes || []).slice() : [];
+}
+function gpLibReadStore(key){
+  try { return JSON.parse(localStorage.getItem(key) || 'null'); } catch (_) { return null; }
+}
+function gpLibWriteStore(key, val){
+  try { localStorage.setItem(key, JSON.stringify(val)); } catch (_) {}
+}
+function gpLibSaveFilters(){
+  const all = gpLibReadStore(GP_LIB_FILTER_KEY) || {};
+  if (gpEF() && gpEF().countChips(_gpLibChips)) all[_gpLibCtxKey] = _gpLibChips;
+  else delete all[_gpLibCtxKey];
+  gpLibWriteStore(GP_LIB_FILTER_KEY, all);
+}
+// Drop chips for tokens this club's library doesn't actually carry, so a
+// remembered filter can never open the picker on an empty list.
+function gpLibPruneChips(chips){
+  const EF = gpEF(); const lib = _gpLib || []; const out = {};
+  Object.keys(chips || {}).forEach(key => {
+    if (!EF.BY_KEY[key]) return;
+    const kept = (chips[key] || []).filter(tok =>
+      tok === EF.UNTAGGED ? lib.some(e => !EF.tagsOf(e, key).length)
+                          : lib.some(e => EF.tagsOf(e, key).includes(tok)));
+    if (kept.length) out[key] = kept;
   });
-  if (!items.length) { list.innerHTML = `<div style="padding:24px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">${tt('gym_planner.no_exercises_found','No exercises found.')}</div>`; foot.textContent = tt('gym_planner.n_exercises_count', '0 exercises', { count:0 }); return; }
-  list.innerHTML = items.map(e => {
-    const muscleLabel = gpExMuscles(e).map(m => gpFacetLabel('muscle_group',m))[0];
-    const purposeLabel = gpExPurposes(e).map(p => gpFacetLabel('purpose',p))[0];
-    const meta = [muscleLabel, purposeLabel, e.complexity].filter(Boolean).join(' · ');
-    return `<button class="gp-lib-item" data-id="${e.id}" data-name="${(e.name||'').replace(/"/g,'&quot;')}" style="width:100%;text-align:left;padding:9px 10px;border:0;border-radius:7px;background:transparent;cursor:pointer">
-      <span class="gp-lib-thumb" data-ex="${e.id}">${gpLibThumbHtml(e.id)}</span>
-      <span style="min-width:0;flex:1">
-        <div style="font:600 13px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)">${escH(e.name||'—')}</div>
-        ${meta?`<div style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:3px">${meta}</div>`:''}
-      </span>
-      ${e.video_url?`<span class="gp-lib-prev" title="${escH(tt('gym_planner.preview_video','Preview video'))}"><i class="ti ti-player-play"></i></span>`:''}
-    </button>`;
-  }).join('');
+  return out;
+}
+function gpLibRecentIds(){ const r = gpLibReadStore(GP_LIB_RECENT_KEY); return Array.isArray(r) ? r : []; }
+function gpLibPushRecent(id){
+  if (!id) return;
+  const next = [id, ...gpLibRecentIds().filter(x => x !== id)].slice(0, 8);
+  gpLibWriteStore(GP_LIB_RECENT_KEY, next);
+}
+
+// ── Filter row ────────────────────────────────────────────────────────
+// Two levels: the four axes coaches already use stay visible, the five the
+// taxonomy supports but nothing ever surfaced sit behind "More filters".
+// A dimension with nothing tagged in this club's library is not rendered at
+// all — an empty dropdown is worse than no dropdown.
+function gpRenderLibFilters() {
+  const EF = gpEF();
+  const wrap = document.getElementById('gpLibChips'); if (!wrap || !EF) return;
+  const lib = _gpLib || [];
+  const state = gpLibState();
+
+  // Active chips, in dimension order, each removable.
+  const chipPills = [];
+  EF.DIMENSIONS.forEach(d => {
+    (_gpLibChips[d.key] || []).forEach(token => {
+      chipPills.push(`<button class="gp-lib-chip" data-rm-key="${gpEscH(d.key)}" data-rm-token="${gpEscH(token)}" title="${gpEscH(tt('gym_filter.remove_filter','Remove filter'))}">
+        <span class="gp-lib-chip-dim">${gpEscH(gpDimLabel(d.key))}</span>${gpEscH(gpTokenLabel(d.key, token))}<i class="ti ti-x"></i></button>`);
+    });
+  });
+  if (_gpLibSearch.trim()) {
+    chipPills.push(`<button class="gp-lib-chip is-text" data-rm-search="1" title="${gpEscH(tt('gym_filter.remove_filter','Remove filter'))}">
+      <i class="ti ti-search"></i>${gpEscH(_gpLibSearch.trim())}<i class="ti ti-x"></i></button>`);
+  }
+
+  // One "add filter" dropdown per dimension. Counts come from the set matching
+  // every OTHER dimension, so a number never promises more than it delivers.
+  const selectFor = d => {
+    const pool = EF.filterExcept(lib, state, d.key);
+    const { options, untagged } = EF.optionsFor(pool, d.key);
+    const active = _gpLibChips[d.key] || [];
+    const free = options.filter(o => !active.includes(o.token));
+    const showUntagged = untagged > 0 && untagged < pool.length && !active.includes(EF.UNTAGGED);
+    if (!free.length && !showUntagged) return '';
+    const n = active.length;
+    return `<select class="gp-lib-sel${n ? ' is-on' : ''}" data-dim="${gpEscH(d.key)}">
+      <option value="">${gpEscH(gpDimLabel(d.key))}${n ? ` · ${n}` : ''}</option>
+      ${free.map(o => `<option value="${gpEscH(o.token)}">${gpEscH(gpTokenLabel(d.key, o.token))} · ${o.count}</option>`).join('')}
+      ${showUntagged ? `<option value="${gpEscH(EF.UNTAGGED)}">${gpEscH(tt('gym_filter.untagged','Untagged'))} · ${untagged}</option>` : ''}
+    </select>`;
+  };
+
+  const primary = EF.DIMENSIONS.filter(d => d.level === 'primary').map(selectFor).filter(Boolean);
+  const moreSelects = EF.DIMENSIONS.filter(d => d.level === 'more').map(selectFor).filter(Boolean);
+  const moreActive = EF.DIMENSIONS.filter(d => d.level === 'more')
+    .reduce((n, d) => n + (_gpLibChips[d.key] || []).length, 0);
+
+  wrap.innerHTML = `
+    ${chipPills.length ? `<div class="gp-lib-chiprow">${chipPills.join('')}
+      <button class="gp-lib-clear" data-clear="1">${gpEscH(tt('gym_filter.clear_all','Clear filters'))}</button></div>` : ''}
+    <div class="gp-lib-filterrow">
+      ${primary.join('')}
+      ${moreSelects.length ? `<button class="gp-lib-more${_gpLibMore ? ' is-on' : ''}" data-more="1">
+        <i class="ti ti-${_gpLibMore ? 'chevron-up' : 'plus'}"></i>${gpEscH(_gpLibMore ? tt('gym_filter.fewer_filters','Fewer filters') : tt('gym_filter.more_filters','More filters'))}${(!_gpLibMore && moreActive) ? ` · ${moreActive}` : ''}</button>` : ''}
+    </div>
+    ${(_gpLibMore && moreSelects.length) ? `<div class="gp-lib-filterrow is-more">${moreSelects.join('')}</div>` : ''}`;
+
+  wrap.querySelectorAll('.gp-lib-sel').forEach(sel => sel.onchange = () => {
+    const key = sel.dataset.dim, token = sel.value;
+    sel.value = '';                                   // the chip is the state now
+    if (!token) return;
+    _gpLibChips = EF.toggleChip(_gpLibChips, key, token);
+    gpLibSaveFilters(); gpRenderLibFilters(); gpRenderLibList();
+  });
+  wrap.querySelectorAll('[data-rm-key]').forEach(b => b.onclick = () => {
+    _gpLibChips = EF.toggleChip(_gpLibChips, b.dataset.rmKey, b.dataset.rmToken);
+    gpLibSaveFilters(); gpRenderLibFilters(); gpRenderLibList();
+  });
+  const rmSearch = wrap.querySelector('[data-rm-search]');
+  if (rmSearch) rmSearch.onclick = () => { gpLibSetSearch(''); };
+  const clear = wrap.querySelector('[data-clear]');
+  if (clear) clear.onclick = () => {
+    _gpLibChips = {}; gpLibSaveFilters();
+    gpLibSetSearch('');
+  };
+  const more = wrap.querySelector('[data-more]');
+  if (more) more.onclick = () => { _gpLibMore = !_gpLibMore; gpRenderLibFilters(); };
+}
+
+// ── Search box ────────────────────────────────────────────────────────
+function gpLibSetSearch(value){
+  _gpLibSearch = value || '';
+  const input = document.getElementById('gpLibSearch');
+  if (input && input.value !== _gpLibSearch) input.value = _gpLibSearch;
+  gpRenderLibSuggest(); gpRenderLibFilters(); gpRenderLibList();
+}
+
+// Typeahead over the tags actually present, so an axis nobody knew was
+// filterable (a myofascial chain, a movement pattern) becomes discoverable by
+// typing. Counted against what the chips already narrowed down.
+function gpRenderLibSuggest(){
+  const EF = gpEF();
+  const box = document.getElementById('gpLibSug'); if (!box || !EF) return;
+  const pool = EF.filter(_gpLib || [], { chips: _gpLibChips });
+  _gpLibSug = EF.suggest(_gpLibSearch, _gpLib || [], { chips: _gpLibChips, pool, limit: 6 });
+  _gpLibSugIdx = -1;
+  if (!_gpLibSug.length) { box.style.display = 'none'; box.innerHTML = ''; return; }
+  box.innerHTML = _gpLibSug.map((sg, i) => `<button class="gp-lib-sugitem" data-i="${i}">
+      <span class="gp-lib-sugname">${gpEscH(gpTokenLabel(sg.key, sg.token))}</span>
+      <span class="gp-lib-sugdim">${gpEscH(gpDimLabel(sg.key))}</span>
+      <span class="gp-lib-sugn">${sg.count}</span>
+    </button>`).join('');
+  box.style.display = 'block';
+  box.querySelectorAll('.gp-lib-sugitem').forEach(b =>
+    b.onmousedown = e => { e.preventDefault(); gpLibAcceptSuggestion(+b.dataset.i); });
+}
+
+// Accepting a suggestion pins it as a chip and eats the fragment that was
+// being typed, so it doesn't linger as a stray text filter.
+function gpLibAcceptSuggestion(i){
+  const EF = gpEF(); const sg = _gpLibSug[i]; if (!sg || !EF) return;
+  _gpLibChips = EF.toggleChip(_gpLibChips, sg.key, sg.token);
+  gpLibSaveFilters();
+  gpLibSetSearch(EF.stripLastWord(_gpLibSearch));
+  const input = document.getElementById('gpLibSearch'); if (input) input.focus();
+}
+
+function gpLibHighlightSuggest(){
+  const box = document.getElementById('gpLibSug'); if (!box) return;
+  box.querySelectorAll('.gp-lib-sugitem').forEach((b, i) => b.classList.toggle('is-on', i === _gpLibSugIdx));
+}
+
+function gpLibSearchKey(e){
+  if (!_gpLibSug.length) {
+    if (e.key === 'Escape' && _gpLibSearch) { e.stopPropagation(); gpLibSetSearch(''); }
+    return;
+  }
+  if (e.key === 'ArrowDown') { e.preventDefault(); _gpLibSugIdx = (_gpLibSugIdx + 1) % _gpLibSug.length; gpLibHighlightSuggest(); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); _gpLibSugIdx = (_gpLibSugIdx - 1 + _gpLibSug.length) % _gpLibSug.length; gpLibHighlightSuggest(); }
+  else if (e.key === 'Enter' && _gpLibSugIdx >= 0) { e.preventDefault(); gpLibAcceptSuggestion(_gpLibSugIdx); }
+  else if (e.key === 'Escape') { e.stopPropagation(); const box = document.getElementById('gpLibSug'); if (box) box.style.display = 'none'; _gpLibSug = []; }
+}
+
+// ── Result list ───────────────────────────────────────────────────────
+function gpRenderLibList() {
+  const EF = gpEF();
+  const list = document.getElementById('gpLibList'), foot = document.getElementById('gpLibFoot');
+  if (!list || !foot) return;
+  const items = gpLibItems();
+
+  if (!items.length) { list.innerHTML = gpLibEmptyHtml(); gpLibBindEmpty(list); foot.textContent = tt('gym_planner.n_exercises_count', '0 exercises', { count:0 }); return; }
+
+  // Nothing filtered yet: lead with what this coach picked last, so the picker
+  // doesn't open on 257 alphabetical rows starting at "1 LEG RUGBY SQUAT".
+  let html = '';
+  if (!gpLibHasFilters()) {
+    const byId = {}; items.forEach(e => { byId[e.id] = e; });
+    const recent = gpLibRecentIds().map(id => byId[id]).filter(Boolean);
+    if (recent.length) {
+      const recentIds = new Set(recent.map(e => e.id));
+      html += gpLibSectionHtml(tt('gym_filter.recent','Recent')) + recent.map(gpLibRowHtml).join('');
+      html += gpLibSectionHtml(tt('gym_filter.all_exercises','All exercises')) + items.filter(e => !recentIds.has(e.id)).map(gpLibRowHtml).join('');
+    }
+  }
+  list.innerHTML = html || items.map(gpLibRowHtml).join('');
+
   foot.textContent = tt('gym_planner.n_exercises_count', `${items.length} exercise${items.length>1?'s':''}`, { count:items.length });
   list.querySelectorAll('.gp-lib-item').forEach(b => {
     b.onmouseenter = () => b.style.background = 'var(--cm-bg-soft)';
@@ -1324,6 +1540,56 @@ function gpRenderLibList() {
   });
   gpResolveLibMedia().then(gpPatchLibThumbs);
 }
+
+function gpLibSectionHtml(label){
+  return `<div class="gp-lib-sechead">${gpEscH(label)}</div>`;
+}
+
+function gpLibRowHtml(e){
+  const meta = [gpExMuscles(e).map(m => gpFacetLabel('muscle_group', m))[0],
+                gpExPurposes(e).map(p => gpFacetLabel('purpose', p))[0],
+                e.complexity ? gpTokenLabel('complexity', e.complexity) : null].filter(Boolean).join(' · ');
+  return `<button class="gp-lib-item" data-id="${e.id}" data-name="${(e.name||'').replace(/"/g,'&quot;')}" style="width:100%;text-align:left;padding:9px 10px;border:0;border-radius:7px;background:transparent;cursor:pointer">
+    <span class="gp-lib-thumb" data-ex="${e.id}">${gpLibThumbHtml(e.id)}</span>
+    <span style="min-width:0;flex:1">
+      <div style="font:600 13px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)">${gpEscH(e.name||'—')}</div>
+      ${meta?`<div style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:3px">${gpEscH(meta)}</div>`:''}
+    </span>
+    ${e.video_url?`<span class="gp-lib-prev" title="${gpEscH(tt('gym_planner.preview_video','Preview video'))}"><i class="ti ti-player-play"></i></span>`:''}
+  </button>`;
+}
+
+// An empty list should say WHY it is empty and offer the one click that fixes
+// it, instead of leaving the coach to guess which filter went too far.
+function gpLibEmptyHtml(){
+  const EF = gpEF();
+  const why = EF ? EF.explainEmpty(_gpLib || [], gpLibState()) : { reason:'no_match' };
+  let msg = tt('gym_filter.empty_no_match','No exercises match.'), undo = '';
+  if (why.reason === 'empty_library') msg = tt('gym_filter.empty_library','This library has no exercises yet.');
+  else if (why.reason === 'chip') {
+    const label = `${gpDimLabel(why.key)}: ${gpTokenLabel(why.key, why.tokens[0])}`;
+    msg = tt('gym_filter.empty_chip', `No exercise matches every filter. Removing "${label}" brings results back.`, { label });
+    undo = `<button class="gp-lib-undo" data-undo-key="${gpEscH(why.key)}">${gpEscH(tt('gym_filter.undo_last','Remove it'))}</button>`;
+  } else if (why.reason === 'term') {
+    msg = tt('gym_filter.empty_term', `Nothing matches "${why.term}". Remove that word to see results.`, { term: why.term });
+  } else if (why.reason === 'search') {
+    msg = tt('gym_filter.empty_search', `Nothing matches "${why.search}".`, { term: why.search });
+    undo = `<button class="gp-lib-undo" data-undo-search="1">${gpEscH(tt('gym_filter.undo_last','Remove it'))}</button>`;
+  }
+  return `<div class="gp-lib-empty">${gpEscH(msg)}${undo}</div>`;
+}
+
+function gpLibBindEmpty(list){
+  const EF = gpEF();
+  const byChip = list.querySelector('[data-undo-key]');
+  if (byChip) byChip.onclick = () => {
+    const next = Object.assign({}, _gpLibChips); delete next[byChip.dataset.undoKey];
+    _gpLibChips = next; gpLibSaveFilters(); gpRenderLibFilters(); gpRenderLibList();
+  };
+  const bySearch = list.querySelector('[data-undo-search]');
+  if (bySearch) bySearch.onclick = () => gpLibSetSearch('');
+}
+
 // Thumbnail for a library row: signed image/GIF > YouTube poster > barbell placeholder.
 function gpLibThumbHtml(exId){
   const src = gpExThumbSrc(exId);
@@ -1395,14 +1661,28 @@ async function gpOpenLib(ctx) {
   const s = document.getElementById('gpLibSearch'); s.value = ''; s.focus();
   document.getElementById('gpLibFoot').textContent = tt('common.loading','Loading…');
   document.getElementById('gpLibList').innerHTML = '';
-  _gpLibCat = (ctx && ctx.libCat != null) ? ctx.libCat : ''; _gpLibMuscle = ''; _gpLibEquip = ''; _gpLibComplexity = '';
+  _gpLibSearch = ''; _gpLibSug = []; _gpLibSugIdx = -1;
+  _gpLibCtxKey = gpLibCtxKeyOf(ctx);
   await gpEnsureLib();
-  if (_gpLibCat && !(_gpLib||[]).some(e => gpExPurposes(e).includes(_gpLibCat))) _gpLibCat = '';
-  gpRenderLibChips(); gpRenderLibList();
+  // Where the picker was opened from decides what it opens on: the chips this
+  // coach last used in this context, else the block type's own default
+  // (a Myofascial block starts on Release, an Activation block on Activation).
+  const EF = gpEF();
+  const remembered = (gpLibReadStore(GP_LIB_FILTER_KEY) || {})[_gpLibCtxKey];
+  const defaults = gpLibDefaultPurposes(ctx);
+  const fallback = defaults.length ? { purpose: defaults } : {};
+  _gpLibChips = EF ? gpLibPruneChips(remembered || fallback) : {};
+  _gpLibMore = EF ? EF.DIMENSIONS.some(d => d.level === 'more' && (_gpLibChips[d.key] || []).length) : false;
+  gpRenderLibSuggest(); gpRenderLibFilters(); gpRenderLibList();
 }
 function gpCloseLib() { const ov = document.getElementById('gpLibOv'); if (ov) ov.style.display = 'none'; }
+document.addEventListener('cm:langchanged', () => {
+  const ov = document.getElementById('gpLibOv');
+  if (ov && ov.style.display !== 'none') { gpRenderLibFilters(); gpRenderLibList(); }
+});
 function gpPickLib(id, name) {
   const ctx = _gpLibCtx || {};
+  gpLibPushRecent(id);
   const fill = inp => { if (inp) { inp.value = name; inp.dispatchEvent(new Event('input', { bubbles: true })); } };
   if (ctx.input) {
     const tr = ctx.input.closest('tr');
@@ -1508,7 +1788,8 @@ function gpOpenExCreate(){
   document.getElementById('gpExcComplexity').value='Low'; document.getElementById('gpExcEquip').value='';
   document.getElementById('gpExcVideo').value=''; document.getElementById('gpExcStatus').textContent='';
   // Prefill purpose from the picker's active facet if one is set.
-  if (_gpLibCat) document.getElementById('gpExcPurpose').value = _gpLibCat;
+  const activePurpose = (_gpLibChips.purpose || []).find(t => t !== (gpEF() && gpEF().UNTAGGED));
+  if (activePurpose) document.getElementById('gpExcPurpose').value = activePurpose;
   n.focus();
 }
 function gpCloseExCreate(){ const ov=document.getElementById('gpExCreateOv'); if (ov) ov.style.display='none'; }
@@ -1554,7 +1835,7 @@ async function gpSaveExCreate(keepOpen){
     btn.disabled = false; btnMore.disabled = false;
     if (keepOpen) {
       // Refresh the library behind the modal so the new exercise is there, reset the form, keep going.
-      gpRenderLibChips(); gpRenderLibList();
+      gpRenderLibFilters(); gpRenderLibList();
       document.getElementById('gpExcName').value=''; document.getElementById('gpExcVideo').value='';
       status.style.color = 'var(--cm-success,var(--cm-accent))';
       status.textContent = tt('gym_planner.exercise_created', `“${name}” created ✓`, { name });
@@ -1800,12 +2081,14 @@ async function gpDeleteTemplate(id) {
 }
 
 // ── Warm-up sub-blocks (typed: activation / strength / mobility / myofascial / custom) ──
+// libPurposes = what the picker starts filtered on when opened from this block.
+// Only a starting point: it renders as a removable chip like any other filter.
 const GP_WU_TYPES = {
-  activation: { i18n:'gym_planner.block_activation', def:'Activation',        color:'var(--cm-success)',   libCat:'' },
-  strength:   { i18n:'gym_planner.block_strength',   def:'Strength',          color:'#B91C1C',             libCat:'strength' },
-  mobility:   { i18n:'gym_planner.block_mobility',   def:'Mobility',          color:'#2563EB',             libCat:'' },
-  myofascial: { i18n:'gym_planner.block_myofascial', def:'Myofascial release', color:'#7C3AED',            libCat:'' },
-  custom:     { i18n:'gym_planner.block_custom',     def:'Custom block',      color:'var(--cm-fg-muted)',  libCat:'' }
+  activation: { i18n:'gym_planner.block_activation', def:'Activation',        color:'var(--cm-success)',   libPurposes:['activation'] },
+  strength:   { i18n:'gym_planner.block_strength',   def:'Strength',          color:'#B91C1C',             libPurposes:['strength'] },
+  mobility:   { i18n:'gym_planner.block_mobility',   def:'Mobility',          color:'#2563EB',             libPurposes:['rise_temperature'] },
+  myofascial: { i18n:'gym_planner.block_myofascial', def:'Myofascial release', color:'#7C3AED',            libPurposes:['release'] },
+  custom:     { i18n:'gym_planner.block_custom',     def:'Custom block',      color:'var(--cm-fg-muted)',  libPurposes:[] }
 };
 function gpAddWarmupBlock(type, label, focus) {
   type = GP_WU_TYPES[type] ? type : 'custom';
