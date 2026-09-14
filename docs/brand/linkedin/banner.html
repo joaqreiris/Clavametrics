@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="UTF-8">
+<link rel="stylesheet" href="fonts-embedded.css">
+<style>
+  /* Un solo verde en toda la pieza: Pitch Green #15803D, el mismo del icono de app
+     y del avatar de LinkedIn. Signal Green (#4ADE80) queda fuera a propósito: el
+     brief lo define como acento de interfaz sobre superficies oscuras, no como
+     color de marca, y conviviendo con el avatar leía como un segundo verde. */
+  :root{
+    --pitch:#15803D; --ink:#0A0A0A; --paper:#FFFFFF;
+    --warm:#FAFAF9; --muted-light:#6B7280; --muted-dark:#9CA3AF;
+    --sans:'Geist', ui-sans-serif, system-ui, -apple-system, sans-serif;
+    --mono:'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{background:#000}
+  body{font-family:var(--sans);font-feature-settings:"ss01","cv11";-webkit-font-smoothing:antialiased}
+
+  .banner{
+    position:relative; overflow:hidden;
+    display:flex; align-items:center; justify-content:center;
+  }
+  /* atmósfera: un solo plano de temperatura, sin tintes de color */
+  .banner::before{content:''; position:absolute; inset:0;}
+
+  /* filo inferior: verde de marca sólido, sin degradado entre verdes */
+  .edge{position:absolute; left:0; right:0; bottom:0; z-index:3; background:var(--pitch);}
+
+  .stack{position:relative; z-index:2; display:flex; flex-direction:column; align-items:center; text-align:center;}
+  .lockup{display:flex; align-items:center;}
+  /* contenedor del isotipo: idéntico al icono de app — fondo #15803D, símbolo blanco */
+  .mark{
+    background:var(--pitch); color:var(--paper);
+    display:flex; align-items:center; justify-content:center; flex-shrink:0;
+  }
+  .mark svg{display:block}
+  .label{text-align:left}
+  .name{font-weight:600; letter-spacing:-0.015em; line-height:1}
+  .sub{font-family:var(--mono); font-weight:500; line-height:1;}
+  .tagline{font-weight:400; line-height:1.4;}
+
+  /* ---- tema claro: el verde de marca es protagonista y contrasta 5.02:1 ---- */
+  body.light .banner{background:var(--paper);}
+  body.light .banner::before{background:radial-gradient(ellipse 70% 120% at 50% 100%, var(--warm), transparent 70%);}
+  body.light .name{color:var(--ink);}
+  body.light .sub{color:var(--pitch);}
+  body.light .tagline{color:var(--muted-light);}
+
+  /* ---- tema oscuro: mismo lockup; el descriptor pasa a gris porque el verde de
+         marca sobre negro (3.95:1) no alcanza para texto chico ---- */
+  body.dark .banner{background:var(--ink);}
+  body.dark .banner::before{background:radial-gradient(ellipse 60% 50% at 50% -10%, rgba(255,255,255,0.045), transparent 60%);}
+  body.dark .name{color:var(--paper);}
+  body.dark .sub{color:var(--muted-dark);}
+  body.dark .tagline{color:var(--muted-dark);}
+
+  /* ---- formato: página de empresa 1128 × 191 ---- */
+  body.company .banner{width:1128px; height:191px;}
+  body.company .edge{height:3px;}
+  body.company .mark{width:52px; height:52px; border-radius:12px;}
+  body.company .mark svg{width:30px; height:30px;}   /* 58% del lado, como el brief */
+  body.company .lockup{gap:11px;}
+  body.company .name{font-size:34px;}
+  body.company .sub{font-size:12.5px; letter-spacing:0.02em; margin-top:8px;}
+  body.company .tagline{font-size:15px; margin-top:16px; letter-spacing:-0.005em;}
+
+  /* ---- formato: perfil personal 1584 × 396 ---- */
+  body.profile .banner{width:1584px; height:396px;}
+  body.profile .edge{height:5px;}
+  body.profile .stack{transform:translateY(-6px);} /* la foto de perfil come el borde inferior izquierdo */
+  body.profile .mark{width:84px; height:84px; border-radius:19px;}
+  body.profile .mark svg{width:49px; height:49px;}
+  body.profile .lockup{gap:17px;}
+  body.profile .name{font-size:56px;}
+  body.profile .sub{font-size:19px; letter-spacing:0.02em; margin-top:13px;}
+  body.profile .tagline{font-size:23px; margin-top:26px; letter-spacing:-0.005em;}
+
+  body.notag .tagline{display:none}
+</style></head>
+<body>
+<div class="banner">
+  <div class="stack">
+    <div class="lockup">
+      <div class="mark">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 18V10"/><path d="M12 18V5"/><path d="M19 18v-9"/></svg>
+      </div>
+      <div class="label">
+        <div class="name">ClavaMetrics</div>
+        <div class="sub">Performance OS</div>
+      </div>
+    </div>
+    <div class="tagline"></div>
+  </div>
+  <div class="edge"></div>
+</div>
+<script>
+  const q = new URLSearchParams(location.search);
+  const format = q.get('format') || 'company';
+  const lang = q.get('lang') || 'es';
+  const theme = q.get('theme') === 'dark' ? 'dark' : 'light';
+  const taglines = {
+    es: 'El sistema operativo del rendimiento deportivo',
+    en: 'Performance OS for sport',
+    pt: 'O sistema operativo da performance esportiva',
+    none: ''
+  };
+  document.body.className = format + ' ' + theme + (lang === 'none' ? ' notag' : '');
+  document.documentElement.lang = lang === 'none' ? 'es' : lang;
+  document.querySelector('.tagline').textContent = taglines[lang] || taglines.es;
+</script>
+</body></html>
