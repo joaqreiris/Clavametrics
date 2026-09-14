@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex,nofollow">
+<title>Darse de baja — ClavaMetrics</title>
+<link rel="stylesheet" href="clavametrics.css">
+<style>
+  body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
+         background:var(--cm-bg); color:var(--cm-fg-strong); font-family:var(--cm-font-sans); padding:24px; }
+  .caja { max-width:440px; text-align:center; }
+  .marca { display:inline-flex; align-items:center; gap:9px; margin-bottom:26px;
+           font:700 15px/1 var(--cm-font-sans); color:var(--cm-accent); }
+  .marca svg { width:19px; height:19px; }
+  h1 { font-size:21px; margin:0 0 12px; font-weight:600; }
+  p  { color:var(--cm-fg-muted); margin:0 0 10px; font-size:14.5px; line-height:1.6; }
+  .volver { color:var(--cm-accent); text-decoration:none; font-size:14px; display:inline-block; margin-top:22px; }
+</style>
+</head>
+<body>
+  <div class="caja">
+    <div class="marca">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 18V10"></path><path d="M12 18V5"></path><path d="M19 18v-9"></path></svg>
+      ClavaMetrics
+    </div>
+    <h1 id="titulo">Un momento…</h1>
+    <p id="detalle"></p>
+    <a class="volver" href="Home.html" id="volver">Ir al inicio</a>
+  </div>
+
+<script>
+/* La baja de los correos de la prueba.
+ *
+ * La página vive en nuestro dominio —un enlace a supabase.co en el pie de un correo
+ * no invita a hacer clic— y el trabajo lo hace la Edge Function email-unsubscribe.
+ * El botón nativo de Gmail no pasa por acá: va directo a la función, que acepta el
+ * POST de un clic.
+ *
+ * Sin i18n.js a propósito: es una página de un solo uso y cargar el diccionario
+ * entero para tres frases la haría más lenta justo cuando alguien está molesto. */
+(function () {
+  const T = {
+    es: {
+      titulo:   'Listo, no te escribiremos más',
+      detalle:  'No volverás a recibir los correos de seguimiento de la prueba. Esto no afecta a tu cuenta ni a tus datos: todo sigue donde estaba.',
+      errorT:   'No pudimos procesar la baja',
+      errorD:   'Es posible que el enlace esté incompleto. Escríbenos a info@clavametrics.app y lo resolvemos.',
+      esperaT:  'Un momento…',
+      volver:   'Ir al inicio',
+    },
+    en: {
+      titulo:   'Done, we will not write again',
+      detalle:  'You will no longer get the trial follow-up emails. This does not affect your account or your data: everything stays where it was.',
+      errorT:   'We could not process your request',
+      errorD:   'The link may be incomplete. Write to info@clavametrics.app and we will sort it out.',
+      esperaT:  'One moment…',
+      volver:   'Go to homepage',
+    },
+    pt: {
+      titulo:   'Pronto, não escreveremos mais',
+      detalle:  'Você não receberá mais os e-mails de acompanhamento do teste. Isso não afeta sua conta nem seus dados: está tudo onde estava.',
+      errorT:   'Não conseguimos processar o cancelamento',
+      errorD:   'O link pode estar incompleto. Escreva para info@clavametrics.app e resolvemos.',
+      esperaT:  'Um momento…',
+      volver:   'Ir ao início',
+    },
+  };
+
+  const params = new URLSearchParams(location.search);
+  const lang = ['es', 'en', 'pt'].includes(params.get('lang')) ? params.get('lang') : 'es';
+  const t = T[lang];
+  const token = params.get('t') || '';
+
+  document.documentElement.lang = lang;
+  document.getElementById('titulo').textContent = t.esperaT;
+  document.getElementById('volver').textContent = t.volver;
+
+  function pintar(ok) {
+    document.getElementById('titulo').textContent  = ok ? t.titulo  : t.errorT;
+    document.getElementById('detalle').textContent = ok ? t.detalle : t.errorD;
+  }
+
+  if (!token) { pintar(false); return; }
+
+  fetch('https://xesrumijvdmqjrufgeka.supabase.co/functions/v1/email-unsubscribe?t=' + encodeURIComponent(token), { method: 'POST' })
+    .then(r => r.json())
+    .then(d => pintar(!!(d && d.ok)))
+    .catch(() => pintar(false));
+})();
+</script>
+</body>
+</html>
