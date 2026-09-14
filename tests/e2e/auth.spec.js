@@ -99,12 +99,16 @@ async function fillRegForm(page, overrides = {}) {
     lastName:  'Doe',
     email:     'john@testfc.com',
     password:  'password123',
+    phone:     '+34600123456',
     ...overrides,
   };
   await page.fill('#club-name',  vals.clubName);
   await page.fill('#first-name', vals.firstName);
   await page.fill('#last-name',  vals.lastName);
   await page.fill('#email',      vals.email);
+  // El teléfono es obligatorio desde que ventas necesita un canal para acompañar el alta:
+  // sin llenarlo el formulario no valida y el submit nunca llega a dispararse.
+  await page.fill('#phone',      vals.phone);
   await page.fill('#pwd',        vals.password);
   // El país es obligatorio y su lista se arma por JS: sin elegirlo el formulario no valida y el
   // envío ni arranca, así que no había llamada de registro ni aviso de error que mirar.
@@ -364,6 +368,89 @@ test.describe('Register — Error handling', () => {
     await page.locator('#reg-error').waitFor({ timeout: 10_000 });
 
     await expect(btn).not.toContainText(/creating|loading|wait/i);
+  });
+});
+
+// Lo que ventas necesita para poder seguir un alta: un teléfono, el permiso para
+// usarlo y de qué campaña vino el club. Si algo de esto se pierde en el registro,
+// no hay forma de recuperarlo después.
+test.describe('Register — Datos para seguimiento comercial', () => {
+
+  // Captura los cuerpos de los POST que hace el registro, para poder mirarlos.
+  async function capturarInserts(page) {
+    const cuerpos = { clubs: null, profiles: null };
+    // De lo general a lo específico: page.route() resuelve de la última registrada a la
+    // primera, así que el comodín va ANTES o se come las rutas que nos interesan.
+    // Y el patrón lleva `**` al final porque supabase-js pide `/clubs?select=id`: un
+    // string sin comodín exige que la URL coincida entera, query incluida.
+    await page.route(`${SB}/**`, route => route.fulfill({ json: {} }));
+    await mockRegisterSuccess(page);
+    await page.route(`${SB}/rest/v1/clubs**`, route => {
+      if (route.request().method() === 'POST') cuerpos.clubs = route.request().postDataJSON();
+      route.fulfill({ status: 201, json: [{ id: 'club-new', name: 'New FC' }] });
+    });
+    await page.route(`${SB}/rest/v1/profiles**`, route => {
+      if (route.request().method() === 'POST') cuerpos.profiles = route.request().postDataJSON();
+      route.fulfill({ status: 201, json: [{ id: 'new-user-1', club_id: 'club-new' }] });
+    });
+    return cuerpos;
+  }
+
+  test('el teléfono viaja al perfil', async ({ page }) => {
+    const cuerpos = await capturarInserts(page);
+    await page.goto('/Register.html');
+    await fillRegForm(page, { phone: '+59891005204' });
+    await page.click('button[type="submit"]');
+
+    await expect.poll(() => cuerpos.profiles?.phone, { timeout: 10_000 }).toBe('+59891005204');
+  });
+
+  test('sin marcar la casilla, el consentimiento comercial queda en false', async ({ page }) => {
+    const cuerpos = await capturarInserts(page);
+    await page.goto('/Register.html');
+    await fillRegForm(page);                       // no toca #marketing-consent
+    await page.click('button[type="submit"]');
+
+    await expect.poll(() => cuerpos.profiles, { timeout: 10_000 }).not.toBeNull();
+    expect(cuerpos.profiles.marketing_opt_in).toBe(false);
+    // Sin consentimiento no se guarda fecha: sería un registro de algo que no pasó.
+    expect(cuerpos.profiles.marketing_opt_in_at).toBeNull();
+  });
+
+  test('marcando la casilla se guardan consentimiento y fecha', async ({ page }) => {
+    const cuerpos = await capturarInserts(page);
+    await page.goto('/Register.html');
+    await fillRegForm(page);
+    await page.check('#marketing-consent');
+    await page.click('button[type="submit"]');
+
+    await expect.poll(() => cuerpos.profiles?.marketing_opt_in, { timeout: 10_000 }).toBe(true);
+    expect(cuerpos.profiles.marketing_opt_in_at).toBeTruthy();
+  });
+
+  test('la campaña de la URL queda guardada en el club', async ({ page }) => {
+    const cuerpos = await capturarInserts(page);
+    // Sin `.html`: el servidor estático de los tests redirige /Register.html → /Register
+    // y en esa redirección pierde la query, que es justo lo que este test mira.
+    await page.goto('/Register?utm_source=instagram&utm_medium=cpc&utm_campaign=pretemporada');
+    await fillRegForm(page);
+    await page.click('button[type="submit"]');
+
+    await expect.poll(() => cuerpos.clubs?.utm_source, { timeout: 10_000 }).toBe('instagram');
+    expect(cuerpos.clubs.utm_medium).toBe('cpc');
+    expect(cuerpos.clubs.utm_campaign).toBe('pretemporada');
+  });
+
+  test('un teléfono demasiado corto corta el envío antes de crear la cuenta', async ({ page }) => {
+    let signupLlamado = false;
+    await page.route(`${SB}/auth/v1/signup`, route => { signupLlamado = true; route.fulfill({ json: {} }); });
+    await page.route(`${SB}/**`, route => route.fulfill({ json: {} }));
+    await page.goto('/Register.html');
+    await fillRegForm(page, { phone: '123' });
+    await page.click('button[type="submit"]');
+
+    await expect(page.locator('#reg-error')).toBeVisible({ timeout: 10_000 });
+    expect(signupLlamado).toBe(false);
   });
 });
 

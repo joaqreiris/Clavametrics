@@ -6,6 +6,7 @@
 <title data-i18n="register.pageTitle">Create your organization — ClavaMetrics</title>
 <link rel="stylesheet" href="clavametrics.css">
 <script src="assets/i18n.js" data-bundle="marketing" defer></script>
+<script src="assets/lead-source.js" defer></script>
   <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#15803D">
   <link rel="apple-touch-icon" href="/assets/clava-app-192.png">
@@ -322,6 +323,15 @@
   }
   .reg-terms a:hover { color: var(--cm-fg-strong); }
 
+  /* Ayuda bajo un campo (el prefijo del teléfono) */
+  .reg-hint {
+    display: block;
+    margin-top: 5px;
+    font-size: 11.5px;
+    line-height: 1.4;
+    color: var(--cm-fg-faint);
+  }
+
   /* OAuth */
   .reg-divider {
     display: flex; align-items: center; gap: 10px;
@@ -545,6 +555,18 @@
             </div>
           </div>
 
+          <!-- El teléfono es el único canal que sirve para acompañar un alta: por mail
+               nadie contesta el día que se queda trabado cargando el plantel. Va acá y
+               no en el perfil (donde ya existía, opcional) porque ahí llega tarde. -->
+          <div class="cm-field">
+            <label class="cm-label" for="phone" data-i18n="register.phone">Phone</label>
+            <div class="cm-input-affix">
+              <i class="ti ti-phone"></i>
+              <input id="phone" type="tel" placeholder="+34 600 123 456" data-i18n-ph="register.phonePlaceholder" autocomplete="tel" required>
+            </div>
+            <span class="reg-hint" data-i18n="register.phoneHint">Include your country code — we use it to help you get set up.</span>
+          </div>
+
           <div class="cm-field">
             <label class="cm-label" for="pwd" data-i18n="login.password">Password</label>
             <div class="cm-input-affix">
@@ -566,6 +588,14 @@
         <label class="reg-terms">
           <input type="checkbox" id="terms" required>
           <span data-i18n-html="register.consent">I agree to the <a href="#">Terms of Service</a> and <a href="#">Privacy Policy</a>, and confirm I'm authorized to register this organization.</span>
+        </label>
+
+        <!-- Casilla aparte y sin `required` a propósito: aceptar los Términos no es
+             aceptar que te llamen. Hay clubes en España, y el RGPD pide que el
+             consentimiento comercial sea una acción propia y demostrable. -->
+        <label class="reg-terms">
+          <input type="checkbox" id="marketing-consent">
+          <span data-i18n="register.marketingConsent">You can contact me to help set up my club and to tell me about plans and updates.</span>
         </label>
 
         <button type="submit" class="cm-btn is-primary is-lg is-block">
@@ -624,7 +654,17 @@
     if (session) window.location.replace('Hub.html');
   })();
 
-  window.fillCountrySelect(document.getElementById('country'), '', tt('register.selectCountry','Select country'));
+  // El placeholder del select se arma por JS, y este script corre antes que i18n.js
+  // (que va con defer): en el primer pintado tt() devuelve el fallback inglés. Se vuelve
+  // a armar cuando el diccionario está listo — el mismo evento cubre el cambio manual de
+  // idioma — conservando el país ya elegido.
+  function pintarPaises() {
+    const sel = document.getElementById('country');
+    if (!sel) return;
+    window.fillCountrySelect(sel, sel.value || '', tt('register.selectCountry','Select country'));
+  }
+  pintarPaises();
+  document.addEventListener('cm:langchanged', pintarPaises);
 
   // Sport tabs
   document.querySelectorAll('#sport-tabs .reg-sport-tab').forEach(btn => {
@@ -674,6 +714,20 @@
     const firstName = document.getElementById('first-name').value.trim();
     const lastName  = document.getElementById('last-name').value.trim();
     const clubName  = document.getElementById('club-name').value.trim();
+    const phone     = document.getElementById('phone').value.trim();
+    const marketing = !!document.getElementById('marketing-consent')?.checked;
+
+    // Un número de menos de 6 dígitos no es un número. No validamos más que eso: los
+    // formatos nacionales son un pozo sin fondo y rechazar un teléfono válido de un
+    // país que no previmos cuesta el alta entera.
+    if ((phone.match(/\d/g) || []).length < 6) {
+      showRegError(tt('register.phoneInvalid', 'Enter a valid phone number, including the country code.'));
+      document.getElementById('phone').focus();
+      return;
+    }
+
+    // De qué campaña vino el club. Vacío si la visita fue directa.
+    const leadSource = (typeof window.cmLeadSource === 'function') ? window.cmLeadSource() : {};
 
     btn.disabled = true;
     btn.textContent = tt('register.creatingAccount', 'Creating account…');
@@ -695,11 +749,18 @@
         sessionStorage.setItem('cm_pending_reg', JSON.stringify({
           email,
           fullName: `${firstName} ${lastName}`.trim(),
+          firstName,
+          lastName,
           clubName,
           country: document.getElementById('country')?.value || null,
           // Without this the sport picked on this form is lost: when Supabase asks for email
           // confirmation the club is created later, by auth-callback.html, from this blob.
           sport: selectedSport(),
+          // Mismo motivo para el teléfono, el consentimiento y el origen: si no viajan
+          // acá, el club que confirma por mail nace sin contacto y sin atribución.
+          phone,
+          marketing,
+          leadSource,
         }));
         btn.disabled = false;
         btn.innerHTML = CREATE_ORG_BTN();
@@ -714,7 +775,7 @@
       // lineup, load metrics), so it has to be persisted at creation time.
       const sport = selectedSport();
       const { data: club, error: clubErr } = await window.sb.from('clubs')
-        .insert({ name: clubName, country, sport })
+        .insert({ name: clubName, country, sport, ...leadSource })
         .select('id')
         .single();
       if (clubErr) throw clubErr;
@@ -725,10 +786,19 @@
         id: userId,
         club_id: clubId,
         full_name: `${firstName} ${lastName}`.trim(),
+        first_name: firstName,
+        last_name: lastName,
         role: 'admin',
-        email
+        email,
+        phone,
+        marketing_opt_in: marketing,
+        // Sin la fecha no se puede demostrar cuándo se dio el consentimiento.
+        marketing_opt_in_at: marketing ? new Date().toISOString() : null,
       });
       if (profErr) throw profErr;
+
+      // El origen ya quedó guardado en el club; no tiene sentido arrastrarlo.
+      if (typeof window.cmClearLeadSource === 'function') window.cmClearLeadSource();
 
       window.location.href = 'Onboarding.html';
     } catch (err) {

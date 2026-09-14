@@ -1233,11 +1233,18 @@
       document.getElementById('club-name').focus();
       return false;
     }
+    const country = document.getElementById('club-country').value || '';
+    if (!country) {
+      showError('club', tt('onboarding.countryRequired', 'Pick the club country.'));
+      document.getElementById('ob-ident-edit').hidden = false;
+      document.getElementById('club-country').focus();
+      return false;
+    }
     const sport = currentSport();
     const patch = {
       name,
       sport,
-      country:    document.getElementById('club-country').value || null,
+      country,
       short_name: (document.getElementById('club-short').value || '').trim().toUpperCase() || null,
       city:       (document.getElementById('club-city').value || '').trim() || null,
       timezone:   document.getElementById('club-tz').value || null,
@@ -1425,12 +1432,19 @@
 
     // Identidad (viene del registro) — visible y editable, no repetida como formulario.
     document.getElementById('club-name').value = state.club.name || '';
-    window.fillCountrySelect(document.getElementById('club-country'), state.club.country || '');
+    // Con placeholder: sin él la primera opción de la lista ("Afghanistan") queda
+    // preseleccionada y se guarda tal cual si nadie toca el select. Ya pasó — hay clubes
+    // uruguayos registrados como afganos, y el país es lo primero que mira ventas.
+    window.fillCountrySelect(document.getElementById('club-country'), state.club.country || '',
+                             tt('register.selectCountry', 'Select country'));
     fillSportSelect(state.club.sport || (window.CMSport && window.CMSport.key()) || 'football');
     document.getElementById('club-short').value = state.club.short_name || '';
     document.getElementById('club-city').value  = state.club.city || '';
     fillTzSelect(state.club.timezone);
     paintIdentity();
+    // Alta por Google/Apple: el club se creó con un nombre derivado del mail y sin país.
+    // Si el panel queda plegado nadie lo corrige y la cuenta nace anónima.
+    if (!state.club.country) document.getElementById('ob-ident-edit').hidden = false;
     if (state.club.logo_url) paintCrest(state.club.logo_url);
 
     // Equipos ya existentes (por si el asistente se retoma a mitad de camino).

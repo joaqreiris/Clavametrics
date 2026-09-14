@@ -28,6 +28,7 @@
      paquete podía romper la app sin que tocáramos nada. -->
 <script src="assets/vendor/supabase-js-2.112.4.min.js"></script>
   <script src="assets/supabase-init.js"></script>
+  <script src="assets/lead-source.js"></script>
   <script>
   (async () => {
     const msgEl   = document.getElementById('statusMsg');
@@ -72,18 +73,28 @@
           const pending = JSON.parse(pendingRaw);
           const { data: club, error: clubErr } = await window.sb.from('clubs')
             .insert({ name: pending.clubName, country: pending.country || null,
-                      sport: pending.sport || 'football' })
+                      sport: pending.sport || 'football',
+                      // Atribución del registro. Va del blob y no de localStorage: la
+                      // confirmación puede abrirse en otro navegador, donde el origen
+                      // de la visita original no existe.
+                      ...(pending.leadSource || {}) })
             .select('id').single();
           if (clubErr) throw clubErr;
 
           const { error: profErr } = await window.sb.from('profiles').insert({
-            id:        userId,
-            club_id:   club.id,
-            full_name: pending.fullName || '',
-            role:      'admin',
-            email:     pending.email || email,
+            id:         userId,
+            club_id:    club.id,
+            full_name:  pending.fullName || '',
+            first_name: pending.firstName || null,
+            last_name:  pending.lastName || null,
+            role:       'admin',
+            email:      pending.email || email,
+            phone:      pending.phone || null,
+            marketing_opt_in:    !!pending.marketing,
+            marketing_opt_in_at: pending.marketing ? new Date().toISOString() : null,
           });
           if (profErr) throw profErr;
+          if (typeof window.cmClearLeadSource === 'function') window.cmClearLeadSource();
         } catch (err) {
           showError('Workspace setup failed: ' + err.message);
           return;
@@ -123,8 +134,12 @@
           const stubName = (email.split('@')[0] || 'My Club').replace(/[._-]/g, ' ');
           // OAuth sign-up: nobody ever saw the register form, so there is no sport to carry.
           // It defaults to football and Onboarding asks for it on the next screen.
+          // El alta por Google/Apple no pasa por el formulario, así que no hay teléfono
+          // ni consentimiento: eso lo pide el Onboarding. El origen sí lo tenemos, y es
+          // el mismo navegador que vio el anuncio.
+          const leadSource = (typeof window.cmLeadSource === 'function') ? window.cmLeadSource() : {};
           const { data: club, error: clubErr } = await window.sb.from('clubs')
-            .insert({ name: stubName })
+            .insert({ name: stubName, ...leadSource })
             .select('id').single();
           if (clubErr) throw clubErr;
 
@@ -132,6 +147,7 @@
             id: userId, club_id: club.id, full_name: fullName, role: 'admin', email,
           });
           if (profErr) throw profErr;
+          if (typeof window.cmClearLeadSource === 'function') window.cmClearLeadSource();
         } catch (err) {
           showError('Failed to create workspace: ' + err.message);
           return;
