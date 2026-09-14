@@ -184,7 +184,13 @@ Deno.serve(async (req) => {
       }),
     });
     if (r.ok) lote.forEach(f => enviados.push(String(f.contact_email)));
-    else fallos.push({ status: r.status, detalle: r.body });
+    else {
+      // Al log además de a la respuesta: cuando esto falla, el mensaje de HubSpot
+      // ("property X does not exist", "missing scopes") es lo único que dice qué
+      // hacer, y perderlo obliga a adivinar.
+      console.error('[hubspot-sync] batch rechazado', r.status, JSON.stringify(r.body).slice(0, 900));
+      fallos.push({ status: r.status, detalle: r.body });
+    }
   }
 
   return json({

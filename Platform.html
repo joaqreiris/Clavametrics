@@ -73,6 +73,7 @@
   .pf-tcontact a{color:var(--cm-accent);text-decoration:none}
   .pf-tstage{font:700 11px var(--cm-font-sans);padding:2px 8px;border-radius:var(--cm-r-pill);background:var(--cm-bg-soft);color:var(--cm-fg-muted);white-space:nowrap}
   .pf-tno{color:var(--cm-fg-faint)}
+  .pf-del{flex:none;color:var(--cm-danger);border-color:var(--cm-border)}
 </style>
 </head>
 <body class="cm">
@@ -609,6 +610,12 @@
 
         const quien = [r.contact_name, r.contact_job].filter(Boolean).map(esc).join(' · ');
 
+        // Un club sin nada adentro y que no paga. El chequeo de verdad lo hace
+        // delete_ghost_club() en la base; acá sólo se decide si mostrar el botón,
+        // para no ofrecer una acción que iba a fallar.
+        const borrable = r.stage !== 'customer' && r.players === 0 && r.sessions === 0
+                      && r.wellness_entries === 0 && r.gps_reports === 0;
+
         return `<div class="pf-trow">
           <span class="pf-tdot" style="background:${h.c}" title="${escAttr(tt(h.k,h.f))}"></span>
           <div class="pf-tmain">
@@ -619,8 +626,29 @@
             <div class="pf-tuse">${uso}</div>
             <div class="pf-tcontact">${quien?`<span>${quien}</span>`:''}${mail}${tel}${consent}</div>
           </div>
+          ${borrable ? `<button class="pf-mini pf-del" data-del="${escAttr(r.club_id)}" data-name="${escAttr(r.club_name||'')}" title="${escAttr(tt('platform.delete_ghost_hint','Delete this empty club permanently'))}"><i class="ti ti-trash"></i></button>` : ''}
         </div>`;
       }).join('');
+
+      host.querySelectorAll('[data-del]').forEach(b =>
+        b.addEventListener('click', () => borrarClub(b.dataset.del, b.dataset.name)));
+    }
+
+    /* ── Borrar un club fantasma ─────────────────────────────────────────────
+       Irreversible y sin papelera, así que se pide escribir el nombre: el club de
+       la fila de al lado se borra con la misma facilidad que el que se quería.
+       Los frenos de verdad están en delete_ghost_club(): club vacío, que no pague,
+       que no sea el tuyo, y el nombre exacto. */
+    async function borrarClub(id, nombre){
+      const tipeado = window.prompt(tt('platform.delete_confirm','This permanently deletes the club and its account. Type the club name to confirm:') + '\n\n' + nombre);
+      if (tipeado === null) return;
+      try{
+        const { data, error } = await sb.rpc('delete_ghost_club', { p_club_id: id, p_club_name: tipeado });
+        if (error) throw error;
+        if (data && data.ok) await load();
+      }catch(e){
+        alert(tt('platform.delete_failed','Could not delete:') + ' ' + (e.message || e));
+      }
     }
 
     /* ── Exportar a CSV, para subir al CRM ──────────────────────────────────
@@ -779,10 +807,18 @@
             msg.textContent += ' · ' + tt('platform.sync_missing','missing in HubSpot:') + ' ' + data.propiedades_faltantes.join(', ');
           }
         } else {
-          msg.textContent = tt('platform.sync_fail','Sync failed') + (data && data.error ? (': ' + data.error) : '');
+          // El motivo real viene de HubSpot dentro de `fallos`; sin mostrarlo, el
+          // mensaje era "falló" a secas y no había por dónde empezar.
+          const detalle = (data && data.error) ? data.error
+            : (data && data.fallos && data.fallos.length
+                ? (data.fallos[0].status + ' · ' + JSON.stringify(data.fallos[0].detalle).slice(0, 300))
+                : '');
+          msg.textContent = tt('platform.sync_fail','Sync failed') + (detalle ? (': ' + detalle) : '');
         }
       }catch(e){
-        msg.textContent = tt('platform.sync_fail','Sync failed') + ': ' + (e.message || e);
+        let extra = e.message || String(e);
+        try { if (e.context && e.context.json) extra = JSON.stringify(await e.context.json()).slice(0, 300); } catch(_) {}
+        msg.textContent = tt('platform.sync_fail','Sync failed') + ': ' + extra;
       }
       btn.disabled = false;
     }

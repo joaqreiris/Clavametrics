@@ -213,4 +213,41 @@ test.describe('Platform — Trials', () => {
     expect(patch.handled_at).toBeTruthy();
     await expect(page.locator('#pfLeadsCard')).toBeHidden();
   });
+  // ── Borrar clubes fantasma ───────────────────────────────────────────────
+  test('sólo ofrece borrar los clubes vacíos', async ({ page }) => {
+    await abrirTrials(page);
+    // Donna FC: 0 jugadores, 0 sesiones, nunca abrió nada.
+    await expect(page.locator('#pfTrialsList .pf-trow').filter({ hasText: 'Donna FC' }).locator('.pf-del')).toHaveCount(1);
+    // MOI U18 tiene 11 jugadores cargados; Clava FC paga.
+    await expect(page.locator('#pfTrialsList .pf-trow').filter({ hasText: 'MOI U18' }).locator('.pf-del')).toHaveCount(0);
+    await expect(page.locator('#pfTrialsList .pf-trow').filter({ hasText: 'Clava FC' }).locator('.pf-del')).toHaveCount(0);
+  });
+
+  test('borrar pide escribir el nombre y manda lo tipeado, no el nombre real', async ({ page }) => {
+    let llamada = null;
+    await abrirTrials(page);
+    await page.route(`${SB}/rest/v1/rpc/delete_ghost_club**`, route => {
+      llamada = route.request().postDataJSON();
+      route.fulfill({ json: { ok: true, club: "Donna's Club" } });
+    });
+    // Se tipea otra cosa a propósito: quien decide si coincide es la base, no la
+    // pantalla. Si el front mandara el nombre real, la confirmación no confirmaría nada.
+    page.on('dialog', d => d.accept('Donna FC'));
+
+    await page.locator('#pfTrialsList .pf-trow').filter({ hasText: 'Donna FC' }).locator('.pf-del').click();
+    await expect.poll(() => llamada, { timeout: 10_000 }).not.toBeNull();
+    expect(llamada.p_club_id).toBe('c-frio');
+    expect(llamada.p_club_name).toBe('Donna FC');
+  });
+
+  test('cancelar el aviso no borra nada', async ({ page }) => {
+    let llamada = false;
+    await abrirTrials(page);
+    await page.route(`${SB}/rest/v1/rpc/delete_ghost_club**`, route => { llamada = true; route.fulfill({ json: {} }); });
+    page.on('dialog', d => d.dismiss());
+
+    await page.locator('#pfTrialsList .pf-trow').filter({ hasText: 'Donna FC' }).locator('.pf-del').click();
+    await page.waitForTimeout(500);
+    expect(llamada).toBe(false);
+  });
 });
