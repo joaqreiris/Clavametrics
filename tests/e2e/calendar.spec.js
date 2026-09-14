@@ -379,8 +379,13 @@ test.describe('Form structure', () => {
     await expect(page.locator('#calEvtF_notes')).toBeVisible();
   });
 
-  test('type select has exactly 5 options', async ({ page }) => {
-    await expect(page.locator('#calEvtF_type option')).toHaveCount(5);
+  // Antes decía «exactamente 5». Los tipos de sesión crecieron a nueve y el número volvería a
+  // quedar viejo con el próximo que agreguen: lo que importa es que estén los que se usan todos
+  // los días, no cuántos hay.
+  test('el selector ofrece los tipos de sesión que se usan', async ({ page }) => {
+    const tipos = await page.locator('#calEvtF_type option').evaluateAll(
+      os => os.map(o => o.value).filter(Boolean));
+    for (const t of ['training', 'gym', 'recovery']) expect(tipos).toContain(t);
   });
 
   test('notes field is a textarea (not a single-line input)', async ({ page }) => {
@@ -396,6 +401,14 @@ test.describe('Form structure', () => {
 });
 
 // ── 7. FORM — VALIDATION ─────────────────────────────────────────────────────
+
+/** La hora de inicio es obligatoria en los entrenamientos de campo: sin ella el guardado se corta
+ *  con «A start time is required…» y el modal se queda abierto. Se completa sólo si está vacía,
+ *  para no romper los tests que prueban justamente la validación. */
+async function _conHora(page) {
+  const campo = page.locator('#calEvtF_starttime');
+  if (await campo.count() && !(await campo.inputValue())) await campo.fill('10:00');
+}
 
 test.describe('Form validation', () => {
   test.beforeEach(async ({ page }) => {
@@ -425,6 +438,7 @@ test.describe('Form save — new event', () => {
     await page.fill('#calEvtF_title', 'New Training');
     await page.fill('#calEvtF_date', '2026-05-16');
     await page.fill('#calEvtF_duration', '75');
+    await _conHora(page);
     await page.click('#calEvtSave');
 
     await expect(page.locator('#calEvtBackdrop')).not.toHaveClass(/is-open/);
@@ -451,6 +465,7 @@ test.describe('Form save — new event', () => {
     await page.locator('.cal-head .cm-btn.is-primary').click();
     await page.fill('#calEvtF_title', 'Slow save');
     await page.fill('#calEvtF_date', '2026-05-16');
+    await _conHora(page);
     await page.click('#calEvtSave');
 
     await expect(page.locator('#calEvtSaving')).toBeVisible();
@@ -484,6 +499,7 @@ test.describe('Modal — edit event', () => {
 
   test('saving update shows toast and closes modal', async ({ page }) => {
     await page.fill('#calEvtF_title', 'Updated 8vs8');
+    await _conHora(page);
     await page.click('#calEvtSave');
     await expect(page.locator('#calEvtBackdrop')).not.toHaveClass(/is-open/);
     await expect(page.locator('#calToast')).toContainText('Event updated');
@@ -536,6 +552,7 @@ test.describe('API errors', () => {
     await page.locator('.cal-head .cm-btn.is-primary').click();
     await page.fill('#calEvtF_title', 'Fail session');
     await page.fill('#calEvtF_date', '2026-05-16');
+    await _conHora(page);
     await page.click('#calEvtSave');
 
     await expect(page.locator('#calToast')).toHaveClass(/is-show/);
