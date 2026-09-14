@@ -638,8 +638,12 @@
       ['Signup Date',     r => (r.created_at||'').slice(0,10)],
       ['Trial Ends',      r => (r.trial_ends_at||'').slice(0,10)],
       ['Days Left',       r => (r.days_left == null ? '' : r.days_left)],
-      ['Stage',           r => tt((STAGE[r.stage]||{}).k, (STAGE[r.stage]||{}).f || r.stage)],
-      ['Health',          r => tt((HEALTH[r.health]||{}).k, (HEALTH[r.health]||{}).f || r.health)],
+      // Sin traducir, a diferencia de la pantalla: el CRM guarda estos dos como opciones
+      // de un desplegable. Si el valor dependiera del idioma de quien baja el archivo,
+      // bajarlo en portugués crearía opciones nuevas y el mismo club quedaría clasificado
+      // de dos maneras. El texto bonito es la etiqueta del desplegable, no el dato.
+      ['Stage',           r => r.stage],
+      ['Health',          r => r.health],
       ['Players',         r => r.players],
       ['Sessions',        r => r.sessions],
       ['Actions 7d',      r => r.events_7d],

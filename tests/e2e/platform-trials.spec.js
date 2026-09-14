@@ -164,6 +164,11 @@ test.describe('Platform — Trials', () => {
 
     // Quien no dio consentimiento viaja igual, marcado: hay que poder darle soporte.
     expect(lineas.find(l => l.includes('Donna FC'))).toContain('"No"');
+
+    // Etapa y salud van en crudo, no traducidas: en el CRM son opciones de un
+    // desplegable y tienen que valer lo mismo se baje el archivo en el idioma que sea.
+    expect(bigua).toContain('"trial","active"');
+    expect(lineas.find(l => l.includes('Clava FC'))).toContain('"customer","active"');
   });
 
   test('el CSV respeta el filtro que está puesto', async ({ page }) => {
