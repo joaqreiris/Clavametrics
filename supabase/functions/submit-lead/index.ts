@@ -55,6 +55,43 @@ async function hashIp(ip: string, salt: string): Promise<string> {
 
 const MAX_POR_HORA = 5;
 
+/** El lead también va al CRM, que es donde se gestiona el seguimiento.
+ *
+ *  Se manda DESPUÉS de guardarlo en nuestra base y sin esperar la respuesta: si
+ *  HubSpot está caído o el token venció, el pedido ya está a salvo y aparece en el
+ *  panel igual. Al revés —mandar primero al CRM y guardar después— un fallo de un
+ *  tercero haría perder el lead, que es exactamente lo que veníamos a arreglar.
+ *
+ *  Sólo propiedades estándar de HubSpot: las personalizadas (Salud, Etapa) describen
+ *  un club en prueba y este todavía no tiene cuenta. */
+async function aHubspot(lead: Record<string, unknown>) {
+  const token = Deno.env.get('HUBSPOT_TOKEN');
+  if (!token) return;
+
+  const nombre = String(lead.name || '').trim();
+  const props: Record<string, string> = { email: String(lead.email) };
+  if (nombre) {
+    props.firstname = nombre.split(/\s+/)[0];
+    const resto = nombre.split(/\s+/).slice(1).join(' ');
+    if (resto) props.lastname = resto;
+  }
+  if (lead.phone)     props.phone    = String(lead.phone);
+  if (lead.club_name) props.company  = String(lead.club_name);
+  if (lead.role)      props.jobtitle = String(lead.role);
+  if (lead.message)   props.message  = String(lead.message).slice(0, 4000);
+
+  try {
+    const res = await fetch('https://api.hubapi.com/crm/v3/objects/contacts/batch/upsert', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ inputs: [{ idProperty: 'email', id: String(lead.email), properties: props }] }),
+    });
+    if (!res.ok) console.error('[submit-lead] HubSpot rechazó el lead', res.status, (await res.text()).slice(0, 500));
+  } catch (e) {
+    console.error('[submit-lead] HubSpot no respondió:', String(e));
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
   if (req.method !== 'POST')    return json({ ok: false, error: 'method_not_allowed' }, 405);
@@ -93,7 +130,7 @@ Deno.serve(async (req) => {
   const src = (body.leadSource && typeof body.leadSource === 'object')
     ? body.leadSource as Record<string, unknown> : {};
 
-  const { error } = await sb.from('leads').insert({
+  const fila = {
     name,
     email: email.toLowerCase(),
     phone:     txt(body.phone, 40),
@@ -111,11 +148,17 @@ Deno.serve(async (req) => {
     referrer:     txt(src.referrer, 500),
     landing_page: txt(src.landing_page, 500),
     ip_hash: ipHash,
-  });
+  };
 
+  const { error } = await sb.from('leads').insert(fila);
   if (error) {
     console.error('[submit-lead] insert falló:', error.message);
     return json({ ok: false, error: 'insert_failed' }, 500);
   }
+
+  // En segundo plano: quien mandó el formulario no tiene por qué esperar al CRM.
+  try { (globalThis as any).EdgeRuntime?.waitUntil?.(aHubspot(fila)); }
+  catch { aHubspot(fila); }
+
   return json({ ok: true });
 });
