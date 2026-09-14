@@ -6,7 +6,12 @@ async function mockHub(page, overrides = {}) {
   const {
     players     = [PLAYER],
     injuries    = [{ status: 'active' }, { status: 'active' }],
-    wellness    = [{ readiness: 8 }, { readiness: 7 }],
+    // El promedio ya no sale de un «readiness» único: se calcula con las cinco respuestas del
+    // cuestionario, y sólo cuentan las filas con responded = true.
+    wellness    = [
+      { responded: true, day_off: false, sleep_quality: 8, mood: 8, fatigue: 8, stress: 8, soreness: 8 },
+      { responded: true, day_off: false, sleep_quality: 7, mood: 7, fatigue: 7, stress: 7, soreness: 7 },
+    ],
     tasks       = [],
     avail       = [{ status: 'available' }, { status: 'unavailable' }],
     sessions    = [SESSION],
@@ -19,6 +24,8 @@ async function mockHub(page, overrides = {}) {
   await page.route(`${SB}/rest/v1/**`, async route => {
     const url    = route.request().url();
     const method = route.request().method();
+    // El RPC de wellness viaja por POST: se atiende antes del corte de los no-GET.
+    if (url.includes('/rpc/wellness_status')) return route.fulfill({ json: wellness });
     if (method !== 'GET') return route.fallback();   // al mock de abajo, no a la red real
 
     // Los KPI se arman con conteos (count: 'exact'), que viajan en la cabecera Content-Range. Al
@@ -35,6 +42,9 @@ async function mockHub(page, overrides = {}) {
 
     if (url.includes('/players'))        return conConteo(players);
     if (url.includes('/injuries'))       return conConteo(injuries);
+    // El wellness del Hub NO sale de una tabla: lo calcula el RPC wellness_status, que ya deriva
+    // el «hoy» del huso del que mira y descarta a quien no tenía que responder.
+    if (url.includes('/rpc/wellness_status')) return route.fulfill({ json: wellness });
     if (url.includes('/wellness'))       return conConteo(wellness);
     if (url.includes('/tasks'))          return route.fulfill({ json: tasks });
     if (url.includes('/availability'))   return route.fulfill({ json: avail });
