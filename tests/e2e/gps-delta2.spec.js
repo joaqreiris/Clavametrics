@@ -47,7 +47,7 @@ const card = (rel) => [{ id: 'card-d2', position: 0, source: 'builder', size: 'l
   metrics: [{ id: 'total_distance', agg: 'avg', ...(rel ? { rel } : {}) }],
   dimensions: [{ id: 'player' }], range: { type: 'season' }, style: { color: '#15803D' } } }];
 
-async function open(page, rel = 'delta2') {
+async function open(page, rel = 'delta2', cardsPropias = null) {
   await page.route(`${SB}/rest/v1/**`, r => r.fulfill({ json: [], headers: { 'Content-Range': '0-0/0', 'Content-Type': 'application/json' } }));
   await page.route(`${SB}/auth/v1/**`, r => r.fulfill({ json: { access_token: 't', user: { id: 'user-1', email: 't@t.com' } } }));
   await page.route(`${SB}/rest/v1/profiles**`, r => r.fulfill({ json: [PROFILE] }));
@@ -82,16 +82,22 @@ async function open(page, rel = 'delta2') {
     const acc = r.request().headers()['accept'] || '';
     return r.fulfill({ json: acc.includes('object') ? DASH : [DASH] });
   });
-  await page.route(`${SB}/rest/v1/dashboard_cards**`, r => r.fulfill({ json: card(rel) }));
+  await page.route(`${SB}/rest/v1/dashboard_cards**`, r => r.fulfill({ json: cardsPropias || card(rel) }));
   await injectSession(page);
   await seedGpIds(page, CLUB_ID, 'user-1');
   await page.goto('/GPS Analysis.html');
   await page.waitForSelector('.gp-sections', { timeout: 15_000 });
   await page.evaluate((cid) => { window._gpClubId = cid; window._gpUserId = 'user-1'; }, CLUB_ID);
-  await expect.poll(async () => page.evaluate(() =>
-    document.querySelectorAll('.gp-view.is-on .gp-c[data-card-id="card-d2"] canvas').length
-  ), { timeout: 45_000 }).toBeGreaterThan(0);
-  await esperarDatosDeCard(page, 'card-d2');
+  // Se espera a que la card TERMINE de resolver, no a que aparezca un canvas: el «antes →
+  // después» sin dos fechas elegidas dibuja un aviso en vez de un gráfico, y ahí no hay canvas.
+  await expect.poll(async () => page.evaluate(() => {
+    const b = document.querySelector('.gp-view.is-on .gp-c[data-card-id="card-d2"] .gp-c-b');
+    if (!b || /loading|cargando/i.test(b.textContent || '')) return false;
+    return !!b.querySelector('canvas') || (b.textContent || '').trim().length > 0;
+  }), { timeout: 45_000 }).toBe(true);
+  if (await page.locator('.gp-view.is-on .gp-c[data-card-id="card-d2"] canvas').count()) {
+    await esperarDatosDeCard(page, 'card-d2');
+  }
 }
 
 /** Elige los dos días en la barra de filtros y espera a que las cards se rehagan. */
@@ -164,4 +170,51 @@ test.describe('GPS · Δ% entre dos fechas', () => {
     const de = (ap) => b.data[b.labels.findIndex(l => l.includes(ap))];
     expect(de('Alfa')).toBe(4500);                 // promedio de 4000 y 5000
   });
+
 });
+
+// ── Antes → después ───────────────────────────────────────────────────────────
+// El Δ% dice cuánto cambió; el dumbbell dice DE CUÁNTO A CUÁNTO. Un +25% puede ser de 4.000 a
+// 5.000 o de 400 a 500, y para decidir carga eso no da lo mismo. Cada fila son dos puntos unidos
+// por una línea cuyo largo ES el cambio.
+const cardDumbbell = () => ([{ id: 'card-d2', position: 0, source: 'builder', size: 'lg', config: {
+  schema: 'gp.card/v1', title: 'Antes y después', viz: 'dumbbell', scope: { level: 'squad' },
+  metrics: [{ id: 'total_distance', agg: 'avg' }], dimensions: [{ id: 'player' }],
+  range: { type: 'season' }, style: { color: '#15803D' } } }]);
+
+const dumbbell = (page) => page.evaluate(() => {
+  const cv = document.querySelector('.gp-view.is-on .gp-c[data-card-id="card-d2"] canvas');
+  const ch = cv && window.Chart.getChart(cv);
+  if (!ch) return null;
+  const linea = ch.data.datasets[0], antes = ch.data.datasets[1], despues = ch.data.datasets[2];
+  return { filas: ch.data.labels.map(String), pares: linea.data,
+           antes: antes.data.map(p => p.x), despues: despues.data.map(p => p.x) };
+});
+
+test.describe('GPS · antes → después', () => {
+  test('cada fila va de su valor viejo al nuevo', async ({ page }) => {
+    await open(page, 'delta2', cardDumbbell());
+    await elegirDosDias(page, [D1, D2]);
+    const d = await dumbbell(page);
+    expect(d, 'no dibujó').not.toBeNull();
+    // p1 4000→5000 y p2 6000→3000. El tercero no tiene las dos fechas y queda afuera.
+    expect(d.filas).toHaveLength(2);
+    const i = (ap) => d.filas.findIndex(l => l.includes(ap));
+    expect(d.pares[i('Alfa')]).toEqual([4000, 5000]);
+    expect(d.pares[i('Beta')]).toEqual([6000, 3000]);
+    expect(d.antes[i('Beta')]).toBe(6000);
+    expect(d.despues[i('Beta')]).toBe(3000);
+  });
+
+  test('sin dos fechas elegidas no inventa nada: lo dice', async ({ page }) => {
+    await open(page, 'delta2', cardDumbbell());
+    await page.waitForTimeout(1200);
+    const hayCanvas = await page.evaluate(() =>
+      !!document.querySelector('.gp-view.is-on .gp-c[data-card-id="card-d2"] canvas'));
+    expect(hayCanvas).toBe(false);
+    const txt = await page.evaluate(() =>
+      document.querySelector('.gp-c[data-card-id="card-d2"] .gp-c-b')?.textContent || '');
+    expect(txt).toMatch(/dos fechas|two dates|duas datas/i);
+  });
+});
+

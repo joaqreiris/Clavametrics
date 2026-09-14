@@ -75,6 +75,11 @@
     // ejercicio suelto daría un 12% que no significa nada, así que con fuente «tarea» este tipo
     // ni se ofrece.
     demand:  { name: 'Match demand', icon: 'ti-percentage', min: 1, max: 8, dimMax: 0, sessionOnly: true },
+    // Antes → después. Dos puntos por fila unidos por una línea: el largo de la línea ES el
+    // cambio. Contesta «¿de cuánto a cuánto?», que el Δ% no dice — un +25% puede ser de 4.000 a
+    // 5.000 o de 400 a 500. Necesita DOS fechas elegidas en el filtro; sin eso no hay antes ni
+    // después, y la card lo dice en vez de dibujar cualquier cosa.
+    dumbbell: { name: 'Before → after', icon: 'ti-arrows-horizontal', min: 1, max: 1, dimMax: 1, squadOnly: true, sessionOnly: true },
   };
 
   // DIMENSIONS — fields you group / label / filter by (no aggregation).
@@ -582,6 +587,41 @@
     return out.map((sr, si) => (config.metrics?.[si]?.rel === 'delta2'
       ? { ...sr, points: sr.points.filter(p => !quitar.has(p.x)) }
       : sr));
+  }
+
+  /**
+   * Datos del «antes → después». Cada fila es un grupo (jugador, posición…) con sus dos valores.
+   * Se apoya en el mismo cruce por fecha que el Δ%: re-agrega por (dimensiones × fecha) y toma
+   * los dos días elegidos. Quien no tenga los dos queda fuera — sin uno de los extremos no hay
+   * línea que dibujar — y se informa cuántos, igual que en el Δ%.
+   */
+  async function _buildDumbbellData(config, rows, series, ctx, sb, days, info) {
+    const [dOld, dNew] = [...days].map(d => String(d).slice(0, 10)).sort();
+    if (!dOld || !dNew || dOld === dNew) return [];
+    const dimIds = (config.dimensions || []).map(d => d.id);
+    const { fetchExtraMetrics, aggregateSeries } = await _importResolver();
+    // viz 'bars': el agregador se usa sólo para CRUZAR por fecha, y no conoce el tipo nuevo.
+    const refConfig = { ...config, viz: 'bars',
+                        dimensions: [...dimIds, 'session_date'].map(id => ({ id })) };
+    const eav = await fetchExtraMetrics(rows, refConfig, catalogMap, _clubId, sb);
+    const byDate = aggregateSeries(rows, eav, refConfig, catalogMap);
+
+    const sr = byDate[0];
+    if (!sr) return [];
+    const g = new Map();
+    for (const p of sr.points) {
+      const dv = p.dims || [p.x];
+      const gk = dv.slice(0, -1).join('¦');
+      const dt = String(dv[dv.length - 1] || '').slice(0, 10);
+      if (!g.has(gk)) g.set(gk, { label: gk, from: null, to: null });
+      if (dt === dOld) g.get(gk).from = p.y;
+      if (dt === dNew) g.get(gk).to   = p.y;
+    }
+    const todas = [...g.values()];
+    const filas = todas.filter(r => r.from != null && r.to != null);
+    if (info) info.dropped = todas.filter(r => r.from == null || r.to == null).map(r => r.label);
+    return filas.map(r => ({ ...r, delta: r.to - r.from,
+                             pct: r.from ? (r.to - r.from) / r.from * 100 : null }));
   }
 
   /** Nota al pie: a quién no se pudo comparar entre las dos fechas, y por qué. */
@@ -2879,6 +2919,7 @@
     else if (S.type === 'table') mountTablePreview(body, S);
     else if (S.type === 'box') mountBoxPreview(body, S);
     else if (S.type === 'demand') mountDemandPreview(body, S);
+    else if (S.type === 'dumbbell') mountDumbbellPreview(body, S);
     else body.innerHTML = renderType(S);
   }
 
@@ -3121,6 +3162,7 @@
       case 'table':   mountTableCard(container, config, series, { editable: !!opts.editable, example: opts.example }); break;
       case 'box':     mountBoxCard(container, config, series, { example: opts.example }); break;
       case 'demand':  mountDemandCard(container, config, series, { demand: opts.demand || null, mixedTypes: opts.demandMixed || 0, example: opts.example }); break;
+      case 'dumbbell': mountDumbbellCard(container, config, series, { dumbbell: opts.dumbbell || null, dumbbellInfo: opts.dumbbellInfo || null, example: opts.example }); break;
       default:        destroyBodyChart(container); container.innerHTML = renderTypeFromDataset(config, series, opts);
     }
   }
@@ -3715,6 +3757,18 @@
             drawOpts.scatterSparks = _buildScatterSparks(rows, eavMap, _xId, CORE_COLS);
           } catch (e) { /* sparkline opcional — nunca romper la card */ }
         }
+      } else if (config.viz === 'dumbbell') {
+        // Los dos extremos salen de las DOS fechas elegidas en el filtro: sin ellas no hay antes
+        // ni después y la card lo dice, en vez de dibujar una línea inventada.
+        const _dias = (FBcard?.date?.days || []).slice();
+        drawOpts.dumbbellInfo = {};
+        if (_dias.length === 2) {
+          try { drawOpts.dumbbell = await _buildDumbbellData(config, rows, series, ctx, sb, _dias, drawOpts.dumbbellInfo); }
+          catch (e) { console.warn('gpb dumbbell:', e); drawOpts.dumbbell = []; }
+        } else {
+          drawOpts.dumbbell = [];
+        }
+        if (stale()) return;
       } else if (config.viz === 'demand') {
         // El % sale de dividir el valor de CADA jugador por SU referencia de partido, así que se
         // calcula acá (la serie ya viene agrupada por jugador) y el render sólo dibuja.
@@ -7680,6 +7734,121 @@
     },
   };
 
+  /**
+   * Dibuja el «antes → después». La línea es una barra horizontal FLOTANTE de [antes, después]
+   * —Chart.js dibuja una barra entre dos valores si el dato es un par— y encima van los dos
+   * puntos. Así el largo de la barra es literalmente el cambio, y se lee de un vistazo quién se
+   * movió mucho sin tener que comparar alturas.
+   *
+   * Verde si subió y rojo si bajó, el mismo criterio que el Δ%: son la misma pregunta, en una
+   * card se ve el porcentaje y en la otra de cuánto a cuánto.
+   */
+  function mountDumbbellCard(body, config, series, opts = {}) {
+    destroyBodyChart(body);
+    const filas = opts.dumbbell || [];
+    if (!filas.length) {
+      body.innerHTML = '';
+      showEmptyBody(body, _tt('gps_analysis.dumbbell_needs_two_dates',
+        'Pick two dates in the filter bar to compare them.'), config);
+      return;
+    }
+    if (typeof Chart === 'undefined') { body.innerHTML = renderTypeFromDataset(config, series); return; }
+
+    const met    = catalogMap.get(config.metrics?.[0]?.id);
+    const unidad = met?.unit || '';
+    const dec    = _decFor(config, config.metrics?.[0]?.id);
+    const subiCol = _cssVar('--cm-success', '#16A34A');
+    const bajaCol = _cssVar('--cm-danger',  '#DC2626');
+    const antesCol = _cssVar('--cm-fg-muted', '#94A3B8');
+
+    const orden = [...filas].sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
+    const tope  = _barLimit(config);
+    const vis   = tope > 0 ? orden.slice(0, tope) : orden;
+    const cats  = vis.map(r => r.label);
+    const col   = vis.map(r => (r.delta >= 0 ? subiCol : bajaCol));
+
+    const canvas = document.createElement('canvas');
+    body.innerHTML = '';
+    body.appendChild(canvas);
+    const alto = Math.max(180, vis.length * 26 + 56);
+    body.style.minHeight = alto + 'px';
+
+    const fmtN = (v) => fmtVal(v, dec) + (unidad ? ' ' + unidad : '');
+    body.__chart = _newChart(body, canvas, {
+      type: 'bar',
+      data: {
+        labels: cats,
+        datasets: [
+          { label: _tt('gps_analysis.dumbbell_change', 'Change'),
+            data: vis.map(r => [r.from, r.to]),   // barra flotante = la línea del dumbbell
+            backgroundColor: col, borderColor: col, borderWidth: 0,
+            borderSkipped: false, borderRadius: 3, barThickness: 3, order: 2 },
+          { label: _tt('gps_analysis.dumbbell_before', 'Before'), type: 'scatter',
+            data: vis.map((r, i) => ({ x: r.from, y: i })),
+            backgroundColor: antesCol, pointRadius: 5, pointHoverRadius: 7, order: 1 },
+          { label: _tt('gps_analysis.dumbbell_after', 'After'), type: 'scatter',
+            data: vis.map((r, i) => ({ x: r.to, y: i })),
+            backgroundColor: col, pointRadius: 6, pointHoverRadius: 8, order: 0 },
+        ],
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true, maintainAspectRatio: false,
+        animation: { duration: 300 },
+        layout: { padding: { right: 14, left: 4 } },
+        plugins: {
+          legend: { display: config.style?.legend !== false, position: 'bottom',
+                    labels: { boxWidth: 10, usePointStyle: true, font: { size: 11 }, padding: 12,
+                              filter: it => it.datasetIndex !== 0 } },
+          tooltip: {
+            callbacks: {
+              title: it => cats[it[0].dataIndex] ?? '',
+              label: (ctx) => {
+                const r = vis[ctx.dataIndex];
+                if (!r) return '';
+                const signo = r.delta >= 0 ? '+' : '';
+                return [`${fmtN(r.from)} → ${fmtN(r.to)}`,
+                        `${signo}${fmtVal(r.delta, dec)}${unidad ? ' ' + unidad : ''}` +
+                        (r.pct == null ? '' : ` (${signo}${Math.round(r.pct)}%)`)];
+              },
+            },
+          },
+        },
+        scales: {
+          x: { display: config.style?.axes !== false, beginAtZero: _yAxis(config).zero,
+               ...(_yAxis(config).min != null ? { min: _yAxis(config).min } : {}),
+               ...(_yAxis(config).max != null ? { max: _yAxis(config).max } : {}),
+               grid: { color: 'rgba(148,163,184,0.18)', drawTicks: false },
+               ticks: { font: { size: 10 }, color: '#9CA3AF', callback: v => kfmt(v) } },
+          y: { display: config.style?.axes !== false, grid: { display: false },
+               ticks: { font: { size: 11 }, color: '#6B7280', autoSkip: false } },
+        },
+      },
+    });
+    if (opts.example) _appendExampleBadge(body);
+    _dumbbellNote(body, opts.dumbbellInfo, filas.length - vis.length);
+  }
+
+  /** Pie de la card: a quién no se pudo comparar, y cuántos quedaron fuera por el tope. */
+  function _dumbbellNote(body, info, recortadas) {
+    try {
+      const fuera = (info && info.dropped) || [];
+      if (!body || (!fuera.length && !recortadas)) return;
+      const partes = [];
+      if (recortadas) partes.push(_tt('gps_analysis.builder_bar_limit_note',
+        'Showing the first {n} · {r} more not shown', { n: '', r: recortadas }).replace(/^[^·]*·\s*/, ''));
+      if (fuera.length) partes.push(_tt('gps_analysis.delta2_dropped',
+        '{n} without data on one of the two dates, left out: {who}',
+        { n: fuera.length, who: fuera.slice(0, 3).join(', ') + (fuera.length > 3 ? '…' : '') }));
+      const note = document.createElement('div');
+      note.className = 'gp-dumbbell-note';
+      note.style.cssText = 'text-align:center;margin-top:2px;font:500 10.5px/1.3 var(--cm-font-sans);color:var(--cm-fg-muted)';
+      note.title = fuera.join(' · ');
+      note.innerHTML = `<i class="ti ti-info-circle" style="font-size:11px;vertical-align:-1px"></i> ${esc(partes.join(' · '))}`;
+      body.appendChild(note);
+    } catch (e) { /* un aviso nunca puede romper una card */ }
+  }
+
   function mountDemandCard(body, config, series, opts = {}) {
     destroyBodyChart(body);
     const rows = opts.demand || [];
@@ -7809,6 +7978,23 @@
   }
 
   /** Preview: datos reales si hay backend; si no, un perfil de sesión corta e intensa. */
+  /** Vista previa del «antes → después». Con datos reales resuelve la card de verdad; sin club
+   *  todavía, dibuja un ejemplo para que se entienda la forma antes de configurar nada. */
+  function mountDumbbellPreview(body, S) {
+    if (!S.metrics?.length) { destroyBodyChart(body); body.innerHTML = renderType(S); return; }
+    if (window.sb && _clubId) { resolveAndRenderCard(draftCard, buildConfig(S)); return; }
+    const ej = [
+      { label: 'Alfa, A.',  from: 4200, to: 5100 },
+      { label: 'Beta, B.',  from: 6100, to: 3300 },
+      { label: 'Gama, C.',  from: 3800, to: 4300 },
+      { label: 'Delta, D.', from: 5200, to: 4800 },
+    ].map(r => ({ ...r, delta: r.to - r.from, pct: (r.to - r.from) / r.from * 100 }));
+    const config = { viz: 'dumbbell', metrics: S.metrics, dimensions: S.dimensions || [],
+      scope: { level: S.scope }, style: { size: S.size, color: S.color, axes: S.axes, legend: S.legend },
+      __example: true };
+    mountDumbbellCard(body, config, [], { dumbbell: ej, example: true });
+  }
+
   function mountDemandPreview(body, S) {
     if (!S.metrics?.length) { destroyBodyChart(body); body.innerHTML = renderType(S); return; }
     if (window.sb && _clubId) { resolveAndRenderCard(draftCard, buildConfig(S)); return; }
