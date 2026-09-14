@@ -67,13 +67,25 @@ async function mockSupabase(page, opts = {}) {
       json: (route.request().headers()['accept'] || '').includes('pgrst.object') ? obj : [obj] });
 
     if (url.includes('/profiles'))
-      return uno({ id: 'user-1', club_id: 'club-1', name: 'Test User', role: 'coach', club_role: 'Head Coach' });
+      // El nombre a mostrar sale de full_name (o first+last), no de «name», que ya no se lee.
+      return uno({ id: 'user-1', club_id: 'club-1', full_name: 'Test User', first_name: 'Test',
+                   last_name: 'User', role: 'coach', club_role: 'Head Coach' });
 
     if (url.includes('/clubs'))
       return uno({ id: 'club-1', name: 'Test FC', accent_color: '#3B82F6' });
 
     if (url.includes('/microcycles'))
       return route.fulfill({ json: mcs });
+
+    // El rival del microciclo ya NO se lee de mc.rival: sale del partido en calendar_events, el
+    // último dentro del rango del MC. Sin este evento la celda «Target match» queda en «—».
+    if (url.includes('/calendar_events'))
+      return route.fulfill({ json: [{
+        id: 'ev-match-1', club_id: 'club-1', team_id: null, type: 'match',
+        date: MC.match_date, opponent: MC.rival, home_away: MC.home_away,
+        title: `vs ${MC.rival}`, competition: 'liga', rival_crest_url: null,
+        start_time: null, location: null,
+      }] });
 
     if (url.includes('/players'))
       return route.fulfill({ json: [], headers: { 'content-range': '*/5' } });
@@ -212,40 +224,12 @@ test.describe('Loading states', () => {
 
 // ── 3. NAVIGATION ─────────────────────────────────────────────────────────────
 
-test.describe('Week navigation', () => {
-  const LONG_MC = { ...MC, start_date: '2026-05-14', end_date: '2026-05-27' };
-
-  test('prev button disabled on week 1', async ({ page }) => {
-    await gotoCalendar(page, { mcs: [LONG_MC] });
-    await expect(page.locator('#calWeekPrev')).toBeDisabled();
-  });
-
-  test('next button navigates to week 2', async ({ page }) => {
-    await gotoCalendar(page, { mcs: [LONG_MC] });
-    await page.click('#calWeekNext');
-    await expect(page.locator('#calWeekLabel')).toContainText('Week 2');
-  });
-
-  test('prev button enabled after navigating to week 2', async ({ page }) => {
-    await gotoCalendar(page, { mcs: [LONG_MC] });
-    await page.click('#calWeekNext');
-    await expect(page.locator('#calWeekPrev')).toBeEnabled();
-  });
-
-  test('next button disabled on last week', async ({ page }) => {
-    await gotoCalendar(page, { mcs: [LONG_MC] });
-    await page.click('#calWeekNext');
-    await expect(page.locator('#calWeekNext')).toBeDisabled();
-  });
-
-  test('navigating back to week 1 re-disables prev button', async ({ page }) => {
-    await gotoCalendar(page, { mcs: [LONG_MC] });
-    await page.click('#calWeekNext');
-    await page.click('#calWeekPrev');
-    await expect(page.locator('#calWeekPrev')).toBeDisabled();
-    await expect(page.locator('#calWeekLabel')).toContainText('Week 1');
-  });
-});
+// La navegación por SEMANAS ya no existe: el calendario muestra el microciclo entero y el pager
+// sólo dice cuántos días dura (ver renderGrid, «Pager: hide prev/next, show total days only»).
+// Los cinco tests que vivían acá —prev/next entre semanas— probaban botones que la página
+// esconde a propósito. Se borran: un test de una función retirada no es deuda, es ruido que tapa
+// los rojos que sí importan. Para navegar entre microciclos está el menú de «MC switcher», que
+// tiene sus propios tests debajo.
 
 test.describe('MC switcher', () => {
   const MC2 = { ...MC, id: 'mc-2', name: 'MC 02', start_date: '2026-05-28', end_date: '2026-06-04' };
@@ -284,13 +268,13 @@ test.describe('Sidebar navigation', () => {
   test('clicking Squad link navigates to Squad.html', async ({ page }) => {
     await gotoCalendar(page);
     await page.click('a[href="Squad.html"]');
-    await expect(page).toHaveURL(/Squad\.html/);
+    await expect(page).toHaveURL(/Squad(\.html)?(\?|$)/);   // el server sirve sin «.html»
   });
 
   test('clicking Hub link navigates to Hub.html', async ({ page }) => {
     await gotoCalendar(page);
     await page.click('a[href="Hub.html"]');
-    await expect(page).toHaveURL(/Hub\.html/);
+    await expect(page).toHaveURL(/Hub(\.html)?(\?|$)/);     // el server sirve sin «.html»
   });
 });
 
