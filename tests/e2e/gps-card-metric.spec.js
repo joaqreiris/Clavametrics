@@ -4,7 +4,7 @@
 // Power BI llama field parameters — un selector, no un gemelo del gráfico por cada métrica.
 
 import { test, expect } from '@playwright/test';
-import { SB, injectSession, seedGpIds } from './_shared.js';
+import { SB, injectSession, seedGpIds, esperarDatosDeCard } from './_shared.js';
 
 test.describe.configure({ timeout: 60_000 });
 
@@ -63,7 +63,7 @@ async function open(page, cards = [CARD]) {
   await expect.poll(async () => page.evaluate((id) =>
     document.querySelectorAll(`.gp-view.is-on .gp-c[data-card-id="${id}"] canvas`).length, CARD.id
   ), { timeout: 30_000 }).toBeGreaterThan(0);
-  await page.waitForTimeout(800);
+  await esperarDatosDeCard(page, CARD.id);
   return patches;
 }
 
@@ -126,6 +126,9 @@ test.describe('GPS · cambiar la métrica desde la card', () => {
   test('una card anclada no se mueve cuando cambia el selector', async ({ page }) => {
     await open(page, [{ ...CARD, config: { ...CARD.config, style: { ...CARD.config.style, metricFollow: false } } }]);
     await page.evaluate(() => window.gpFilterBar.setMetrics(['high_speed_distance']));
+    // Se comprueba que la card anclada NO siga al selector. // NO cambiar este sleep por una condición: lo que se comprueba es una AUSENCIA, y para eso hay
+    // que darle tiempo a que la cosa ocurra y ver que no ocurrió. Una espera por condición pasaría
+    // por llegar antes, no porque el producto esté bien.
     await page.waitForTimeout(2500);
     const data = await page.evaluate((id) => {
       const cv = document.querySelector(`.gp-view.is-on .gp-c[data-card-id="${id}"] canvas`);

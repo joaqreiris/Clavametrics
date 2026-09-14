@@ -22,7 +22,7 @@
 // cascada nunca corría y los cuatro tests pasaban en verde con el bug puesto.
 
 import { test, expect } from '@playwright/test';
-import { SB, injectSession, seedGpIds } from './_shared.js';
+import { SB, injectSession, seedGpIds, esperarCardQuieta } from './_shared.js';
 
 test.describe.configure({ timeout: 90_000 });
 
@@ -138,7 +138,10 @@ const opciones = async (page) => {
     const t = document.querySelector('.fb-drop[data-key="position"] .fb-trigger');
     if (t && !t.closest('.fb-drop').classList.contains('is-open')) t.click();
   });
-  await page.waitForTimeout(350);
+  // El desplegable se llena al abrirse: esperar a que haya opciones en vez de 350 ms.
+  await expect.poll(async () => page.evaluate(() =>
+    document.querySelectorAll('.fb-drop[data-key="position"] .fb-opt input').length),
+    { timeout: 20_000 }).toBeGreaterThan(0);
   return page.evaluate(() =>
     [...document.querySelectorAll('.fb-drop[data-key="position"] .fb-opt input')].map(i => i.value));
 };
@@ -152,12 +155,20 @@ const enLaCard = (page) => page.evaluate(() => {
 
 /** Elige nivel + posición y espera a que las cards se rehagan. */
 async function filtrar(page, gran, pos) {
+  const antes = (await enLaCard(page)).length;
   await page.evaluate(async ([g, p]) => {
     window.gpFilterBar.setPosGranularity(g);
     await new Promise(r => setTimeout(r, 300));
     window.gpFilterBar.setValue('position', [p]);
   }, [gran, pos]);
-  await page.waitForTimeout(2200);
+  // «Menos que antes» no alcanzaba: se cumplía con cualquier baja intermedia y el test leía la
+  // card a mitad de rehacerse (vio 4 jugadores donde esperaba 1). Hay que esperar a que el filtro
+  // esté en el estado Y a que la card se haya quedado quieta.
+  await expect.poll(async () => page.evaluate(() =>
+    window.gpFilterBar.getState().positions || []), { timeout: 20_000 }).toEqual([pos]);
+  await esperarCardQuieta(page, 'card-pos');
+  await expect.poll(async () => (await enLaCard(page)).length,
+    { timeout: 30_000 }).toBeLessThan(antes);
 }
 
 test.describe('GPS · filtro de posiciones por nivel', () => {
@@ -203,7 +214,9 @@ test.describe('GPS · filtro de posiciones por nivel', () => {
     await open(page);
     expect(await opciones(page)).toContain('LB');          // detallado: el crudo
     await page.evaluate(() => window.gpFilterBar.setPosGranularity('basic'));
-    await page.waitForTimeout(800);
+    // Cambiar el nivel regenera los códigos: la señal es que ya no esté el crudo del nivel
+    // anterior. Las aserciones de abajo siguen comprobando qué códigos son.
+    await expect.poll(async () => opciones(page), { timeout: 20_000 }).not.toContain('LB');
     const basicas = await opciones(page);
     expect(basicas).toContain('FB');                       // proyectado
     expect(basicas).not.toContain('LB');
@@ -223,7 +236,10 @@ test.describe('GPS · filtro de posiciones por nivel', () => {
       await new Promise(r => setTimeout(r, 400));
       window.gpFilterBar.setValue('position', ['MF']);
     });
-    await page.waitForTimeout(1500);
+    // La señal es que el último setValue ya esté en el estado; lo que el test vigila es que al
+    // aplicarlo NO se borre el jugador, y eso lo comprueban las aserciones de abajo.
+    await expect.poll(async () => page.evaluate(() =>
+      window.gpFilterBar.getState().positions), { timeout: 20_000 }).toEqual(['MF']);
     const st = await page.evaluate(() => window.gpFilterBar.getState());
     expect(st.playerIds).toEqual(['p2']);                 // sigue elegido
     expect(st.positions).toEqual(['MF']);

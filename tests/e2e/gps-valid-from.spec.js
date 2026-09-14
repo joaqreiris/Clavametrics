@@ -9,7 +9,7 @@
 // El corte NO borra: las filas siguen en la base, sólo dejan de entrar al análisis.
 
 import { test, expect } from '@playwright/test';
-import { SB, injectSession, seedGpIds } from './_shared.js';
+import { SB, injectSession, seedGpIds, esperarDatosDeCard } from './_shared.js';
 
 test.describe.configure({ timeout: 90_000 });
 
@@ -96,7 +96,7 @@ async function open(page, validFrom) {
   await expect.poll(async () => page.evaluate(() =>
     document.querySelectorAll('.gp-view.is-on .gp-c[data-card-id="card-vf"] canvas').length
   ), { timeout: 45_000 }).toBeGreaterThan(0);
-  await page.waitForTimeout(700);
+  await esperarDatosDeCard(page, 'card-vf');
   return page.evaluate(() => {
     const cv = document.querySelector('.gp-view.is-on .gp-c[data-card-id="card-vf"] canvas');
     return window.Chart.getChart(cv).data.labels.map(String);

@@ -150,7 +150,9 @@ test.describe('GPS Builder — Init', () => {
     await injectSession(page);
     await mockGpsBuilder(page, { builderEnabled: false });
     await page.goto('/GPS Analysis.html');
-    // give time for init to run
+    // Se comprueba que con el flag apagado el botón NO aparezca. // NO cambiar este sleep por una condición: lo que se comprueba es una AUSENCIA, y para eso hay
+    // que darle tiempo a que la cosa ocurra y ver que no ocurrió. Una espera por condición pasaría
+    // por llegar antes, no porque el producto esté bien.
     await page.waitForTimeout(3000);
     await expect(page.locator('#gpbOpenBtn')).toHaveCount(0);
   });

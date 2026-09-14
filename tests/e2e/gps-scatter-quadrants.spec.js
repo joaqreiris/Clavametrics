@@ -4,7 +4,7 @@
 // propiedad, siguen viendo la cruz de medias de siempre.
 
 import { test, expect } from '@playwright/test';
-import { SB, injectSession, seedGpIds } from './_shared.js';
+import { SB, injectSession, seedGpIds, esperarDatosDeCard } from './_shared.js';
 
 const CLUB_ID = '11111111-1111-4111-8111-111111111111';
 const DASH = { id: 'dash-1', club_id: CLUB_ID, report_type: 'mgrp', name: 'Load Monitoring', scope: 'squad', is_shared: true, created_by: null };
@@ -58,7 +58,7 @@ async function open(page, cards) {
   await expect.poll(async () => page.evaluate(() =>
     document.querySelectorAll('.gp-view.is-on .gp-c[data-card-id="card-sc"] canvas').length
   ), { timeout: 30_000 }).toBeGreaterThan(0);
-  await page.waitForTimeout(1500);
+  await esperarDatosDeCard(page, 'card-sc');
 }
 
 /** Lo que el plugin de la cruz recibió ya resuelto. */

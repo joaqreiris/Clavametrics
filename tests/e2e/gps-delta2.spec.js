@@ -5,7 +5,7 @@
 // Acá queda una barra por jugador, verde si subió y roja si bajó.
 
 import { test, expect } from '@playwright/test';
-import { SB, injectSession, seedGpIds } from './_shared.js';
+import { SB, injectSession, seedGpIds, esperarDatosDeCard, esperarCardQuieta } from './_shared.js';
 
 test.describe.configure({ timeout: 90_000 });
 
@@ -91,13 +91,18 @@ async function open(page, rel = 'delta2') {
   await expect.poll(async () => page.evaluate(() =>
     document.querySelectorAll('.gp-view.is-on .gp-c[data-card-id="card-d2"] canvas').length
   ), { timeout: 45_000 }).toBeGreaterThan(0);
-  await page.waitForTimeout(600);
+  await esperarDatosDeCard(page, 'card-d2');
 }
 
 /** Elige los dos días en la barra de filtros y espera a que las cards se rehagan. */
 async function elegirDosDias(page, dias) {
   await page.evaluate(async (ds) => { window.gpFilterBar.setDateDays(ds); }, dias);
-  await page.waitForTimeout(2200);
+  // Primero que el filtro esté aplicado de verdad...
+  await expect.poll(async () => page.evaluate(() =>
+    !!window.gpFilterBar.getState().date), { timeout: 20_000 }).toBe(true);
+  // ...y después que la card se haya quedado quieta. No sirve «cambió»: uno de los tests de abajo
+  // comprueba justamente que SIN el modo puesto la card NO cambia. Eran 2200 ms fijos.
+  await esperarCardQuieta(page, 'card-d2');
 }
 
 const barras = (page) => page.evaluate(() => {

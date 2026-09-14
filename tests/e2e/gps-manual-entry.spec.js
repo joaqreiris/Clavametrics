@@ -100,7 +100,7 @@ async function openModal(page, opts) {
   // «Manual data» vive en el menú de Settings, no en la barra: es configuración, no algo de cada
   // visita. El botón sigue en el DOM porque el menú lo dispara por id, pero está oculto.
   await page.locator('#gpGearBtn').click();
-  await page.waitForTimeout(350);
+  await expect(page.locator('.gp-popover .gp-popover-item').first()).toBeVisible({ timeout: 20_000 });
   await page.evaluate(() => {
     const it = [...document.querySelectorAll('.gp-popover .gp-popover-item')]
       .find(b => /manual data|datos manuales|dados manuais/i.test(b.textContent || ''));

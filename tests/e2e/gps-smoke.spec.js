@@ -122,7 +122,8 @@ test.describe('GPS smoke — views mount', () => {
       await gotoView(page, view);
       // Grid present = the view actually mounted (not a blank shell).
       await expect(page.locator(`.gp-view[data-view="${view}"] .gp-grid`).first()).toBeVisible();
-      // Let each view's async init settle so a late throw is attributed here.
+      // Se recogen errores no capturados: hay que DARLE tiempo a cada vista a tirar uno tarde y
+      // ver que no lo tira. Es el mismo caso de una ausencia — no cambiar por una condición.
       await page.waitForTimeout(500);
     }
 

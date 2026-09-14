@@ -4,7 +4,7 @@
 // fuera — y que la consulta pida los valores individuales en vez de un promedio por grupo.
 
 import { test, expect } from '@playwright/test';
-import { SB, injectSession, seedGpIds } from './_shared.js';
+import { SB, injectSession, seedGpIds, esperarDatosDeCard } from './_shared.js';
 
 const CLUB_ID = '11111111-1111-4111-8111-111111111111';
 const DASH = { id: 'dash-1', club_id: CLUB_ID, report_type: 'mgrp', name: 'Load Monitoring', scope: 'squad', is_shared: true, created_by: null };
@@ -73,7 +73,9 @@ async function open(page, cards, { waitCanvas = true, sessions = SESSIONS, repor
     waitCanvas ? '.gp-view.is-on .gp-c[data-card-id="card-box"] canvas'
                : '.gp-view.is-on .gp-c[data-card-id="card-box"] .cb2-state:not(.load)'
   ), { timeout: 30_000 }).toBeGreaterThan(0);
-  await page.waitForTimeout(waitCanvas ? 1200 : 300);
+  // Con canvas, la señal son los DATOS del gráfico. Sin canvas ya se esperó el estado resuelto
+  // (.cb2-state:not(.load)) arriba, que es justo lo que el test va a leer: no hace falta más.
+  if (waitCanvas) await esperarDatosDeCard(page, 'card-box');
 }
 
 /** Opciones con las que se dibujan los que se salen. */

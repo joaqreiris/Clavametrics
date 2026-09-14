@@ -71,7 +71,9 @@ async function mount(page, { dashboards = DASHES, cards = [] } = {}) {
   await page.goto('/GPS Analysis.html');
   await page.waitForSelector('.gp-sections', { timeout: 15_000 });
   await page.evaluate((cid) => { window._gpClubId = cid; window._gpUserId = 'user-1'; }, CLUB_ID);
-  await page.waitForTimeout(1500);
+  // La señal es que el boot ya montó las cards de la vista activa, no 1500 ms de reloj.
+  await expect(page.locator('.gp-view.is-on .gp-c[data-card-id]').first())
+    .toBeAttached({ timeout: 20_000 });
   return { posts, live, cardsDb };
 }
 

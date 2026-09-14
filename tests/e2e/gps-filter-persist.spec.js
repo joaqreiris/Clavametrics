@@ -97,13 +97,30 @@ async function abrir(page) {
     window.gpFilterBar?.getState?.().restored === true), { timeout: 20_000 }).toBe(true);
 }
 
+/**
+ * Espera a que un filtro esté GUARDADO en localStorage, no sólo aplicado en memoria.
+ *
+ * setValue() actualiza el estado y persiste por separado. Mirar sólo el estado y recargar en
+ * seguida deja el guardado a mitad de camino: no hay nada que restaurar y el test falla culpando
+ * al restore. Los sleeps que había tapaban las dos cosas de una.
+ */
+async function esperarGuardado(page, valor) {
+  await expect.poll(async () => page.evaluate((v) =>
+    Object.keys(localStorage).filter(k => k.startsWith('cm_gpfilters_')
+      && (localStorage.getItem(k) || '').includes(v)).length, valor),
+    { timeout: 20_000 }).toBeGreaterThan(0);
+}
+
 test.describe('GPS · los filtros sobreviven al reload', () => {
   test('en Player Week Report, el jugador elegido sigue después de recargar', async ({ page }) => {
     await rutas(page);
     await injectSession(page);
     await abrir(page);
     await page.evaluate(() => window.gpFilterBar.setValue('player', ['p2']));
-    await page.waitForTimeout(1200);
+    // Acá NO alcanza con que el estado en memoria tenga el jugador: lo que este test recarga tiene
+    // que estar GUARDADO. El sleep que había cubría las dos cosas de una; esperar sólo el estado
+    // recarga antes de que el guardado llegue y no queda nada que restaurar.
+    await esperarGuardado(page, 'p2');
     expect((await page.evaluate(() => window.gpFilterBar.getState())).playerIds).toEqual(['p2']);
 
     await page.reload();
@@ -114,8 +131,9 @@ test.describe('GPS · los filtros sobreviven al reload', () => {
     // de que corra es leer una barra que todavía no cargó nada.
     await expect.poll(async () => page.evaluate(() =>
       window.gpFilterBar?.getState?.().restored === true), { timeout: 20_000 }).toBe(true);
-    await page.waitForTimeout(600);
-    expect((await page.evaluate(() => window.gpFilterBar.getState())).playerIds).toEqual(['p2']);
+    // Con restored===true ya alcanza: el jugador restaurado se espera por estado, no por reloj.
+    await expect.poll(async () => page.evaluate(() =>
+      window.gpFilterBar.getState().playerIds), { timeout: 20_000 }).toEqual(['p2']);
   });
 
   // «Corroborá que todos los dashboards lo hagan»: la clave sale del data-view, que TODAS las
@@ -127,13 +145,13 @@ test.describe('GPS · los filtros sobreviven al reload', () => {
     await injectSession(page);
     await abrir(page);
     await page.evaluate(() => window.gpFilterBar.setValue('player', ['p1']));   // en «ind»
-    await page.waitForTimeout(1000);
+    await esperarGuardado(page, 'p1');        // el guardado de «ind» tiene que haber caído...
 
     // A Session Control (data-view="grp"), que es otra pestaña y otro guardado.
     await page.evaluate(() => document.querySelector('#sections .gp-sec[data-view="grp"]')?.click());
-    await page.waitForTimeout(1200);
+    await expect(page.locator('.gp-view[data-view="grp"]')).toHaveClass(/is-on/);
     await page.evaluate(() => window.gpFilterBar.setValue('player', ['p2']));
-    await page.waitForTimeout(1200);
+    await esperarGuardado(page, 'p2');        // ...antes de mirar el de «grp»
 
     const claves = await page.evaluate(() => Object.fromEntries(
       Object.keys(localStorage).filter(k => k.startsWith('cm_gpfilters_'))
@@ -147,7 +165,7 @@ test.describe('GPS · los filtros sobreviven al reload', () => {
     await injectSession(page);
     await abrir(page);
     await page.evaluate(() => window.gpFilterBar.setValue('position', ['MF']));
-    await page.waitForTimeout(1200);
+    await esperarGuardado(page, 'MF');
     const claves = await page.evaluate(() =>
       Object.keys(localStorage).filter(k => k.startsWith('cm_gpfilters_') && (localStorage.getItem(k) || '').includes('MF')));
     // Una sola clave con ese filtro, y armada con el data-view estable — no con el uuid, que

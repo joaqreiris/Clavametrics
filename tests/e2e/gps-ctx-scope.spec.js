@@ -8,7 +8,7 @@
 // los PERÍODOS, no en la sesión—, así que mirar sólo la fila de sesión no alcanza.
 
 import { test, expect } from '@playwright/test';
-import { SB, injectSession, seedGpIds } from './_shared.js';
+import { SB, injectSession, seedGpIds, esperarDatosDeCard } from './_shared.js';
 
 test.describe.configure({ timeout: 90_000 });
 
@@ -112,7 +112,7 @@ async function abrir(page) {
   await expect.poll(async () => page.evaluate(() =>
     document.querySelectorAll('.gp-view.is-on .gp-c[data-card-id="card-ctx"] canvas').length
   ), { timeout: 30_000 }).toBeGreaterThan(0);
-  await page.waitForTimeout(800);
+  await esperarDatosDeCard(page, 'card-ctx');
 }
 
 /** Metros que muestra la card, por jugador. */
@@ -141,8 +141,12 @@ test.describe('GPS · el filtro de contexto recorta de verdad', () => {
 
   test('con «Rehab» se ve sólo el rehab, y el que no hizo desaparece', async ({ page }) => {
     await abrir(page);
+    const antes = JSON.stringify(await valores(page));
     await page.evaluate(() => window.gpFilterBar.setValue('work_context', ['rehab']));
-    await page.waitForTimeout(2500);
+    // La señal de que el filtro entró es que la card se rehizo con otros números; qué números
+    // tienen que ser lo comprueban las aserciones de abajo. Eran 2500 ms fijos.
+    await expect.poll(async () => JSON.stringify(await valores(page)),
+      { timeout: 30_000 }).not.toBe(antes);
     const v = await valores(page);
     const de = (ap) => v[Object.keys(v).find(k => k.includes(ap)) || ''];
     expect(de('Mixto')).toBe(3540);                    // sus 43' de rehab
@@ -151,11 +155,13 @@ test.describe('GPS · el filtro de contexto recorta de verdad', () => {
 
   test('con «Equipo» y «Rehab» juntos, se suman los dos', async ({ page }) => {
     await abrir(page);
+    const antes = JSON.stringify(await valores(page));
     await page.evaluate(() => {
       window.gpFilterBar.setValue('work_context', ['team']);
       window.gpFilterBar.setValue('work_context', ['rehab'], { additive: true });
     });
-    await page.waitForTimeout(2500);
+    await expect.poll(async () => JSON.stringify(await valores(page)),
+      { timeout: 30_000 }).not.toBe(antes);
     const v = await valores(page);
     const de = (ap) => v[Object.keys(v).find(k => k.includes(ap)) || ''];
     expect(de('Mixto')).toBe(3806);                    // 3540 + 266, el día entero

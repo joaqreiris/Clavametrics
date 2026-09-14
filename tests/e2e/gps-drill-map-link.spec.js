@@ -65,6 +65,9 @@ test.describe('Exercises Library — enlace del wizard al mapeo de drills', () =
     const hits = await mockLibrary(page);
     await page.goto(LIB);
     await page.waitForSelector('#slMapDrillsBtn', { timeout: 15_000 });
+    // Se comprueba que la página NO consulte los nombres de período. // NO cambiar este sleep por una condición: lo que se comprueba es una AUSENCIA, y para eso hay
+    // que darle tiempo a que la cosa ocurra y ver que no ocurrió. Una espera por condición pasaría
+    // por llegar antes, no porque el producto esté bien.
     await page.waitForTimeout(2000);
     expect(hits.periodNames).toBe(0);
   });

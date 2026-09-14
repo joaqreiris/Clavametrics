@@ -48,12 +48,13 @@ async function abrir(page) {
   await page.goto('/GPS Analysis.html');
   await page.waitForSelector('.gp-sections', { timeout: 15_000 });
   await page.evaluate((cid) => { window._gpClubId = cid; window._gpUserId = 'user-1'; }, CLUB_ID);
-  await page.waitForTimeout(900);
+  // Lo que los tests necesitan es el engranaje, que lo dibuja el boot: esperarlo a él, no 900 ms.
+  await expect(page.locator('#gpGearBtn')).toBeVisible({ timeout: 20_000 });
 }
 
 const menu = async (page) => {
   await page.click('#gpGearBtn');
-  await page.waitForTimeout(400);
+  await expect(page.locator('.gp-popover .gp-popover-item').first()).toBeVisible({ timeout: 20_000 });
   return page.evaluate(() => [...document.querySelectorAll('.gp-popover .gp-popover-item')]
     .map(b => (b.textContent || '').trim()).filter(Boolean));
 };
@@ -76,14 +77,16 @@ test.describe('GPS · menú de Settings', () => {
   test('el panel abre en «por período» y en el último día con datos, no dos meses atrás', async ({ page }) => {
     await abrir(page);
     await page.click('#gpGearBtn');
-    await page.waitForTimeout(400);
+    await expect(page.locator('.gp-popover .gp-popover-item').first()).toBeVisible({ timeout: 20_000 });
     await page.evaluate(() => {
       const b = [...document.querySelectorAll('.gp-popover .gp-popover-item')]
         .find(x => /rehab/i.test(x.textContent || ''));
       b?.click();
     });
     await page.waitForSelector('#tagBody', { timeout: 10_000 });
-    await page.waitForTimeout(1200);
+    // El panel se abre y DESPUÉS elige pestaña y fechas; la señal es la pestaña de períodos ya
+    // dibujada, que es lo primero que mira el test.
+    await expect(page.locator('#tagTabPeriod')).toBeVisible({ timeout: 20_000 });
     // Las dos pestañas están, y arranca en la de períodos.
     expect(await page.locator('#tagTabPeriod').isVisible()).toBe(true);
     expect(await page.locator('#tagTabSession').isVisible()).toBe(true);

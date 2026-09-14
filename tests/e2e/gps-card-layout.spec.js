@@ -143,6 +143,13 @@ test('el layout guarda el tamaño que la card ocupa de verdad, no el de su bucke
   const { patches } = await mount(page, [KPI]);
   const card = page.locator(`.gp-view.is-on .gp-c[data-card-id="${KPI.id}"]`).first();
   await expect(card).toBeVisible({ timeout: 30_000 });
+  // INESTABLE, y a propósito se deja como está. Este test mide el tamaño exacto (--gp-w/--gp-h) y
+  // después exige que saveLayout emita un PATCH NUEVO tras vaciar `patches`. Probado el
+  // 2026-09-14: cambiando el sleep por una espera a que el tamaño se estabilice, el test pasa
+  // 16/16 corrido solo y falla SIEMPRE dentro de la suite entera — y falla en el poll de
+  // `patches.length`, o sea que saveLayout no manda nada. No es cuestión de esperar más ni menos;
+  // hay algo en cuándo se considera "sucio" el layout que no está entendido. Cambiar este sleep
+  // sin resolver eso primero empeora las cosas: lo deja rojo en vez de intermitente.
   await page.waitForTimeout(1200);
 
   // Lo que se ve: el tile compacto ocupa 2 columnas × 3 filas.

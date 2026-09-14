@@ -4,7 +4,7 @@
 // misma barra o la misma caja. Como dimensión, cada contexto es su propio grupo.
 
 import { test, expect } from '@playwright/test';
-import { SB, injectSession, seedGpIds } from './_shared.js';
+import { SB, injectSession, seedGpIds, esperarDatosDeCard } from './_shared.js';
 
 test.describe.configure({ timeout: 60_000 });
 
@@ -66,7 +66,7 @@ async function open(page, cards) {
   await expect.poll(async () => page.evaluate(() =>
     document.querySelectorAll('.gp-view.is-on .gp-c[data-card-id="card-ctx"] canvas').length
   ), { timeout: 30_000 }).toBeGreaterThan(0);
-  await page.waitForTimeout(1000);
+  await esperarDatosDeCard(page, 'card-ctx');
 }
 
 /** Categorías y valores ya dibujados. */

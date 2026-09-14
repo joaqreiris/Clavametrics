@@ -66,7 +66,14 @@ async function open(page, cards) {
       + document.querySelectorAll('.gp-view.is-on .gp-c[data-card-id]').length ? 
       (document.querySelector('.gp-view.is-on .gp-c[data-card-id] .cb2-state.load') ? 0 : 1) : 1
   ), { timeout: 30_000 }).toBe(1);
-  await page.waitForTimeout(400);
+  // El spinner ya se fue; lo que falta es que el gráfico tenga sus datos.
+  await expect.poll(async () => page.evaluate(() => {
+    const cv = document.querySelector('.gp-view.is-on .gp-c[data-card-id] canvas');
+    const ch = cv && window.Chart?.getChart(cv);
+    if (!ch) return 1;   // esta card puede resolver sin canvas: no bloquear por eso
+    const puntos = (ch.data?.datasets || []).reduce((n, d) => n + ((d.data || []).length), 0);
+    return (ch.data?.labels || []).length + puntos;
+  }), { timeout: 20_000 }).toBeGreaterThan(0);
 }
 
 test.describe('GPS · alcance de una card', () => {

@@ -1,6 +1,8 @@
 // @ts-check
 // Shared fixtures and mock helpers for all module specs
 
+import { expect } from '@playwright/test';
+
 export const SB = 'https://xesrumijvdmqjrufgeka.supabase.co';
 
 export const PROFILE = {
@@ -105,4 +107,64 @@ export async function seedGpIds(page, clubId, userId = 'user-1') {
     window._gpClubId = c;
     if (u !== null) window._gpUserId = u;
   }, [clubId, userId]);
+}
+
+/**
+ * Espera a que una card ya tenga DATOS dibujados, no sólo su <canvas>.
+ *
+ * El canvas aparece primero y los datos llegan después, así que `toHaveCount(1)` sobre el canvas se
+ * cumple antes de que haya algo que leer. El atajo era dormir 600-800 ms y cruzar los dedos: con la
+ * máquina cargada no alcanzaba —el test leía labels vacíos y fallaba con cara de bug del producto—
+ * y con la máquina libre sobraba, pagando la espera completa en cada caso.
+ *
+ * Mide labels + puntos de todos los datasets, así que sirve igual para barras, líneas y scatter.
+ */
+export async function esperarDatosDeCard(page, cardId, { timeout = 30_000 } = {}) {
+  await expect.poll(async () => page.evaluate((id) => {
+    const cv = document.querySelector(`.gp-view.is-on .gp-c[data-card-id="${id}"] canvas`);
+    const ch = cv && window.Chart?.getChart(cv);
+    if (!ch) return 0;
+    const puntos = (ch.data?.datasets || []).reduce((n, d) => n + ((d.data || []).length), 0);
+    return (ch.data?.labels || []).length + puntos;
+  }, cardId), { timeout }).toBeGreaterThan(0);
+}
+
+/**
+ * Espera a que las cards de la vista activa estén COLOCADAS por el lienzo libre: en el DOM pueden
+ * estar con alto 0 o fuera de sitio hasta que corre la colocación.
+ */
+export async function esperarCardsColocadas(page, cuantas, { timeout = 30_000 } = {}) {
+  await expect.poll(async () => page.evaluate(() =>
+    [...document.querySelectorAll('.gp-view.is-on .gp-c[data-card-id]')]
+      .filter(el => { const r = el.getBoundingClientRect(); return r.width > 50 && r.height > 50; })
+      .length
+  ), { timeout }).toBeGreaterThanOrEqual(cuantas);
+}
+
+/**
+ * Espera a que una card deje de cambiar: N lecturas seguidas iguales del gráfico.
+ *
+ * Para cuando NO se puede usar «cambió a X» como señal, porque según el caso la card cambia o se
+ * queda igual a propósito (un modo apagado, una card anclada). «Cambió» fallaría en los casos que
+ * esperan que no cambie, y un reloj fijo no sabe nada de la máquina.
+ *
+ * Limitación conocida, y es la razón de pedir VARIAS lecturas iguales y no dos: si se pregunta
+ * antes de que el redibujado arranque, las primeras lecturas coinciden en el valor viejo. Con el
+ * estado del filtro ya aplicado antes de llamar acá, la ventana es chica.
+ */
+export async function esperarCardQuieta(page, cardId, { lecturas = 3, timeout = 30_000 } = {}) {
+  const leer = () => page.evaluate((id) => {
+    const cv = document.querySelector(`.gp-view.is-on .gp-c[data-card-id="${id}"] canvas`);
+    const ch = cv && window.Chart?.getChart(cv);
+    if (!ch) return 'sin-grafico';
+    return JSON.stringify({ l: ch.data?.labels || [],
+                            d: (ch.data?.datasets || []).map(x => x.data || []) });
+  }, cardId);
+  let previo = null, iguales = 0;
+  await expect.poll(async () => {
+    const ahora = await leer();
+    iguales = (ahora === previo) ? iguales + 1 : 0;
+    previo = ahora;
+    return iguales;
+  }, { timeout, intervals: [120, 150, 150, 200, 250] }).toBeGreaterThanOrEqual(lecturas - 1);
 }

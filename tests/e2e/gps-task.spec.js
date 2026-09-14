@@ -5,7 +5,7 @@
 // por qué. Se monta en un dashboard CUSTOM (report_type null), que es donde viven estas cards.
 
 import { test, expect } from '@playwright/test';
-import { SB, injectSession, seedGpIds } from './_shared.js';
+import { SB, injectSession, seedGpIds, esperarDatosDeCard, esperarCardsColocadas } from './_shared.js';
 
 const CLUB_ID = '11111111-1111-4111-8111-111111111111';
 const DASH = { id: '22222222-2222-4222-8222-222222222222', club_id: CLUB_ID, report_type: null, name: 'DRILL ANALYSIS', scope: 'squad', is_shared: true, created_by: null };
@@ -126,8 +126,9 @@ test.describe('GPS · cards de ejercicios (source=task)', () => {
     await page.locator('.gp-sec[data-custom]').click();
     await expect(page.locator('.gp-view.is-on .gp-c[data-card-id]')).toHaveCount(2, { timeout: 15_000 });
     // Ambas tienen que quedar VISIBLES (no basta con estar en el DOM: la colocación libre las
-    // puede dejar con altura 0 o fuera del lienzo).
-    await page.waitForTimeout(1500);
+    // puede dejar con altura 0 o fuera del lienzo). Esperar a que el lienzo las haya colocado de
+    // verdad, que es lo que miden las aserciones de abajo, en lugar de 1500 ms a ojo.
+    await esperarCardsColocadas(page, 2);
     const boxes = await page.evaluate(() => [...document.querySelectorAll('.gp-view.is-on .gp-c[data-card-id]')]
       .map(el => { const r = el.getBoundingClientRect(); return { id: el.dataset.cardId, w: Math.round(r.width), h: Math.round(r.height), y: Math.round(r.top), ds: { x: el.dataset.x, y: el.dataset.y, w: el.dataset.w, h: el.dataset.h }, pos: getComputedStyle(el).position }; }));
     for (const b of boxes) { expect(b.w).toBeGreaterThan(50); expect(b.h).toBeGreaterThan(50); }
@@ -154,7 +155,8 @@ test.describe('GPS · cards de ejercicios (source=task)', () => {
     await page.locator('input.gpt-rename').fill('DRILLS');
     await page.keyboard.press('Enter');
 
-    await page.waitForTimeout(600);
+    // La señal del renombrado es el nombre nuevo en la pestaña, no 600 ms.
+    await expect(page.locator('.gp-sec[data-custom]')).toContainText('DRILLS');
     // Sigue habiendo una vista activa, y es la del dashboard renombrado, con su card.
     await expect(page.locator('.gp-view.is-on')).toHaveCount(1);
     await expect(page.locator('.gp-view.is-on .gp-c[data-card-id="card-task"]')).toHaveCount(1, { timeout: 15_000 });
@@ -173,7 +175,7 @@ test.describe('GPS · cards de ejercicios (source=task)', () => {
     await openTask(page, cards);
     await page.locator('.gp-sec[data-custom]').click();
     await expect(page.locator('.gp-view.is-on .gp-c[data-card-id="card-line"] canvas')).toHaveCount(1, { timeout: 20_000 });
-    await page.waitForTimeout(600);
+    await esperarDatosDeCard(page, 'card-line');
     const labels = await page.evaluate(() => {
       const cv = document.querySelector('.gp-view.is-on .gp-c[data-card-id="card-line"] canvas');
       return window.Chart.getChart(cv).data.labels;
@@ -197,7 +199,7 @@ test.describe('GPS · cards de ejercicios (source=task)', () => {
     await openTask(page, cards);
     await page.locator('.gp-sec[data-custom]').click();
     await expect(page.locator('.gp-view.is-on .gp-c[data-card-id="card-sc"] canvas')).toHaveCount(1, { timeout: 20_000 });
-    await page.waitForTimeout(600);
+    await esperarDatosDeCard(page, 'card-sc');
     const pts = await page.evaluate(() => {
       const cv = document.querySelector('.gp-view.is-on .gp-c[data-card-id="card-sc"] canvas');
       const ch = window.Chart.getChart(cv);
@@ -252,7 +254,11 @@ test.describe('GPS · card en borrador del chart builder', () => {
     await openTask(page);
     await page.locator('.gp-sec[data-custom]').click();
     await page.locator('#gpbOpenBtn').first().click();
-    await page.waitForTimeout(1200);
+    // El borrador aparece y DESPUÉS el lienzo le da tamaño; lo que mide el test es ese tamaño.
+    await expect.poll(async () => page.evaluate(() => {
+      const el = document.querySelector('.gp-view.is-on .gp-c.is-draft');
+      return el ? Math.round(el.getBoundingClientRect().height) : 0;
+    }), { timeout: 30_000 }).toBeGreaterThan(50);
     const d = await page.evaluate(() => {
       const el = document.querySelector('.gp-view.is-on .gp-c.is-draft');
       if (!el) return null;
@@ -272,9 +278,15 @@ test.describe('GPS · card en borrador del chart builder', () => {
     await openTask(page);
     await page.locator('.gp-sec[data-custom]').click();
     await page.locator('#gpbOpenBtn').first().click();
-    await page.waitForTimeout(800);
+    await expect(page.locator('#gpbPanel')).toBeVisible();
     await page.locator('[data-type="scatter"]').first().click();
-    await page.waitForTimeout(1000);
+    await expect(page.locator('[data-type="scatter"]').first()).toHaveClass(/is-on/);
+    // Elegir el tipo rehace el borrador: la señal es que vuelva a tener tamaño, que es lo que mide
+    // el test. Eran 800 + 1000 ms a ojo.
+    await expect.poll(async () => page.evaluate(() => {
+      const el = document.querySelector('.gp-view.is-on .gp-c.is-draft');
+      return el ? (+el.dataset.w || 0) : 0;
+    }), { timeout: 30_000 }).toBeGreaterThan(0);
     const d = await page.evaluate(() => {
       const el = document.querySelector('.gp-view.is-on .gp-c.is-draft');
       const otras = [...document.querySelectorAll('.gp-view.is-on .gp-c:not(.is-draft)')];
@@ -303,9 +315,12 @@ test.describe('GPS · card en borrador del chart builder', () => {
       style: { color: '#15803D', size: 'md', span: 12, canvas: { x: 0, y: 0, w: 12, h: 11, size: 'md' } } } }];
     await openTask(page, cards);
     await page.locator('.gp-sec[data-custom]').click();
-    await page.waitForTimeout(1200);            // deja que el lienzo coloque la card guardada
+    await esperarCardsColocadas(page, 1);       // el lienzo ya colocó la card guardada
     await page.locator('#gpbOpenBtn').first().click();
-    await page.waitForTimeout(1200);
+    await expect.poll(async () => page.evaluate(() => {
+      const el = document.querySelector('.gp-view.is-on .gp-c.is-draft');
+      return el ? (+el.dataset.w || 0) : 0;
+    }), { timeout: 30_000 }).toBeGreaterThan(0);
     const d = await page.evaluate(() => {
       const el = document.querySelector('.gp-view.is-on .gp-c.is-draft');
       const otras = [...document.querySelectorAll('.gp-view.is-on .gp-c:not(.is-draft)')];
@@ -351,7 +366,7 @@ test.describe('GPS · comparar ejercicios de distinta duración', () => {
     await openTask(page, cardCon([{ id: 'very_high_speed_distance_per_min', agg: 'avg', kind: 'avg', unit: 'm/min' }]));
     await page.locator('.gp-sec[data-custom]').click();
     await expect(page.locator('.gp-view.is-on .gp-c[data-card-id="card-dur"] canvas')).toHaveCount(1, { timeout: 20_000 });
-    await page.waitForTimeout(800);
+    await esperarDatosDeCard(page, 'card-dur');
     await expect(aviso(page)).toHaveCount(0);
   });
 });
@@ -371,7 +386,7 @@ test.describe('GPS · carga mecánica por minuto', () => {
     await openTask(page, cards);
     await page.locator('.gp-sec[data-custom]').click();
     await expect(page.locator('.gp-view.is-on .gp-c[data-card-id="card-ad"] canvas')).toHaveCount(1, { timeout: 20_000 });
-    await page.waitForTimeout(700);
+    await esperarDatosDeCard(page, 'card-ad');
     const vals = await page.evaluate(() => {
       const cv = document.querySelector('.gp-view.is-on .gp-c[data-card-id="card-ad"] canvas');
       const ch = window.Chart.getChart(cv);
@@ -404,7 +419,7 @@ test.describe('GPS · orientación del ejercicio', () => {
     await openTask(page, cardCon([{ id: 'orientation' }]));
     await page.locator('.gp-sec[data-custom]').click();
     await expect(page.locator('.gp-view.is-on .gp-c[data-card-id="card-or"] canvas')).toHaveCount(1, { timeout: 20_000 });
-    await page.waitForTimeout(700);
+    await esperarDatosDeCard(page, 'card-or');
     const l = await etiquetas(page);
     expect(l).toHaveLength(2);
     // «STRENGTH» se muestra como en la Biblioteca de ejercicios, no en crudo.
@@ -416,11 +431,13 @@ test.describe('GPS · orientación del ejercicio', () => {
     await openTask(page, cardCon([{ id: 'drill' }]));
     await page.locator('.gp-sec[data-custom]').click();
     await expect(page.locator('.gp-view.is-on .gp-c[data-card-id="card-or"] canvas')).toHaveCount(1, { timeout: 20_000 });
-    await page.waitForTimeout(700);
+    await esperarDatosDeCard(page, 'card-or');
     expect(await etiquetas(page)).toHaveLength(2);       // los dos ejercicios
 
     await page.evaluate(() => window.gpFilterBar.setValue('orientation', ['STRENGTH']));
-    await page.waitForTimeout(1200);
+    // La señal de que el filtro entró es que la serie se recortó; el nombre lo comprueba la
+    // aserción de abajo, que es la que de verdad importa.
+    await expect.poll(async () => (await etiquetas(page)).length, { timeout: 30_000 }).toBe(1);
     const l = await etiquetas(page);
     expect(l).toHaveLength(1);                            // sólo el de fuerza
     expect(l[0]).toBe('Rondo');
@@ -433,7 +450,11 @@ test.describe('GPS · orientación del ejercicio', () => {
       dimensions: [{ id: 'player_name' }], style: { color: '#15803D' } } }];
     await openTask(page, sesion);
     await page.locator('.gp-sec[data-custom]').click();
-    await page.waitForTimeout(1200);
+    // Se comprueba una AUSENCIA (que no se ofrezca el filtro), así que hay que esperar a que la
+    // barra esté dibujada: si no, el test pasaría por llegar antes, no porque el filtro no esté.
+    // Nada de esperar un canvas: esta card es de sesión y con estos mocks se dibuja vacía.
+    await expect(page.locator('.gp-view.is-on .gp-c[data-card-id="card-ses"]')).toHaveCount(1, { timeout: 20_000 });
+    await expect(page.locator('.fb-drop').first()).toBeAttached({ timeout: 20_000 });
     const visible = await page.evaluate(() => {
       const d = document.querySelector('.fb-drop[data-key="orientation"]');
       return !!d && !d.classList.contains('fb-hidden');

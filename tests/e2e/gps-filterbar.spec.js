@@ -41,7 +41,11 @@ async function open(page) {
   // carrera que el usuario real no corre: él espera a que la página cargue.
   await expect.poll(async () => page.evaluate(() =>
     window.gpFilterBar?.getState?.().restored === true), { timeout: 20_000 }).toBe(true);
-  await page.waitForTimeout(600);
+  // Con restored===true el estado ya está; lo que falta es que la barra esté DIBUJADA, que es lo
+  // que miran los tests (qué desplegables se ven).
+  // OJO: acá NO vale esperar rowCount>0 — este spec no carga filas y la barra queda legítimamente
+  // vacía de datos. Probado: con esa condición se caían 6 de los 7 tests.
+  await expect(page.locator('.fb-drop').first()).toBeAttached({ timeout: 20_000 });
 }
 
 /** Filtros que se ven en la barra (los ocultos llevan .fb-hidden). */
@@ -106,7 +110,7 @@ test.describe('GPS · barra de filtros', () => {
     await open(page);
     // Se pone un valor a «tipo de sesión» aunque el filtro no esté en la barra…
     await page.evaluate(() => window.gpFilterBar.setValue('session_type', ['training']));
-    await page.waitForTimeout(600);
+    // El sleep sobraba: la aserción de abajo ya es un poll que espera lo que importa.
     // …y la barra lo muestra igual: esconder algo que está filtrando sería mentir.
     await expect.poll(async () => (await visibles(page)).includes('session_type'), { timeout: 6_000 }).toBe(true);
   });

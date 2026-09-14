@@ -71,21 +71,48 @@ async function abrir(page) {
     window.updateDashboardCard = async (id, cfg, sb) => { window.__saved.push(JSON.parse(JSON.stringify(cfg))); return real ? real(id, cfg, sb) : null; };
   });
   await page.waitForSelector(`${CARD_SEL} .gp-zt th`, { timeout: 30_000 });
-  await page.waitForTimeout(400);
+  // Que existan los <th> no quiere decir que la tabla ya tenga sus anchos: los guardados se
+  // aplican después de dibujar. Como acá se miden PÍXELES, la señal correcta no es un reloj sino
+  // que el ancho deje de moverse.
+  await anchoEstable(page, 1);
+}
+
+/** Espera a que el ancho de una columna deje de cambiar (dos lecturas iguales seguidas). */
+async function anchoEstable(page, i) {
+  let previo = -1;
+  await expect.poll(async () => {
+    const ahora = await anchoDe(page, i);
+    const quieto = ahora > 0 && ahora === previo;
+    previo = ahora;
+    return quieto;
+  }, { timeout: 20_000, intervals: [100, 150, 200, 300] }).toBe(true);
 }
 
 /** Arrastra el agarre de una columna `dx` píxeles. */
 async function estirar(page, indice, dx) {
+  const anchoAntes = await anchoDe(page, indice);
   const th = page.locator(`${CARD_SEL} .gp-zt thead th`).nth(indice);
   await th.scrollIntoViewIfNeeded();   // la card vive abajo del todo: sin esto el ratón no le pega
-  await page.waitForTimeout(250);
   const grip = th.locator('.tf-rs');
+  // El scroll puede seguir corriendo: si se lee la caja a mitad de camino, el ratón apunta a un
+  // sitio que ya no es. Se espera a que la posición se quede quieta.
+  let prevY = -1;
+  await expect.poll(async () => {
+    const b = await grip.boundingBox();
+    const quieto = !!b && Math.round(b.y) === prevY;
+    prevY = b ? Math.round(b.y) : -1;
+    return quieto;
+  }, { timeout: 20_000, intervals: [100, 150, 200, 300] }).toBe(true);
   const box = await grip.boundingBox();
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.down();
   await page.mouse.move(box.x + box.width / 2 + dx, box.y + box.height / 2, { steps: 8 });
   await page.mouse.up();
-  await page.waitForTimeout(500);
+  // Todos los que llaman a esto cambian el ancho (lo agrandan o lo achican): la señal es que el
+  // ancho ya no sea el de antes, y que se haya quedado quieto. Eran 500 ms de fe.
+  await expect.poll(async () => anchoDe(page, indice),
+    { timeout: 20_000 }).not.toBe(anchoAntes);
+  await anchoEstable(page, indice);
 }
 
 const anchoDe = (page, i) => page.locator(`${CARD_SEL} .gp-zt thead th`).nth(i)
@@ -117,8 +144,7 @@ test.describe('GPS · ancho de columna en la tabla', () => {
     await estirar(page, 1, 50);
     expect(await orden()).toBeNull();          // el agarre se llevó el click
     await page.locator(`${CARD_SEL} .gp-zt thead th`).nth(1).click({ position: { x: 8, y: 8 } });
-    await page.waitForTimeout(400);
-    expect(await orden()).not.toBeNull();      // el encabezado sí sigue ordenando
+    await expect.poll(orden, { timeout: 20_000 }).not.toBeNull();   // el encabezado sí ordena
   });
 
   test('el ancho se guarda con la card', async ({ page }) => {
