@@ -140,7 +140,11 @@
         <div id="pfTrialsSummary" class="pf-tsum"></div>
         <div class="pf-tbar">
           <div id="pfTrialsFilters" class="pf-tfilters"></div>
-          <button id="pfTrialsExport" class="pf-mini"><i class="ti ti-download"></i> <span data-i18n="platform.export_csv">Export CSV</span></button>
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+            <span id="pfSyncMsg" style="font-size:12px;color:var(--cm-fg-muted)"></span>
+            <button id="pfTrialsSync" class="pf-mini"><i class="ti ti-refresh"></i> <span data-i18n="platform.sync_hubspot">Sync to CRM</span></button>
+            <button id="pfTrialsExport" class="pf-mini"><i class="ti ti-download"></i> <span data-i18n="platform.export_csv">Export CSV</span></button>
+          </div>
         </div>
         <div id="pfTrialsList" style="font-size:13px" data-i18n="common.loading">Loading…</div>
       </div>
@@ -755,7 +759,36 @@
       }
     }
 
+    /* ── Empujar el pipeline al CRM ──────────────────────────────────────────
+       Lo mismo que hace el cron cada noche, a mano. Sirve para no esperar hasta
+       mañana después de hablar con un club, y para ver el error cuando algo falla
+       (una propiedad que no existe, el token vencido). */
+    async function sincronizar(){
+      const btn = $('pfTrialsSync'), msg = $('pfSyncMsg');
+      if (!btn) return;
+      btn.disabled = true;
+      msg.textContent = tt('platform.sync_running','Syncing…');
+      try{
+        const { data, error } = await sb.functions.invoke('hubspot-sync', { body: { action: 'sync' } });
+        if (error) throw error;
+        if (data && data.ok) {
+          msg.textContent = data.sincronizados + ' ' + tt('platform.sync_ok','contacts synced');
+          // Una propiedad que falta no rompe la sincronización, pero deja el CRM a
+          // medias sin decirlo: se avisa acá o nadie se entera.
+          if (data.propiedades_faltantes && data.propiedades_faltantes.length) {
+            msg.textContent += ' · ' + tt('platform.sync_missing','missing in HubSpot:') + ' ' + data.propiedades_faltantes.join(', ');
+          }
+        } else {
+          msg.textContent = tt('platform.sync_fail','Sync failed') + (data && data.error ? (': ' + data.error) : '');
+        }
+      }catch(e){
+        msg.textContent = tt('platform.sync_fail','Sync failed') + ': ' + (e.message || e);
+      }
+      btn.disabled = false;
+    }
+
     window.pfLoadTrials = load;
+    $('pfTrialsSync')?.addEventListener('click', sincronizar);
     $('pfTrialsExport')?.addEventListener('click', exportar);
     document.addEventListener('cm:langchanged', ()=>{ try{ if($('pfTrials')?.classList.contains('is-active')) load(); }catch(e){} });
   })();
