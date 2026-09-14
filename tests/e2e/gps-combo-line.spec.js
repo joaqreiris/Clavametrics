@@ -233,3 +233,51 @@ test.describe('GPS · decimales', () => {
   });
 });
 
+// Cuántas barras mostrar. Con 27 jugadores una card de plantel es ilegible: barras de dos píxeles
+// y nombres del eje pisados. El recorte va DESPUÉS de ordenar, así que «las primeras 5» con
+// High→low son las cinco de más carga — y la media sigue siendo la del plantel entero, porque se
+// calcula antes de recortar.
+const cardTope = (barLimit, sort) => ([{ id: 'card-combo', position: 0, source: 'builder', size: 'lg', config: {
+  schema: 'gp.card/v1', title: 'Distancia por jugador', viz: 'bars', scope: { level: 'squad' },
+  metrics: [{ id: 'total_distance', agg: 'avg' }],
+  dimensions: [{ id: 'player' }], range: { type: 'last30' },
+  ...(sort ? { sort } : {}),
+  style: { color: '#2563EB', ...(barLimit ? { barLimit } : {}) } } }]);
+
+const barras = (page) => page.evaluate(() => {
+  const cv = document.querySelector('.gp-view.is-on .gp-c[data-card-id="card-combo"] canvas');
+  const ch = window.Chart.getChart(cv);
+  const ds = ch.data.datasets.find(d => d.type === 'bar') || ch.data.datasets[0];
+  return { etiquetas: ch.data.labels.map(String), valores: ds.data.map(Number) };
+});
+
+test.describe('GPS · cuántas barras mostrar', () => {
+  test('sin tope se dibujan todas', async ({ page }) => {
+    await open(page, cardTope(null));
+    const b = await barras(page);
+    expect(b.etiquetas.length).toBeGreaterThan(2);
+  });
+
+  test('con tope 2 quedan dos, y avisa cuántas faltan', async ({ page }) => {
+    await open(page, cardTope(2));
+    const b = await barras(page);
+    expect(b.etiquetas).toHaveLength(2);
+    const nota = await page.evaluate(() =>
+      document.querySelector('.gp-c[data-card-id="card-combo"] .gp-barlimit-note')?.textContent?.trim() || '');
+    expect(nota, 'no avisa que recortó').not.toBe('');
+    expect(nota).toMatch(/\b2\b/);
+  });
+
+  test('el recorte respeta el orden: con High→low quedan las de más carga', async ({ page }) => {
+    await open(page, cardTope(1, { col: 'total_distance', dir: 'desc' }));
+    const b = await barras(page);
+    expect(b.valores).toHaveLength(1);
+    // La que queda tiene que ser la más alta de todas, no la primera del eje.
+    const todas = await (async () => {
+      await open(page, cardTope(null, { col: 'total_distance', dir: 'desc' }));
+      return (await barras(page)).valores;
+    })();
+    expect(b.valores[0]).toBe(Math.max(...todas));
+  });
+});
+

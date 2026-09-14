@@ -857,7 +857,7 @@
       dimensions: (S.dimensions || []).map(d => ({ id:d.id, ...(d.label ? { label:d.label } : {}), ...(d.align ? { align:d.align } : {}), ...(d.role ? { role:d.role } : {}) })),
       range:      { type: S.range },
       comparison: cmpConfig(S),
-      style: { size:S.size, color:S.color, ...(S.icon ? { icon:S.icon } : {}), palette:S.palette, ...(_compactColors(S) ? { colors: _compactColors(S) } : {}), ...(S.relBands ? { relBands: S.relBands } : {}), axes:S.axes, legend:S.legend, dataLabels:S.labels, area:S.area, points:S.points, comboLine: S.comboLine !== false, ..._yAxisStyle(S), ..._decStyle(S), quadrants: S.quadrants || 'mean', boxOut: S.boxOut || 'named', boxOutHi: S.boxOutHi !== false,
+      style: { size:S.size, color:S.color, ...(S.icon ? { icon:S.icon } : {}), palette:S.palette, ...(_compactColors(S) ? { colors: _compactColors(S) } : {}), ...(S.relBands ? { relBands: S.relBands } : {}), axes:S.axes, legend:S.legend, dataLabels:S.labels, area:S.area, points:S.points, comboLine: S.comboLine !== false, ..._yAxisStyle(S), ..._decStyle(S), ..._barLimitStyle(S), quadrants: S.quadrants || 'mean', boxOut: S.boxOut || 'named', boxOutHi: S.boxOutHi !== false,
                orientation: S.horizontal ? 'horizontal' : 'vertical', stacked: !!S.stacked, scatterLabel: S.scatterLabel || 'name', scatterAvatars: !!S.scatterAvatars, richTooltip: S.richTooltip !== false, gaugeMode: S.gaugeMode || 'value', showSub: S.showSub !== false,
                // Title/subtitle format (Paso 3a). Compacted to only non-default props; absent when
                // unset → cards without formatting stay byte-identical to today.
@@ -1154,6 +1154,12 @@
                 <span class="tx"><span class="t" data-i18n="gps_analysis.builder_area_fill">Area fill</span><span class="s" data-i18n="gps_analysis.builder_area_fill_sub">Soft fill under the line</span></span>
                 <button class="es-sw-t" data-toggle="area"></button>
               </div>
+              <!-- Cuántas barras mostrar. Con 27 jugadores la card es ilegible; el recorte va sobre
+                   el orden elegido, así que con High→low son «los diez de más carga». -->
+              <div class="es-toggle is-stack" data-only="bars">
+                <span class="tx"><span class="t" data-i18n="gps_analysis.builder_bar_limit">How many bars</span><span class="s" data-i18n="gps_analysis.builder_bar_limit_sub">Empty = all of them</span></span>
+                <input type="number" min="1" max="200" id="gpbBarLimit" data-i18n-attr="placeholder:gps_analysis.builder_bar_limit_ph" placeholder="All" style="width:74px;padding:6px 8px;border:1px solid var(--cm-border);border-radius:6px;background:var(--cm-surface-2);color:var(--cm-fg);font:600 12px/1 var(--cm-font-mono);box-sizing:border-box">
+              </div>
               <div class="es-toggle" data-only="bars">
                 <span class="tx"><span class="t" data-i18n="gps_analysis.builder_combo_line">Join the line</span><span class="s" data-i18n="gps_analysis.builder_combo_line_sub">Off: only the dots of the line metric</span></span>
                 <button class="es-sw-t is-on" data-toggle="comboLine"></button>
@@ -1330,7 +1336,7 @@
     return { type:'bars', source:'session', metrics:[], dimensions:[], scope: _fbPidsNew.length === 1 ? 'player' : 'squad', scopeTouched:false, squadAgg:'pooled',
              compare:'none', compareMethod:'avg', compareStat:'median', compareOpts:{ topN:5, mdLookback:4 }, refWindow:{ type:'season' }, refMcId:null, range,
              size:'md', color:'#15803D', icon:null, palette:'pitch', colors:{}, title:'', titleCustom:false, axes:true, legend:true, labels:false, gaugeMode:'value', showSub:true,
-             points:true, area:false, comboLine:true, yzero:true, ymin:null, ymax:null, decimals:null, quadrants:'mean', boxOut:'named', boxOutHi:true, horizontal:false, stacked:false, sort:null, scatterLabel:'name', scatterAvatars:false, richTooltip:true, referenceLines:[],
+             points:true, area:false, comboLine:true, yzero:true, ymin:null, ymax:null, decimals:null, barLimit:null, quadrants:'mean', boxOut:'named', boxOutHi:true, horizontal:false, stacked:false, sort:null, scatterLabel:'name', scatterAvatars:false, richTooltip:true, referenceLines:[],
              titleFormat:{}, subtitleFormat:{} };
   }
 
@@ -1822,8 +1828,10 @@
       S.colWidths = cfg.colWidths || null;   // anchos a medida de la tabla
       const _ya = cfg.style?.yAxis || {};   // escala del eje a medida
       const _yaDec = cfg.style?.decimals ?? null;
+      const _yaLim = cfg.style?.barLimit ?? null;
       S.ymin = _ya.min ?? null; S.ymax = _ya.max ?? null; S.yzero = _ya.zero !== false;
       S.decimals = _yaDec;
+      S.barLimit = _yaLim;
       S.referenceLines = Array.isArray(cfg.referenceLines) ? cfg.referenceLines.map(r => ({ ...r })) : [];
       S.title   = cfg.titleCustom ? (cfg.title || '') : '';   // no-custom → vacío: el auto se deriva fresco (no se congela)
       S.titleCustom = !!cfg.titleCustom;      // ausente en cards viejas → false → título auto
@@ -1869,8 +1877,10 @@
       S.colWidths = rawConfig.colWidths || null;   // anchos a medida de la tabla
       const _ya = rawConfig.style?.yAxis || {};   // escala del eje a medida
       const _yaDec = rawConfig.style?.decimals ?? null;
+      const _yaLim = rawConfig.style?.barLimit ?? null;
       S.ymin = _ya.min ?? null; S.ymax = _ya.max ?? null; S.yzero = _ya.zero !== false;
       S.decimals = _yaDec;
+      S.barLimit = _yaLim;
       S.referenceLines = Array.isArray(rawConfig.referenceLines) ? rawConfig.referenceLines.map(r => ({ ...r })) : [];
       S.title   = rawConfig.titleCustom ? (rawConfig.title || '') : '';   // ver nota en el otro load: evita congelar el auto
       S.titleCustom = !!rawConfig.titleCustom;   // ausente en cards viejas → false → título auto
@@ -2123,7 +2133,7 @@
 
     // Escala del eje: se aplica al soltar el foco o con Enter, no en cada tecla — redibujar la
     // card mientras se escribe «1200» la haría saltar cuatro veces.
-    [['gpbYMin', 'ymin'], ['gpbYMax', 'ymax'], ['gpbDecimals', 'decimals']].forEach(([id, key]) => {
+    [['gpbYMin', 'ymin'], ['gpbYMax', 'ymax'], ['gpbDecimals', 'decimals'], ['gpbBarLimit', 'barLimit']].forEach(([id, key]) => {
       const inp = document.getElementById(id);
       if (!inp) return;
       const aplicar = () => {
@@ -2573,7 +2583,7 @@
       b.classList.toggle('is-on', !!S[b.dataset.toggle])
     );
     const _yi = (id, v) => { const e = document.getElementById(id); if (e) e.value = (v == null ? '' : v); };
-    _yi('gpbYMin', S.ymin); _yi('gpbYMax', S.ymax); _yi('gpbDecimals', S.decimals);
+    _yi('gpbYMin', S.ymin); _yi('gpbYMax', S.ymax); _yi('gpbDecimals', S.decimals); _yi('gpbBarLimit', S.barLimit);
     document.getElementById('gpbScatterLabel')?.querySelectorAll('button').forEach(b =>
       b.classList.toggle('is-on', b.dataset.slabel === (S.scatterLabel || 'name'))
     );
@@ -4507,6 +4517,13 @@
    *                que es lo que hace falta cuando todos los valores están apretados.
    */
   /** El trozo de `style` con la escala pedida en el panel. Sólo viaja si hay algo que decir. */
+  /** Tope de barras pedido en el panel. Vacío = todas. */
+  function _barLimitStyle(S) {
+    const n = Number(S.barLimit);
+    return (S.barLimit === '' || S.barLimit == null || !Number.isFinite(n) || n <= 0)
+      ? {} : { barLimit: Math.min(200, Math.round(n)) };
+  }
+
   /** Decimales pedidos en el panel. Vacío = los del catálogo, que es el default. */
   function _decStyle(S) {
     const d = S.decimals;
@@ -4519,6 +4536,30 @@
     const min = num(S.ymin), max = num(S.ymax), zero = S.yzero !== false;
     if (min == null && max == null && zero) return {};   // todo automático: no se guarda nada
     return { yAxis: { ...(min != null ? { min } : {}), ...(max != null ? { max } : {}), zero } };
+  }
+
+  /**
+   * Aviso al pie cuando el tope dejó barras afuera. Sin esto, una card recortada se lee como si
+   * el plantel entero fueran diez: hay que decir que faltan, y cuántas.
+   */
+  function _barLimitNote(body, ocultas, tope) {
+    try {
+      body.querySelector('.gp-barlimit-note')?.remove();
+      if (!body || !ocultas) return;
+      const note = document.createElement('div');
+      note.className = 'gp-barlimit-note';
+      note.style.cssText = 'text-align:center;margin-top:2px;font:500 10.5px/1.3 var(--cm-font-sans);color:var(--cm-fg-muted)';
+      note.innerHTML = `<i class="ti ti-dots" style="font-size:11px;vertical-align:-1px"></i> ${
+        esc(_tt('gps_analysis.builder_bar_limit_note', 'Showing the first {n} · {r} more not shown',
+                { n: tope, r: ocultas }))}`;
+      body.appendChild(note);
+    } catch (e) { /* un aviso nunca puede romper una card */ }
+  }
+
+  /** Cuántas barras dibujar como mucho (config.style.barLimit). 0 / vacío = todas. */
+  function _barLimit(config) {
+    const n = Number(config?.style?.barLimit);
+    return Number.isFinite(n) && n > 0 ? Math.min(200, Math.round(n)) : 0;
   }
 
   function _yAxis(config) {
@@ -5384,6 +5425,24 @@
       datasets.forEach(ds => { _perBar.forEach(k => { if (Array.isArray(ds[k])) ds[k] = order.map(i => ds[k][i]); }); });
       if (mcDiffs) { const _md = mcDiffs; mcDiffs = order.map(i => _md[i]); }
     }
+
+    // Cuántas barras mostrar. Con 27 jugadores una card de plantel es ilegible: las barras quedan
+    // de dos píxeles y los nombres del eje se pisan. El recorte va DESPUÉS de ordenar, así que
+    // «primeros 10» quiere decir los diez primeros del orden elegido — con High→low, los diez de
+    // más carga; con el orden natural, los diez primeros del eje.
+    //
+    // Es un recorte de DIBUJO, no de datos: la media y las líneas de referencia ya se calcularon
+    // sobre el plantel completo unas líneas más arriba, que es lo correcto — el promedio del
+    // equipo no cambia porque se muestren diez.
+    const _tope = _barLimit(config);
+    let _ocultas = 0;
+    if (_tope > 0 && cats.length > _tope) {
+      _ocultas = cats.length - _tope;
+      cats.length = _tope; catFids.length = _tope; catDims.length = _tope;
+      const _perBar2 = ['data', 'backgroundColor', 'borderColor', 'pointBackgroundColor', '_relPct', '_relCap'];
+      datasets.forEach(ds => { _perBar2.forEach(k => { if (Array.isArray(ds[k])) ds[k] = ds[k].slice(0, _tope); }); });
+      if (mcDiffs) mcDiffs = mcDiffs.slice(0, _tope);
+    }
     // Con 2 niveles el eje muestra SOLO el detalle (dims[1]); el nivel 1 lo dibuja el plugin
     // arriba. Es puramente de DISPLAY: los datasets ya están alineados por índice con `cats`.
     // Sin anidar pero con varios niveles por categoría (p. ej. jugador · fecha: un bar por
@@ -5415,6 +5474,7 @@
              mcDnCol: mcOn ? _cssVar('--cm-danger',  '#DC2626') : null,
              horizontal, stacked, hasLine, max1, step1, min1, relBands: config.style?.relBands || null, referenceLines: refLines,
              yMin: _yax.min, yZero: _yax.zero,
+             ocultas: _ocultas,   // cuántas barras quedaron fuera por el tope
              grpDelta,
              height, color: accent };
   }
@@ -5806,6 +5866,7 @@
       // Cross-filter: el handler (GPS Analysis.html) lee esto desde la instancia del chart.
       // Índice de categoría (hit.index) → id de filtro. Se re-escribe en cada mount.
       body.__chart.$gpCatFids = d.catFids || null;
+      _barLimitNote(body, d.ocultas, _barLimit(config));
       // Eje jerárquico (Fase A): valores por nivel de cada categoría + cuántos niveles hay.
       // El commit 2 (plugin del piso superior) los consume; acá sólo se exponen.
       body.__chart.$gpCatDims = d.catDims || null;
@@ -5840,7 +5901,7 @@
       viz: 'bars',
       dimensions: S.dimensions,
       comparison: cmpConfig(S),
-      style: { size: S.size, color: S.color, palette: S.palette, ...(_compactColors(S) ? { colors: _compactColors(S) } : {}), axes: S.axes, legend: S.legend, dataLabels: S.labels, ..._yAxisStyle(S), ..._decStyle(S),
+      style: { size: S.size, color: S.color, palette: S.palette, ...(_compactColors(S) ? { colors: _compactColors(S) } : {}), axes: S.axes, legend: S.legend, dataLabels: S.labels, ..._yAxisStyle(S), ..._decStyle(S), ..._barLimitStyle(S),
                orientation: S.horizontal ? 'horizontal' : 'vertical', stacked: !!S.stacked },
       ...(S.referenceLines?.length ? { referenceLines: S.referenceLines } : {}),
     };
@@ -6095,7 +6156,7 @@
       viz: 'line',
       dimensions: S.dimensions,
       comparison: cmpConfig(S),
-      style: { size: S.size, color: S.color, palette: S.palette, ...(_compactColors(S) ? { colors: _compactColors(S) } : {}), axes: S.axes, legend: S.legend, dataLabels: S.labels, area: S.area, points: S.points , ..._yAxisStyle(S), ..._decStyle(S) },
+      style: { size: S.size, color: S.color, palette: S.palette, ...(_compactColors(S) ? { colors: _compactColors(S) } : {}), axes: S.axes, legend: S.legend, dataLabels: S.labels, area: S.area, points: S.points , ..._yAxisStyle(S), ..._decStyle(S), ..._barLimitStyle(S) },
       __example: true,
     };
     mountLineChart(body, cfg, series);
@@ -10068,8 +10129,10 @@
     S.colWidths = config.colWidths || null;   // anchos a medida de la tabla
     const _ya = config.style?.yAxis || {};   // escala del eje a medida
     const _yaDec = config.style?.decimals ?? null;
+    const _yaLim = config.style?.barLimit ?? null;
     S.ymin = _ya.min ?? null; S.ymax = _ya.max ?? null; S.yzero = _ya.zero !== false;
       S.decimals = _yaDec;
+      S.barLimit = _yaLim;
     S.referenceLines = Array.isArray(config.referenceLines) ? config.referenceLines.map(r => ({ ...r })) : [];
     S.titleFormat    = config.style?.titleFormat    ? { ...config.style.titleFormat }    : {};
     S.subtitleFormat = config.style?.subtitleFormat ? { ...config.style.subtitleFormat } : {};
