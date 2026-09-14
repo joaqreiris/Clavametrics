@@ -9405,6 +9405,7 @@
     heatmap: { name:'Heatmap', icon:'ti-layout-grid',  dimAx:'rows (dim)',            metAx:'columns (metrics)' },
     box:     { name:'Box plot', icon:'ti-chart-candle', dimAx:'group (optional dim)',  metAx:'metric to spread' },
     demand:  { name:'Match demand', icon:'ti-percentage', dimAx:'(no dimension)',        metAx:'metrics to compare vs the match' },
+    dumbbell: { name:'Before → after', icon:'ti-arrows-horizontal', dimAx:'one row per (dim)', metAx:'metric to compare between the two dates' },
   };
   let _bMode   = 'dd';       // el builder es SOLO Drag & drop (el Clásico fue eliminado); constante 'dd'
   let _ddQuery = '';         // texto del buscador del panel de campos

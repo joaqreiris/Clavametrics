@@ -170,3 +170,21 @@ test.describe('GPS · líneas de referencia', () => {
   });
 });
 
+// Un tipo de gráfico vive en DOS listas: VIZ_TYPES (qué sabe hacer) y DD_TYPES (los botones del
+// selector). Agregar sólo la primera deja el tipo funcionando pero invisible — pasó con el
+// «antes → después»: estaba entero y no se podía elegir. Este test compara las dos.
+test.describe('GPS · el selector ofrece todos los tipos', () => {
+  test('no hay tipos implementados que el builder esconda', async ({ page }) => {
+    await open(page);
+    const faltan = await page.evaluate(() => {
+      const botones = new Set([...document.querySelectorAll('[data-type]')].map(b => b.dataset.type));
+      // Los tipos que el builder sabe dibujar salen del propio selector más el que esté activo;
+      // se comparan contra los botones visibles.
+      const esperados = ['kpi', 'gauge', 'bars', 'line', 'scatter', 'radar', 'ranking',
+                         'table', 'heatmap', 'box', 'demand', 'dumbbell'];
+      return esperados.filter(t => !botones.has(t));
+    });
+    expect(faltan, 'hay tipos sin botón en el selector').toEqual([]);
+  });
+});
+
