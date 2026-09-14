@@ -310,8 +310,18 @@
     <h2 data-i18n="sec.watch.h2">See the whole loop in 90 seconds</h2>
     <p data-i18n="sec.watch.p">From building a microcycle to flagging an at-risk athlete — a quick tour of how ClavaMetrics fits a real performance week.</p>
   </div>
-  <div class="demo-player">
-    <div class="mk-shot" role="img" aria-label="ClavaMetrics product demo" style="background-image:url('assets/marketing/home-demo-poster.jpg')"></div>
+  <div class="demo-player" id="demoPlayer">
+    <!-- preload="metadata": nadie debe bajarse 8 MB por hacer scroll hasta aquí.
+         El póster es un fotograma del propio vídeo, así que no hay salto visual
+         al arrancar. playsinline para que iOS no lo abra a pantalla completa. -->
+    <video class="mk-shot" id="demoVideo" poster="assets/marketing/demo-poster.jpg"
+           preload="metadata" playsinline muted
+           aria-label="ClavaMetrics product demo">
+      <source src="assets/marketing/demo.mp4" type="video/mp4">
+    </video>
+    <button class="demo-play" id="demoPlayBtn" type="button" aria-controls="demoVideo"
+            aria-label="Play the product demo"><i class="ti ti-player-play-filled"></i></button>
+    <span class="demo-dur"><i class="ti ti-clock"></i>1:31</span>
     <div class="demo-chips">
       <span><i class="ti ti-calendar-stats"></i>Plan</span>
       <span><i class="ti ti-activity"></i>Monitor</span>
@@ -507,6 +517,32 @@
   };
   window.__stopRotator = function () { clearInterval(rotatorTimer); };
   window.__startRotator();
+
+  /* ── Demo del producto ──
+     Arranca con póster + botón: el vídeo no se descarga hasta que alguien lo
+     pide. Los controles nativos aparecen recién al reproducir, para que el
+     encuadre estático quede limpio. Va mudo (la grabación no tiene audio), así
+     que no hay autoplay que bloquear ni sonido que sorprenda a nadie. */
+  (function () {
+    const wrap = document.getElementById("demoPlayer");
+    const video = document.getElementById("demoVideo");
+    const btn = document.getElementById("demoPlayBtn");
+    if (!wrap || !video || !btn) return;
+    function start() {
+      wrap.classList.add("is-playing");
+      video.controls = true;
+      const p = video.play();
+      // Safari devuelve una promesa que puede rechazarse: si pasa, se deja el
+      // vídeo con sus controles para que el usuario le dé a play él mismo.
+      if (p && p.catch) p.catch(() => {});
+    }
+    btn.addEventListener("click", start);
+    video.addEventListener("ended", () => {
+      wrap.classList.remove("is-playing");
+      video.controls = false;
+      video.currentTime = 0;   // vuelve al póster
+    });
+  })();
 
   /* ── How-it-works tabs ── */
   (function () {
