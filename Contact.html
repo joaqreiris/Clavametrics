@@ -111,6 +111,18 @@
           <input class="cm-input" id="f-club" name="club" type="text" placeholder="Clava FC" required>
         </div>
         <div class="cm-field">
+          <label class="cm-label" for="f-phone"><span data-i18n="ct.lbl.phone">Phone</span><span class="req">*</span></label>
+          <input class="cm-input" id="f-phone" name="phone" type="tel" placeholder="+34 600 123 456" data-i18n-ph="register.phonePlaceholder" autocomplete="tel" required>
+        </div>
+        <!-- Honeypot: invisible para una persona, irresistible para un bot que llena
+             todo lo que encuentra. Si viene con algo, submit-lead descarta el envío.
+             tabindex -1 y aria-hidden para que ni el tabulador ni un lector de
+             pantalla lo pisen. -->
+        <div class="ct-hp" aria-hidden="true">
+          <label for="f-website">Website</label>
+          <input id="f-website" name="website" type="text" tabindex="-1" autocomplete="off">
+        </div>
+        <div class="cm-field">
           <label class="cm-label" for="f-role" data-i18n="ct.lbl.role">Your role</label>
           <select class="cm-select" id="f-role" name="role">
             <option value="" data-i18n="ct.opt.select">Select…</option>
@@ -229,6 +241,11 @@
 
 <script>
   (function () {
+    const LEAD_ENDPOINT = "https://xesrumijvdmqjrufgeka.supabase.co/functions/v1/submit-lead";
+    function tt(key, fallbackEN) {
+      const v = (window.CM_I18N && CM_I18N.t) ? CM_I18N.t(key) : null;
+      return (v && v !== key) ? v : fallbackEN;
+    }
     const form = document.getElementById("ctForm");
     const card = document.getElementById("ctCard");
     if (!form) return;
@@ -239,7 +256,7 @@
       e.preventDefault();
 
       // ── client-side validation ──
-      const required = ["name", "email", "club"];
+      const required = ["name", "email", "club", "phone"];
       let ok = true;
       required.forEach(function (n) {
         const el = form.elements[n];
@@ -252,23 +269,66 @@
       }
       if (!ok) return;
 
-      // ── send to Formspree (AJAX, stays on page) ──
-      if (btn) { btn.disabled = true; btn.innerHTML = "Sending…"; }
+      // ── Enviar ──
+      // Primero a nuestra base (submit-lead). Antes esto iba solo a Formspree: el
+      // pedido llegaba como mail a una casilla y no quedaba registro de quién había
+      // preguntado ni de si alguien contestó.
+      //
+      // Formspree queda como red de seguridad y no como destino principal: si la
+      // Edge Function estuviera caída, el pedido igual llega a alguna parte. Un lead
+      // perdido no se recupera nunca.
+      if (btn) { btn.disabled = true; btn.innerHTML = tt("ct.sending", "Sending…"); }
+
+      const datos = {
+        name:    form.elements["name"].value.trim(),
+        email:   form.elements["email"].value.trim(),
+        phone:   form.elements["phone"].value.trim(),
+        club:    form.elements["club"].value.trim(),
+        role:    form.elements["role"].value,
+        sport:   form.elements["sport"].value,
+        size:    form.elements["size"].value,
+        message: form.elements["message"].value.trim(),
+        website: form.elements["website"] ? form.elements["website"].value : "",
+        lang:    (window.CM_I18N && CM_I18N.current) || document.documentElement.lang || "es",
+        leadSource: (typeof window.cmLeadSource === "function") ? window.cmLeadSource() : {},
+      };
+
+      let guardado = false;
       try {
-        const res = await fetch(form.action, {
+        const res = await fetch(LEAD_ENDPOINT, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(datos),
+        });
+        const out = await res.json().catch(function () { return {}; });
+        if (res.status === 429) {
+          if (btn) { btn.disabled = false; btn.innerHTML = btnHTML; }
+          alert(tt("ct.tooMany", "You've sent several requests already — we have them. Write to info@clavametrics.app if it's urgent."));
+          return;
+        }
+        guardado = res.ok && out.ok === true;
+      } catch (err) {
+        guardado = false;
+      }
+
+      // Copia a Formspree. No se espera su respuesta cuando el lead ya está guardado:
+      // el visitante no tiene por qué esperar a un tercero para ver el "gracias".
+      try {
+        const copia = fetch(form.action, {
           method: "POST",
           body: new FormData(form),
-          headers: { "Accept": "application/json" }
+          headers: { "Accept": "application/json" },
         });
-        if (res.ok) {
-          card.classList.add("is-sent");
-          form.reset();
-        } else {
-          throw new Error("bad response");
-        }
-      } catch (err) {
+        if (!guardado) guardado = (await copia).ok;
+      } catch (err) { /* la copia es opcional */ }
+
+      if (guardado) {
+        card.classList.add("is-sent");
+        form.reset();
+        if (typeof window.cmClearLeadSource === "function") window.cmClearLeadSource();
+      } else {
         if (btn) { btn.disabled = false; btn.innerHTML = btnHTML; }
-        alert("Something went wrong sending your request. Please try again or email info@clavametrics.app.");
+        alert(tt("ct.sendError", "Something went wrong sending your request. Please try again or email info@clavametrics.app."));
       }
     });
   })();

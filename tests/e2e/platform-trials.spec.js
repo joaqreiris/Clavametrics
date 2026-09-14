@@ -58,10 +58,20 @@ const PIPELINE = [
   },
 ];
 
-async function abrirTrials(page, { pipeline = PIPELINE, esAdmin = true } = {}) {
+// Un pedido de demo pendiente: alguien que escribió y todavía no tiene cuenta.
+const LEAD = {
+  id: 'lead-1', created_at: '2026-09-14T09:00:00Z', name: 'Marta Díaz',
+  email: 'marta@cdlugo.es', phone: '+34600999888', club_name: 'CD Lugo',
+  role: 'Performance director', sport: 'Football', size: '40–120',
+  message: 'Tenemos 6 categorías y usamos Excel.', lang: 'es',
+  utm_source: 'linkedin', utm_medium: 'social', utm_campaign: null, referrer: null,
+};
+
+async function abrirTrials(page, { pipeline = PIPELINE, esAdmin = true, leads = [] } = {}) {
   await injectSession(page);
   // De lo general a lo específico: en Playwright gana la última ruta registrada.
   await page.route(`${SB}/**`, route => route.fulfill({ json: {} }));
+  await page.route(`${SB}/rest/v1/leads**`, route => route.fulfill({ json: leads }));
   await page.route(`${SB}/auth/v1/**`, route =>
     route.fulfill({ json: { id: 'user-1', email: 'admin@clavametrics.app', aud: 'authenticated', role: 'authenticated' } }));
   await page.route(`${SB}/rest/v1/rpc/**`, route => route.fulfill({ json: [] }));
@@ -166,5 +176,36 @@ test.describe('Platform — Trials', () => {
     const lineas = readFileSync(await descarga.path(), 'utf-8').replace(/^\uFEFF/, '').trim().split('\r\n');
     expect(lineas).toHaveLength(2);                       // cabecera + Clava FC
     expect(lineas[1]).toContain('Clava FC');
+  });
+  // ── Pedidos de demo ──────────────────────────────────────────────────────
+  test('los pedidos de demo pendientes se muestran arriba, con su WhatsApp', async ({ page }) => {
+    await abrirTrials(page, { leads: [LEAD] });
+    const card = page.locator('#pfLeadsCard');
+    await expect(card).toBeVisible();
+    await expect(card).toContainText('Marta Díaz');
+    await expect(card).toContainText('CD Lugo');
+    await expect(card).toContainText('linkedin');
+    await expect(card).toContainText('Tenemos 6 categorías');
+    await expect(card.locator('a[href="https://wa.me/34600999888"]')).toHaveCount(1);
+  });
+
+  test('sin pedidos pendientes, la caja no ocupa lugar', async ({ page }) => {
+    await abrirTrials(page, { leads: [] });
+    await expect(page.locator('#pfLeadsCard')).toBeHidden();
+  });
+
+  test('marcar contactado guarda el estado y quién lo atendió', async ({ page }) => {
+    let patch = null;
+    await abrirTrials(page, { leads: [LEAD] });
+    await page.route(`${SB}/rest/v1/leads**`, route => {
+      if (route.request().method() === 'PATCH') { patch = route.request().postDataJSON(); return route.fulfill({ json: [] }); }
+      route.fulfill({ json: [] });                 // al recargar ya no queda ninguno
+    });
+
+    await page.locator('[data-lead-done="lead-1"]').click();
+    await expect.poll(() => patch, { timeout: 10_000 }).not.toBeNull();
+    expect(patch.status).toBe('contacted');
+    expect(patch.handled_at).toBeTruthy();
+    await expect(page.locator('#pfLeadsCard')).toBeHidden();
   });
 });

@@ -126,6 +126,14 @@
     <!-- Seguimiento comercial: una fila por club, con lo que hace falta para levantar
          el teléfono. El orden no es por fecha de alta sino por urgencia (ver pfTrials). -->
     <section class="pf-panel" id="pfTrials">
+      <!-- Pedidos de demo: gente que pidió hablar y todavía no tiene cuenta. Va arriba
+           de los clubes en prueba porque es lo único de esta pantalla donde alguien
+           está esperando una respuesta nuestra. -->
+      <div id="pfLeadsCard" hidden style="border:1px solid var(--cm-border);border-radius:12px;padding:18px;background:var(--cm-bg);margin-bottom:18px">
+        <h3 style="margin:0 0 4px;font-size:15px" data-i18n="platform.leads_title">Demo requests</h3>
+        <p style="margin:0 0 14px;color:var(--cm-fg-muted);font-size:12.5px" data-i18n="platform.leads_desc">Sent from the website contact form. They don't have an account yet — answering fast is the whole game.</p>
+        <div id="pfLeadsList" style="font-size:13px"></div>
+      </div>
       <div style="border:1px solid var(--cm-border);border-radius:12px;padding:18px;background:var(--cm-bg)">
         <h3 style="margin:0 0 4px;font-size:15px" data-i18n="platform.trials_title">Trials &amp; accounts</h3>
         <p style="margin:0 0 14px;color:var(--cm-fg-muted);font-size:12.5px" data-i18n="platform.trials_desc">Every club, how the trial is going and how to reach them. Health is about usage, not the calendar: a club with no squad loaded is stalled even with 14 days left.</p>
@@ -664,8 +672,71 @@
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
 
+    /* ── Pedidos de demo (tabla leads) ───────────────────────────────────────
+       Se muestran los pendientes. Uno atendido desaparece de la lista: esto es una
+       bandeja de trabajo, no un archivo histórico —para eso está la tabla. */
+    async function cargarLeads(){
+      const card = $('pfLeadsCard'), host = $('pfLeadsList');
+      if (!card || !host) return;
+      try{
+        const { data, error } = await sb.from('leads')
+          .select('id, created_at, name, email, phone, club_name, role, sport, size, message, lang, utm_source, utm_medium, utm_campaign, referrer')
+          .eq('status','new').order('created_at',{ ascending:false }).limit(50);
+        if (error) throw error;
+        if (!data || !data.length) { card.hidden = true; return; }
+        card.hidden = false;
+
+        host.innerHTML = data.map(l => {
+          const wa  = waHref(l.phone);
+          const tel = l.phone
+            ? (wa ? `<a href="${escAttr(wa)}" target="_blank" rel="noopener"><i class="ti ti-brand-whatsapp"></i> ${esc(l.phone)}</a>`
+                  : `<span class="pf-tno"><i class="ti ti-phone"></i> ${esc(l.phone)}</span>`)
+            : '';
+          const origen = l.utm_source
+            ? (l.utm_source + [l.utm_medium, l.utm_campaign].filter(Boolean).map(x => ' / ' + x).join(''))
+            : (l.referrer || tt('platform.source_direct','direct'));
+          const ficha = [l.club_name, l.role, l.sport, l.size].filter(Boolean).map(esc).join(' · ');
+          return `<div class="pf-trow">
+            <span class="pf-tdot" style="background:var(--cm-info)"></span>
+            <div class="pf-tmain">
+              <div><span class="pf-tname">${esc(l.name||'—')}</span>
+                <span class="pf-tstage">${esc(fmtDate(l.created_at))}</span>
+                ${l.lang ? `<span class="pf-tstage">${esc(String(l.lang).toUpperCase())}</span>` : ''}</div>
+              <div class="pf-tmeta">${ficha}${ficha?' · ':''}${esc(tt('platform.via','via'))} ${esc(origen)}</div>
+              ${l.message ? `<div class="pf-tmeta" style="margin-top:4px;font-style:italic">“${esc(l.message)}”</div>` : ''}
+              <div class="pf-tcontact">
+                <a href="mailto:${escAttr(l.email)}"><i class="ti ti-mail"></i> ${esc(l.email)}</a>${tel}
+              </div>
+            </div>
+            <button class="pf-mini" data-lead-done="${esc(l.id)}">${esc(tt('platform.lead_contacted','Contacted'))}</button>
+            <button class="pf-mini" data-lead-drop="${esc(l.id)}">${esc(tt('platform.lead_discard','Discard'))}</button>
+          </div>`;
+        }).join('');
+
+        host.querySelectorAll('[data-lead-done]').forEach(b =>
+          b.addEventListener('click', () => marcarLead(b.dataset.leadDone, 'contacted')));
+        host.querySelectorAll('[data-lead-drop]').forEach(b =>
+          b.addEventListener('click', () => marcarLead(b.dataset.leadDrop, 'discarded')));
+      }catch(e){
+        // Un fallo acá no puede tapar los clubes en prueba, que es el resto de la pantalla.
+        card.hidden = true;
+      }
+    }
+
+    async function marcarLead(id, estado){
+      try{
+        const { data:{ user } } = await sb.auth.getUser();
+        const { error } = await sb.from('leads').update({
+          status: estado, handled_at: new Date().toISOString(), handled_by: user?.id || null,
+        }).eq('id', id);
+        if (error) throw error;
+        await cargarLeads();
+      }catch(e){ alert(tt('platform.failed','Failed')); }
+    }
+
     async function load(){
       const host = $('pfTrialsList'); if(!host) return;
+      cargarLeads();
       host.textContent = tt('common.loading','Loading…');
       try{
         const { data, error } = await sb.rpc('sales_pipeline');
