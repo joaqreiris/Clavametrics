@@ -58,7 +58,9 @@
   .pf-tsum div{flex:1;min-width:104px;padding:10px 12px;border:1px solid var(--cm-border);border-radius:10px;background:var(--cm-bg-soft)}
   .pf-tsum b{display:block;font-size:20px;line-height:1.1;color:var(--cm-fg-strong)}
   .pf-tsum span{font-size:11px;color:var(--cm-fg-muted);text-transform:uppercase;letter-spacing:.04em}
-  .pf-tfilters{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
+  .pf-tbar{display:flex;gap:10px;align-items:flex-start;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap}
+  .pf-tfilters{display:flex;gap:6px;flex-wrap:wrap}
+  #pfTrialsExport{flex:none;white-space:nowrap}
   .pf-chip{padding:5px 11px;border:1px solid var(--cm-border);border-radius:var(--cm-r-pill);background:var(--cm-bg);color:var(--cm-fg-muted);font:600 12px var(--cm-font-sans);cursor:pointer}
   .pf-chip.is-active{background:var(--cm-accent);border-color:var(--cm-accent);color:var(--cm-fg-on-accent)}
   .pf-trow{display:flex;align-items:flex-start;gap:12px;padding:13px 0;border-bottom:1px solid var(--cm-border-soft)}
@@ -128,7 +130,10 @@
         <h3 style="margin:0 0 4px;font-size:15px" data-i18n="platform.trials_title">Trials &amp; accounts</h3>
         <p style="margin:0 0 14px;color:var(--cm-fg-muted);font-size:12.5px" data-i18n="platform.trials_desc">Every club, how the trial is going and how to reach them. Health is about usage, not the calendar: a club with no squad loaded is stalled even with 14 days left.</p>
         <div id="pfTrialsSummary" class="pf-tsum"></div>
-        <div id="pfTrialsFilters" class="pf-tfilters"></div>
+        <div class="pf-tbar">
+          <div id="pfTrialsFilters" class="pf-tfilters"></div>
+          <button id="pfTrialsExport" class="pf-mini"><i class="ti ti-download"></i> <span data-i18n="platform.export_csv">Export CSV</span></button>
+        </div>
         <div id="pfTrialsList" style="font-size:13px" data-i18n="common.loading">Loading…</div>
       </div>
     </section>
@@ -606,6 +611,59 @@
       }).join('');
     }
 
+    /* ── Exportar a CSV, para subir al CRM ──────────────────────────────────
+       Las cabeceras van en inglés y NO se traducen: son los nombres que HubSpot
+       reconoce solos al importar, incluso con la cuenta en español. Traducirlas
+       obligaría a mapear las 22 columnas a mano en cada importación.
+       "Club ID" es la que une las dos herramientas: sin ella, la ficha del CRM y
+       la fila de esta pantalla no se pueden cruzar. */
+    const COLUMNAS = [
+      ['Company Name',    r => r.club_name],
+      ['Club ID',         r => r.club_id],
+      ['First Name',      r => (r.contact_name||'').trim().split(/\s+/)[0] || ''],
+      ['Last Name',       r => (r.contact_name||'').trim().split(/\s+/).slice(1).join(' ')],
+      ['Email',           r => r.contact_email],
+      ['Phone Number',    r => r.contact_phone],
+      ['Job Title',       r => r.contact_job],
+      ['Country/Region',  r => r.country],
+      ['Sport',           r => r.sport],
+      ['Signup Date',     r => (r.created_at||'').slice(0,10)],
+      ['Trial Ends',      r => (r.trial_ends_at||'').slice(0,10)],
+      ['Days Left',       r => (r.days_left == null ? '' : r.days_left)],
+      ['Stage',           r => tt((STAGE[r.stage]||{}).k, (STAGE[r.stage]||{}).f || r.stage)],
+      ['Health',          r => tt((HEALTH[r.health]||{}).k, (HEALTH[r.health]||{}).f || r.health)],
+      ['Players',         r => r.players],
+      ['Sessions',        r => r.sessions],
+      ['Actions 7d',      r => r.events_7d],
+      ['Last Activity',   r => (r.last_activity_at||'').slice(0,10)],
+      ['Campaign Source', r => r.utm_source],
+      ['Campaign Medium', r => r.utm_medium],
+      ['Campaign Name',   r => r.utm_campaign],
+      ['Marketing Consent', r => r.marketing_opt_in ? 'Yes' : 'No'],
+    ];
+
+    function celda(v){
+      const s = (v == null) ? '' : String(v);
+      // Comillas siempre: un nombre de club con coma ("Racing, Club de Avellaneda")
+      // parte la fila en dos y desplaza todas las columnas siguientes.
+      return '"' + s.replace(/"/g,'""') + '"';
+    }
+
+    function exportar(){
+      const rows = _rows.filter(r => _filtro==='all' || r.stage===_filtro);
+      if (!rows.length) return;
+      const lineas = [ COLUMNAS.map(c => celda(c[0])).join(',') ]
+        .concat(rows.map(r => COLUMNAS.map(c => celda(c[1](r))).join(',')));
+      // BOM: sin él, Excel abre el CSV en Latin-1 y "Bigúa" llega como "BigÃºa".
+      const blob = new Blob(['﻿' + lineas.join('\r\n')], { type:'text/csv;charset=utf-8' });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href = url;
+      a.download = 'clavametrics-pipeline-' + new Date().toISOString().slice(0,10) + '.csv';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
     async function load(){
       const host = $('pfTrialsList'); if(!host) return;
       host.textContent = tt('common.loading','Loading…');
@@ -623,6 +681,7 @@
     }
 
     window.pfLoadTrials = load;
+    $('pfTrialsExport')?.addEventListener('click', exportar);
     document.addEventListener('cm:langchanged', ()=>{ try{ if($('pfTrials')?.classList.contains('is-active')) load(); }catch(e){} });
   })();
   </script>

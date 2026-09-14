@@ -6,6 +6,7 @@
 // Los datos vienen del RPC sales_pipeline(), que se mockea.
 
 import { test, expect } from '@playwright/test';
+import { readFileSync } from 'node:fs';
 import { SB, injectSession } from './_shared.js';
 
 // Cuatro clubes elegidos para cubrir el orden completo: el cliente que paga va último
@@ -123,5 +124,47 @@ test.describe('Platform — Trials', () => {
     await expect(page.locator('#pfTrialsList .pf-trow')).toHaveCount(2);
     const nombres = await page.locator('#pfTrialsList .pf-tname').allTextContents();
     expect(nombres).toEqual(['Donna FC', 'Bigúa']);
+  });
+
+  // El CSV es el puente con el CRM: se baja de acá y se sube a HubSpot.
+  test('el CSV sale con las cabeceras que HubSpot reconoce y una fila por club', async ({ page }) => {
+    await abrirTrials(page);
+    const [descarga] = await Promise.all([
+      page.waitForEvent('download'),
+      page.locator('#pfTrialsExport').click(),
+    ]);
+    expect(descarga.suggestedFilename()).toMatch(/^clavametrics-pipeline-\d{4}-\d{2}-\d{2}\.csv$/);
+
+    const csv = readFileSync(await descarga.path(), 'utf-8');
+    // BOM al principio: sin él Excel abre el archivo en Latin-1 y rompe los acentos.
+    expect(csv.charCodeAt(0)).toBe(0xFEFF);
+
+    const lineas = csv.replace(/^\uFEFF/, '').trim().split('\r\n');
+    expect(lineas).toHaveLength(5);                       // cabecera + 4 clubes
+    expect(lineas[0]).toContain('"Company Name"');
+    expect(lineas[0]).toContain('"Club ID"');             // la columna que cruza los dos sistemas
+    expect(lineas[0]).toContain('"Marketing Consent"');
+
+    // El nombre del contacto se parte en nombre y apellido, que es como los pide el CRM.
+    const bigua = lineas.find(l => l.includes('Bigúa'));
+    expect(bigua).toContain('"Ana","Pérez"');
+    expect(bigua).toContain('"+59899111222"');
+    expect(bigua).toContain('"instagram"');
+    expect(bigua).toContain('"Yes"');
+
+    // Quien no dio consentimiento viaja igual, marcado: hay que poder darle soporte.
+    expect(lineas.find(l => l.includes('Donna FC'))).toContain('"No"');
+  });
+
+  test('el CSV respeta el filtro que está puesto', async ({ page }) => {
+    await abrirTrials(page);
+    await page.locator('#pfTrialsFilters .pf-chip[data-f="customer"]').click();
+    const [descarga] = await Promise.all([
+      page.waitForEvent('download'),
+      page.locator('#pfTrialsExport').click(),
+    ]);
+    const lineas = readFileSync(await descarga.path(), 'utf-8').replace(/^\uFEFF/, '').trim().split('\r\n');
+    expect(lineas).toHaveLength(2);                       // cabecera + Clava FC
+    expect(lineas[1]).toContain('Clava FC');
   });
 });
