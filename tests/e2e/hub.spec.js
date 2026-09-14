@@ -21,9 +21,21 @@ async function mockHub(page, overrides = {}) {
     const method = route.request().method();
     if (method !== 'GET') return route.fallback();   // al mock de abajo, no a la red real
 
-    if (url.includes('/players'))        return route.fulfill({ json: players, headers: { 'content-range': `*/${players.length}` } });
-    if (url.includes('/injuries'))       return route.fulfill({ json: injuries });
-    if (url.includes('/wellness'))       return route.fulfill({ json: wellness });
+    // Los KPI se arman con conteos (count: 'exact'), que viajan en la cabecera Content-Range. Al
+    // ser una respuesta de otro origen, el navegador NO deja leerla salvo que se la exponga: sin
+    // esto el conteo llega vacío y la tarjeta muestra «—».
+    const conConteo = (filas) => route.fulfill({
+      json: filas,
+      headers: {
+        'content-range': `0-${Math.max(0, filas.length - 1)}/${filas.length}`,
+        'Access-Control-Expose-Headers': 'Content-Range, content-range',
+        'Access-Control-Allow-Origin': '*',
+      },
+    });
+
+    if (url.includes('/players'))        return conConteo(players);
+    if (url.includes('/injuries'))       return conConteo(injuries);
+    if (url.includes('/wellness'))       return conConteo(wellness);
     if (url.includes('/tasks'))          return route.fulfill({ json: tasks });
     if (url.includes('/availability'))   return route.fulfill({ json: avail });
     if (url.includes('/gps_reports'))    return route.fulfill({ json: gpsReports });

@@ -259,7 +259,12 @@ test.describe('MC switcher', () => {
   test('selecting a different MC updates the header', async ({ page }) => {
     await gotoCalendar(page, { mcs: [MC, MC2] });
     await page.click('#calMcNav');
-    await page.locator('#calMcPopover button', { hasText: 'MC 02' }).click();
+    // El popover se abre abajo del todo y su botón queda fuera de la ventana; además tiene una
+    // transición de fondo que Playwright lee como «inestable». Se lo trae a la vista y se lo
+    // dispara directo.
+    const opcion = page.locator('#calMcPopover button', { hasText: 'MC 02' }).first();
+    await opcion.scrollIntoViewIfNeeded();
+    await opcion.evaluate(b => b.click());
     await expect(page.locator('#calMcTitle')).toContainText('MC 02');
   });
 });
@@ -394,7 +399,9 @@ test.describe('Form structure', () => {
   });
 
   test('modal has aria-modal and aria-labelledby attributes', async ({ page }) => {
-    const modal = page.locator('[role="dialog"]');
+    // La página tiene ocho diálogos; el que abre este bloque es el de eventos. Sin acotar, el
+    // selector los agarra a todos y Playwright lo rechaza por ambiguo.
+    const modal = page.locator('#calEvtBackdrop [role="dialog"], [role="dialog"]#calEvtModal').first();
     await expect(modal).toHaveAttribute('aria-modal', 'true');
     await expect(modal).toHaveAttribute('aria-labelledby', 'calEvtTitle');
   });

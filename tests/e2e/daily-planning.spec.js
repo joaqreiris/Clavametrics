@@ -5,7 +5,10 @@ import { SB, PLAYER, MICROCYCLE, injectSession, mockBase } from './_shared.js';
 const TREATMENT = {
   id: 'tr-1', club_id: 'club-1', player_id: 'p-1',
   date: '2026-05-16', type: 'Massage',
-  notes: 'Post-match recovery', adaptation: null, zones: null,
+  // La lista de fisio del día muestra SOLO los tratamientos con adaptación anotada: es lo que el
+  // cuerpo técnico tiene que respetar en la sesión. Sin este campo la tarjeta sale vacía.
+  notes: 'Post-match recovery', adaptation: null, adaptation_notes: 'Sin sprints ni cambios de dirección',
+  zones: null,
   players: { first_name: 'Lucas', last_name: 'García', number: 10, position: 'FW' },
 };
 
@@ -85,7 +88,8 @@ test.describe('Daily Planning — Render', () => {
 test.describe('Daily Planning — Squad section', () => {
   test('shows player name in squad body', async ({ page }) => {
     await gotoDP(page);
-    await expect(page.locator('#dpSquadBody')).toContainText('Lucas', { timeout: 8000 });
+    // La lista muestra el APELLIDO con el dorsal («FWD · 10 García»), no el nombre de pila.
+    await expect(page.locator('#dpSquadBody')).toContainText('García', { timeout: 8000 });
   });
 
   test('squad count reflects loaded players', async ({ page }) => {
