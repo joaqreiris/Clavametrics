@@ -145,6 +145,10 @@
           if (realProf) { _profile = realProf; window.__cm_profile = realProf; syncProfileTimezone(user.id, realProf.timezone); }
         }
         _clubId = _ov;
+        // Estás navegando un club ajeno como soporte: que quede qué pantalla abriste.
+        // El club lo lee en Admin → Seguridad. Un único punto en vez de 20 páginas, y se
+        // dispara y se olvida: si falla, no puede tumbar la pantalla que venías a ver.
+        window.supportLogView(location.pathname.replace(/^\//, '') || 'Hub.html');
         return _clubId;
       }
       const { data: profile, error: profileErr } = await window.sb.from('profiles')
@@ -671,14 +675,42 @@
     window.cmPaintPhotoSrcs(document);
   })();
 
-  let _superAdmin = null;
-  window.isSuperAdmin = function () {
-    if (_superAdmin !== null) return Promise.resolve(_superAdmin);
+  // OJO con los nombres: desde las migraciones 163-166 is_super_admin() en la BASE ya NO
+  // significa "soy el dueño". Significa "soy admin de plataforma Y el club me abrió una
+  // ventana de soporte ahora mismo". Lo que el frontend necesita para decidir si pinta el
+  // selector de clubes o desbloquea menús es la otra pregunta — "¿soy personal de
+  // plataforma?" — y esa es is_platform_admin(), que no cambió.
+  //
+  // Por eso isSuperAdmin() apunta a is_platform_admin: los ~20 usos que hay repartidos por
+  // la app son gates de INTERFAZ, no de datos. Los datos los corta la RLS sola: un admin de
+  // plataforma puede elegir otro club en el switcher y la pantalla le sale vacía hasta que
+  // ese club autorice. Para saber si hay sesión viva está supportStatus().
+  let _platformAdmin = null;
+  window.isPlatformAdmin = function () {
+    if (_platformAdmin !== null) return Promise.resolve(_platformAdmin);
     return (async () => {
-      try { const { data } = await window.sb.rpc('is_super_admin'); _superAdmin = !!data; }
-      catch { _superAdmin = false; }
-      return _superAdmin;
+      try { const { data } = await window.sb.rpc('is_platform_admin'); _platformAdmin = !!data; }
+      catch { _platformAdmin = false; }
+      return _platformAdmin;
     })();
+  };
+  window.isSuperAdmin = window.isPlatformAdmin;
+
+  // Sesión de soporte viva, o null. No se cachea: caduca sola y el club la puede revocar
+  // en cualquier momento, así que un valor viejo mentiría justo cuando importa.
+  window.supportStatus = async function () {
+    try {
+      const { data } = await window.sb.rpc('support_status');
+      const row = Array.isArray(data) ? data[0] : data;
+      return (row && row.club_id) ? row : null;
+    } catch { return null; }
+  };
+
+  // Deja constancia de qué pantalla se abrió durante una sesión de soporte. El club lo lee.
+  // Se dispara y se olvida: si falla, no puede romper la pantalla que el usuario vino a ver.
+  window.supportLogView = function (resource, detail) {
+    try { window.sb.rpc('support_log_view', { p_resource: String(resource || 'unknown'), p_detail: detail || null }); }
+    catch {}
   };
   // Club activo elegido por un super-admin (override). Devuelve null si no aplica.
   window.getActiveClubOverride = function () {
