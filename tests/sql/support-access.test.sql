@@ -199,6 +199,58 @@ begin
 
   execute 'reset role';
 
+  ------------------------------- G. el conflicto de interes DECLARADO
+
+  -- El veto por pais no es una lista que alguien carga: se deduce de donde declaro que
+  -- ejerce el admin. Un club nuevo de ese pais tiene que nacer vetado, sin que nadie haga
+  -- nada. Se prueba creando uno al vuelo (la transaccion termina en rollback).
+  execute 'reset role';
+  declare
+    v_pais text; v_falso uuid;
+  begin
+    select e.country into v_pais
+    from public.platform_admin_engagements e
+    where e.admin_user_id = v_admin
+      and (e.ended_on is null or (e.ended_on + make_interval(months => e.cooloff_months)) > current_date)
+    limit 1;
+
+    if v_pais is not null then
+      insert into public.clubs (name, country)
+      values ('ZZZ club de prueba (rollback)', v_pais)
+      returning id into v_falso;
+
+      if not public.support_conflict(v_admin, v_falso) then
+        v_fallos := v_fallos || format(
+          E'\n  G1: un club nuevo de %s NO nacio vetado pese al conflicto declarado', v_pais);
+      end if;
+
+      -- y su empleador declarado sigue siendo accesible, que es el otro lado de la moneda
+      if exists (
+        select 1 from public.platform_admin_employers em
+        join public.platform_admin_engagements e on e.id = em.engagement_id
+        where e.admin_user_id = v_admin
+          and public.support_conflict(v_admin, em.club_id)
+      ) then
+        v_fallos := v_fallos || E'\n  G2: su empleador declarado quedo vetado (no podria dar soporte donde trabaja)';
+      end if;
+    end if;
+
+    -- La declaracion no se puede ablandar: ni borrar, ni cambiar el pais, ni bajar el
+    -- enfriamiento. Si se pudiera, no seria una garantia sino una promesa.
+    begin
+      delete from public.platform_admin_engagements where admin_user_id = v_admin;
+      v_fallos := v_fallos || E'\n  G3: pude BORRAR una declaracion de conflicto';
+    exception when others then null; end;
+    begin
+      update public.platform_admin_engagements set cooloff_months = 0 where admin_user_id = v_admin;
+      v_fallos := v_fallos || E'\n  G4: pude bajar el periodo de enfriamiento';
+    exception when others then null; end;
+    begin
+      update public.platform_admin_engagements set country = 'Narnia' where admin_user_id = v_admin;
+      v_fallos := v_fallos || E'\n  G5: pude cambiarle el pais a una declaracion';
+    exception when others then null; end;
+  end;
+
   ------------------------------------------------------------------ veredicto
 
   if v_fallos <> '' then

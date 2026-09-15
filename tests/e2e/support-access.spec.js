@@ -25,7 +25,7 @@ const LOG = [
  * Monta Admin.html con el club en el estado que se le pida y abre la pestaña de seguridad.
  * `grants` vacío = puerta cerrada. Devuelve los POST a RPC que hizo la página.
  */
-async function montar(page, { grants = [], log = [], restricciones = [], sesiones = [] } = {}) {
+async function montar(page, { grants = [], log = [], restricciones = [], sesiones = [], conflictos = [] } = {}) {
   const rpcs = [];
   const USER = { id:'user-1', email:'admin@testfc.com', aud:'authenticated', role:'authenticated', app_metadata:{}, user_metadata:{} };
 
@@ -46,7 +46,9 @@ async function montar(page, { grants = [], log = [], restricciones = [], sesione
     return route.fulfill({ json: [], headers:{ 'Content-Range':'0-0/0' } });
   });
   await page.route(`${SB}/rest/v1/rpc/**`, route => {
-    rpcs.push({ nombre: route.request().url().split('/rpc/')[1].split('?')[0], body: route.request().postDataJSON() });
+    const nombre = route.request().url().split('/rpc/')[1].split('?')[0];
+    rpcs.push({ nombre, body: route.request().postDataJSON() });
+    if (nombre === 'support_conflict_notice') return route.fulfill({ json: conflictos });
     return route.fulfill({ json: [] });
   });
 
@@ -120,6 +122,29 @@ test.describe('Admin — acceso de soporte', () => {
   test('sin accesos previos lo dice en vez de dejar el hueco vacío', async ({ page }) => {
     await montar(page, { log: [] });
     await expect(page.locator('#supLog')).toContainText('Nadie de ClavaMetrics entró nunca', { timeout: 15_000 });
+  });
+
+  test('el conflicto declarado se avisa aunque no haya ninguna fila de veto', async ({ page }) => {
+    // Esto es lo que de verdad contesta "¿el dueño puede ver mis datos?". No sale de una
+    // lista que alguien cargó a mano: sale de que la persona declaró dónde ejerce y este
+    // club está en ese país. Un club camboyano que se dé de alta mañana ya lo ve.
+    await montar(page, { log: LOG, restricciones: [], conflictos: [
+      { admin_email:'reiris.joaquin@gmail.com', country:'Cambodia', started_on:'2026-09-16', ended_on:null, note:null },
+    ]});
+    const vetos = page.locator('#supVetos');
+    await expect(vetos).toContainText('declaró que ejerce en Cambodia', { timeout: 15_000 });
+    await expect(vetos).toContainText('ni con la puerta abierta');
+    await expect(vetos).toContainText('no se puede borrar ni ablandar');
+    // Y NO puede decir "no hay nadie vetado" justo debajo: se contradice y le quita
+    // credibilidad a lo único que de verdad importa de esta tarjeta.
+    await expect(vetos).not.toContainText('No hay nadie vetado');
+  });
+
+  test('si esa persona ya se fue, se dice que el veto sigue en enfriamiento', async ({ page }) => {
+    await montar(page, { log: LOG, conflictos: [
+      { admin_email:'reiris.joaquin@gmail.com', country:'Cambodia', started_on:'2024-01-01', ended_on:'2026-06-30', note:null },
+    ]});
+    await expect(page.locator('#supVetos')).toContainText('enfriamiento', { timeout: 15_000 });
   });
 
   test('un vetado se puede quitar, y el veto se ofrece sobre quien ya entró', async ({ page }) => {

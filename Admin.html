@@ -1336,7 +1336,7 @@ const _esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&a
     const elVetos = document.getElementById('supVetos');
     if (!elState) return;
 
-    const [grantRes, logRes, vetoRes, sessRes] = await Promise.all([
+    const [grantRes, logRes, vetoRes, sessRes, conflRes] = await Promise.all([
       window.sb.from('support_grants')
         .select('id, reason, created_at, expires_at, granted_by')
         .eq('club_id', clubId).is('revoked_at', null).gt('expires_at', new Date().toISOString())
@@ -1350,12 +1350,14 @@ const _esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&a
       window.sb.from('support_sessions')
         .select('admin_user_id, reason, opened_at, expires_at')
         .eq('club_id', clubId).gt('expires_at', new Date().toISOString()),
+      window.sb.rpc('support_conflict_notice', { p_club_id: clubId }),
     ]);
 
     const grant = grantRes.data?.[0] || null;
     const rows  = logRes.data  || [];
     const vetos = vetoRes.data || [];
     const dentro = sessRes.data || [];
+    const conflictos = conflRes.data || [];
 
     // Nombre por id: los perfiles de plataforma no están en profiles del club, así que el
     // email que guardó el log es la única identidad fiable. Por eso se guarda al escribirlo.
@@ -1437,6 +1439,9 @@ const _esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&a
     // puede identificar (los admins de plataforma no están en su tabla de perfiles).
     const yaVetados = new Set(vetos.map(v => v.admin_user_id));
     const candidatos = [...new Set(rows.filter(r => r.actor_id && !yaVetados.has(r.actor_id)).map(r => r.actor_id))];
+    // "No hay nadie vetado" justo debajo de un aviso que dice que SÍ hay alguien vetado se
+    // contradice y le resta credibilidad a lo único que importa de esta tarjeta. Con aviso de
+    // conflicto, el hueco vacío no lleva texto.
     const lista = vetos.length
       ? vetos.map(v => `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--cm-border-soft)">
             <i class="ti ti-ban" style="font-size:15px;color:var(--cm-danger,#DC2626)"></i>
@@ -1446,6 +1451,7 @@ const _esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&a
             </div>
             <button class="cm-btn is-outline is-sm" data-sup-unveto="${_esc(v.admin_user_id)}">${tt('admin.sup_unveto','Lift')}</button>
           </div>`).join('')
+      : conflictos.length ? ''
       : `<div style="color:var(--cm-fg-muted);font:500 12.5px/1.5 var(--cm-font-sans)">${tt('admin.sup_veto_empty','Nobody is blocked. If someone at ClavaMetrics has a conflict of interest with your club — they coach against you, for example — block them here and not even an open door will let them in.')}</div>`;
     const anadir = candidatos.length
       ? `<div style="margin-top:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
@@ -1455,7 +1461,22 @@ const _esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&a
            <button class="cm-btn is-outline is-sm" id="supVetoAdd"><i class="ti ti-ban" style="font-size:13px"></i>${tt('admin.sup_veto_add','Block access')}</button>
          </div>`
       : '';
-    elVetos.innerHTML = lista + anadir;
+    // Conflicto de interés DECLARADO: no es una fila que alguien se acordó de cargar, sale
+    // de que la persona declaró dónde ejerce y este club está en ese país. Va arriba de todo
+    // porque es lo que de verdad contesta la pregunta "¿el dueño puede ver mis datos?".
+    const aviso = conflictos.map(c => `
+      <div style="display:flex;gap:11px;align-items:flex-start;padding:12px 13px;margin-bottom:12px;border-radius:9px;background:color-mix(in srgb,var(--cm-accent) 9%,transparent);border:1px solid color-mix(in srgb,var(--cm-accent) 30%,transparent)">
+        <i class="ti ti-shield-lock" style="font-size:17px;color:var(--cm-accent);flex:0 0 auto"></i>
+        <div style="min-width:0">
+          <div style="font:600 12.5px/1.4 var(--cm-font-sans);color:var(--cm-fg-strong)">${tt('admin.sup_conflict_title','{who} declared they work in {country} — so they cannot enter your club, even with the door open.',{ who:_esc(c.admin_email), country:_esc(c.country) })}</div>
+          <div style="font:500 11.5px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);margin-top:3px">
+            ${c.ended_on
+              ? tt('admin.sup_conflict_ended','Left on {d}. The block stays in place for a cooling-off period.',{ d:_esc(c.ended_on) })
+              : tt('admin.sup_conflict_since','Declared since {d}. This declaration is public and cannot be deleted or softened.',{ d:_esc(c.started_on) })}
+          </div>
+        </div>
+      </div>`).join('');
+    elVetos.innerHTML = aviso + lista + anadir;
 
     elVetos.querySelectorAll('[data-sup-unveto]').forEach(b => b.addEventListener('click', async () => {
       await window.sb.from('support_restrictions').delete()
