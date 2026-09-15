@@ -30,7 +30,12 @@ const PLAYERS = [
   { id: 'p1', club_id: CLUB_ID, first_name: 'Ana',  last_name: 'Alfa',  number: 4, position: 'CB', positions: ['CB'], status: 'active' },
   { id: 'p2', club_id: CLUB_ID, first_name: 'Beto', last_name: 'Bravo', number: 5, position: 'CB', positions: ['CB'], status: 'active' },
 ];
-const REPORTS = SESSIONS.flatMap((s, si) => PLAYERS.map((p, pi) => ({
+/** Plantilla de n jugadores: una tabla de plantilla real no entra en la altura de su card. */
+const squadOf = (n) => Array.from({ length: n }, (_, i) => ({
+  id: `q${i + 1}`, club_id: CLUB_ID, first_name: `Jug${i + 1}`, last_name: `Apellido${i + 1}`,
+  number: i + 1, position: 'CB', positions: ['CB'], status: 'active',
+}));
+const reportsOf = (players) => SESSIONS.flatMap((s, si) => players.map((p, pi) => ({
   player_id: p.id, session_id: s.id, club_id: CLUB_ID, is_invalid: false, work_context: 'team',
   total_distance: 5000 + pi * 1000 + si * 500, high_speed_distance: 500, very_high_speed_distance: null,
   sprint_distance: null, sprint_count: 5, accelerations: 20, decelerations: 18, max_speed: 30, avg_speed: 6,
@@ -38,6 +43,7 @@ const REPORTS = SESSIONS.flatMap((s, si) => PLAYERS.map((p, pi) => ({
   players: { first_name: p.first_name, last_name: p.last_name, number: p.number, position: p.position, positions: p.positions },
   training_sessions: { session_date: s.session_date, session_attributes: null, microcycle_id: s.microcycle_id, team_id: null, session_type: 'training', match_day_offset: null, season_id: null },
 })));
+const REPORTS = reportsOf(PLAYERS);
 
 const CARDS = [
   { id: 'card-1', position: 0, source: 'builder', size: 'lg', config: {
@@ -69,7 +75,9 @@ const CARDS = [
     range: { type: 'last30' }, style: { color: '#15803D', gaugeMode: 'value' } } },
 ];
 
-async function openDashboard(page) {
+async function openDashboard(page, players) {
+  const squad   = players || PLAYERS;
+  const reports = players ? reportsOf(players) : REPORTS;
   await page.route(`${SB}/rest/v1/**`, r => r.fulfill({ json: [], headers: { 'Content-Range': '0-0/0', 'Content-Type': 'application/json' } }));
   await page.route(`${SB}/auth/v1/**`, r => r.fulfill({ json: { access_token: 'test-token', user: { id: 'user-1', email: 'test@test.com' } } }));
   await page.route(`${SB}/rest/v1/profiles**`, r => r.fulfill({ json: [PROFILE] }));
@@ -81,8 +89,8 @@ async function openDashboard(page) {
   ] }));
   await page.route(`${SB}/rest/v1/microcycles**`, r => r.fulfill({ json: MCS }));
   await page.route(`${SB}/rest/v1/training_sessions**`, r => r.fulfill({ json: SESSIONS }));
-  await page.route(`${SB}/rest/v1/players**`, r => r.fulfill({ json: PLAYERS }));
-  await page.route(`${SB}/rest/v1/gps_reports**`, r => r.fulfill({ json: REPORTS }));
+  await page.route(`${SB}/rest/v1/players**`, r => r.fulfill({ json: squad }));
+  await page.route(`${SB}/rest/v1/gps_reports**`, r => r.fulfill({ json: reports }));
   await page.route(`${SB}/rest/v1/dashboards**`, r => {
     const acc = r.request().headers()['accept'] || '';
     return r.fulfill({ json: acc.includes('object') ? DASH : [DASH] });
@@ -187,6 +195,38 @@ test.describe('GPS · informe PDF', () => {
     const last = await page.evaluate(() => window.__gxLast);
     expect(last.kinds.table).toBeGreaterThan(0);
     expect(last.kinds.gauge).toBeGreaterThan(0);
+  });
+
+  // Una tabla de 24 jugadores no entra en la altura de su card: antes se cortaba con un
+  // «+N filas más» y esas filas no aparecían en ninguna página del informe. Ahora siguen en
+  // páginas propias, con la cabecera repetida — y se puede apagar.
+  test('la tabla que no entra en su card continúa en páginas propias', async ({ page }) => {
+    await openDashboard(page, squadOf(24));
+    await expect.poll(async () => page.evaluate(() =>
+      document.querySelectorAll('.gp-view.is-on .gp-c .gp-zt tbody tr').length
+    ), { timeout: 30_000, message: 'la tabla nunca se llenó' }).toBeGreaterThan(15);
+
+    await page.locator('#gpExportBtn').click();
+    await expect(page.locator('#gxBody')).toBeVisible();
+    const [dl] = await Promise.all([
+      page.waitForEvent('download', { timeout: 60_000 }),
+      page.locator('#gxPdf').click(),
+    ]);
+    expect(dl.suggestedFilename()).toMatch(/\.pdf$/);
+    const con = await page.evaluate(() => window.__gxLast);
+    expect(con.tableCont).toBeGreaterThan(0);          // hubo continuación
+
+    // Y sin la opción, el informe vuelve a cortar la tabla: es una elección, no un efecto.
+    await page.locator('#gpExportBtn').click();
+    await expect(page.locator('#gxBody')).toBeVisible();
+    await page.locator('#gxTables').uncheck();
+    await Promise.all([
+      page.waitForEvent('download', { timeout: 60_000 }),
+      page.locator('#gxPdf').click(),
+    ]);
+    const sin = await page.evaluate(() => window.__gxLast);
+    expect(sin.tableCont).toBe(0);
+    expect(sin.pages).toBeLessThan(con.pages);
   });
 
   // Ranking, zonas de velocidad y × match avg son HTML puro: no hay canvas que copiar ni tabla

@@ -219,8 +219,10 @@
     return 'other';
   }
 
-  /** Dibuja una card completa en (x,y) con ancho w; devuelve el alto usado en mm. */
-  async function drawCard(pdf, card, x, y, w, k) {
+  /** Dibuja una card completa en (x,y) con ancho w; devuelve el alto usado en mm.
+   *  `o.fullTables` = las filas que no entran en la card no se pierden: quedan anotadas en
+   *  `card._cont` y se imprimen enteras después de la fila de cards. */
+  async function drawCard(pdf, card, x, y, w, k, o) {
     const el = card.el;
     const hpx = el.getBoundingClientRect().height;
     let h = Math.max(18, mmOf(hpx, k));
@@ -264,7 +266,9 @@
     } else if (kind === 'kpi') {
       drawKpi(pdf, el, x, bodyY, w, bodyH);
     } else if (kind === 'table') {
-      drawTable(pdf, el.querySelector('table'), x, bodyY, w, bodyH);
+      const full = !!(o && o.fullTables);
+      const r = drawTable(pdf, el.querySelector('table'), x, bodyY, w, bodyH, { cont: full });
+      card._cont = (full && r && r.rest > 0) ? { model: r.model, from: r.next } : null;
     } else if (kind === 'gauge') {
       drawGauge(pdf, el, x, bodyY, w, bodyH, k);
     } else {
@@ -371,15 +375,33 @@
     pdf.setLineCap('butt'); pdf.setLineWidth(0.2);
   }
 
-  /** Tabla: se redibuja fila por fila (texto real, no una foto) CON sus colores. */
-  function drawTable(pdf, table, x, y, w, h) {
-    if (!table) return;
+  /** Lo que hay que saber de una tabla para dibujarla: cabecera, anchos de pantalla y filas.
+   *  Se lee UNA vez: las continuaciones de las páginas siguientes reusan el mismo modelo. */
+  function tableModel(table) {
+    if (!table) return null;
     const ths  = [...table.querySelectorAll('thead th')];
     const head = ths.map(t => t.innerText.trim());
     const rows = [...table.querySelectorAll('tbody tr')].map(tr => [...tr.children].map(cellInfo));
-    if (!head.length && !rows.length) return;
+    if (!head.length && !rows.length) return null;
+    return { ths, head, rows };
+  }
+
+  /**
+   * Tabla: se redibuja fila por fila (texto real, no una foto) CON sus colores.
+   *
+   * Dibuja las filas que ENTRAN en la caja (`o.from` en adelante) y devuelve dónde se quedó,
+   * para que el resto pueda seguir en otra página. Una tabla de plantilla no entra en la altura
+   * de su card: antes se cortaba con un «+N filas más» y esas filas no estaban en ningún lado
+   * del informe — el dato existía y no se imprimía.
+   */
+  function drawTable(pdf, table, x, y, w, h, o) {
+    const opt = o || {};
+    const model = opt.model || tableModel(table);
+    if (!model) return null;
+    const { ths, head, rows } = model;
+    const from = Math.max(0, opt.from | 0);
     const cols = Math.max(head.length, rows[0]?.length || 0);
-    if (!cols) return;
+    if (!cols) return null;
 
     const inner = w - PDF.PAD * 2;
     // Anchos PROPORCIONALES a los de pantalla: ahí la columna del jugador es ancha y las de
@@ -404,6 +426,7 @@
 
     const rowH = 4.2, avail = Math.max(0, h - 2);
     const maxRows = Math.max(0, Math.floor(avail / rowH) - 1);
+    const slice = rows.slice(from, from + maxRows);
     let yy = y + 3.5;
     if (head.length) {
       setFont(pdf, 6.2, 'bold', PDF.muted);
@@ -412,7 +435,7 @@
       pdf.line(x + PDF.PAD, yy + 1.2, x + w - PDF.PAD, yy + 1.2);
       yy += rowH;
     }
-    rows.slice(0, maxRows).forEach((r, ri) => {
+    slice.forEach((r, ri) => {
       if (ri % 2) { pdf.setFillColor(250, 250, 249); pdf.rect(x + PDF.PAD - 0.5, yy - 3, w - PDF.PAD * 2 + 1, rowH, 'F'); }
       r.slice(0, cols).forEach((c, i) => {
         const bx = cx[i] + 0.4, bw = Math.max(1, cw[i] - 0.8), top = yy - 2.8, bh = 3.5;
@@ -444,10 +467,51 @@
       });
       yy += rowH;
     });
-    if (rows.length > maxRows) {
+    const next = from + slice.length;
+    const rest = rows.length - next;
+    // Pie de la tabla: cuántas filas quedan. Si van a seguir en otra página se dice, para que
+    // nadie tome el corte por «no hay más datos».
+    if (rest > 0) {
       setFont(pdf, 6.2, 'normal', PDF.faint);
-      pdf.text(T('gps_analysis.export_rows_more', '+{n} more rows', { n: rows.length - maxRows }), x + PDF.PAD, yy);
+      pdf.text(opt.cont
+        ? T('gps_analysis.export_rows_cont', '+{n} more rows · continues on the next pages', { n: rest })
+        : T('gps_analysis.export_rows_more', '+{n} more rows', { n: rest }), x + PDF.PAD, yy);
     }
+    return { model, next, rest, drawn: slice.length };
+  }
+
+  /**
+   * Continuación de una tabla que no entró en su card: una página nueva por tanda, con el
+   * título de la card y la cabecera repetida. Devuelve cuántas páginas agregó.
+   *
+   * Va aparte de la card (y no estirando la card) a propósito: el informe respeta el layout del
+   * dashboard, y agrandar una card correría todo lo demás. Así la hoja sigue siendo la que armó
+   * el usuario y el dato completo está igual, a una página de distancia.
+   */
+  function drawTableRest(pdf, card, x, w, pageH) {
+    const cont = card._cont;
+    if (!cont || !cont.model) return 0;
+    const total = cont.model.rows.length;
+    let from = cont.from, pages = 0;
+    while (from < total && pages < 40) {          // tope de seguridad: nunca un PDF infinito
+      pdf.addPage();
+      pages += 1;
+      const y = PDF.M + 9;
+      // Primero la tabla: recién después se sabe cuántas filas entraron y se puede rotular el tramo.
+      const r = drawTable(pdf, null, x, y, w, pageH - PDF.FOOT - y, { model: cont.model, from, cont: true });
+      const hasta = from + ((r && r.drawn) || 0);
+      setFont(pdf, 9, 'bold');
+      pdf.text(clip(pdf, `${card.title} · ${T('gps_analysis.export_cont', 'continued')}`, w * 0.6),
+               x + PDF.PAD, PDF.M + 6);
+      setFont(pdf, 7, 'normal', PDF.muted);
+      pdf.text(T('gps_analysis.export_cont_rows', 'rows {a}–{b} of {n}',
+                 { a: from + 1, b: hasta, n: total }), x + w - PDF.PAD, PDF.M + 6, { align: 'right' });
+      pdf.setDrawColor(...PDF.line); pdf.setLineWidth(0.2);
+      pdf.line(x + PDF.PAD, PDF.M + 7.5, x + w - PDF.PAD, PDF.M + 7.5);
+      if (!r || r.next <= from) break;            // no avanzó: cortar antes que repetir la hoja
+      from = r.next;
+    }
+    return pages;
   }
 
   // ── Gauges ──────────────────────────────────────────────────────────────
@@ -714,6 +778,7 @@
     const x0 = PDF.M, contentW = pageW - PDF.M * 2, bottom = pageH - PDF.FOOT;
 
     _htmlDrawn = 0;
+    let contPages = 0;                 // páginas extra con la continuación de una tabla
     opts.crestData = await crestData(opts.crest);
     let y = drawHeader(pdf, opts, x0, PDF.M + 2, contentW);
     if (opts.showFilters) y = drawFilters(pdf, filterLines(), x0, y, contentW);
@@ -737,16 +802,24 @@
       for (const c of band) {
         const cwCols = isFinite(c.w) ? c.w : 12;
         const cw = (contentW - PDF.GAP * (band.length - 1)) * (cwCols / Math.max(totalW, cwCols));
-        await drawCard(pdf, c, cx, y, cw, k);
+        await drawCard(pdf, c, cx, y, cw, k, opts);
         cx += cw + PDF.GAP;
       }
       y += bandH + PDF.GAP;
+      // Las tablas que no entraron en su card siguen acá: en páginas propias, justo detrás de
+      // la fila donde están, con la cabecera repetida y el título de la card.
+      for (const c of band) {
+        if (!c._cont) continue;
+        contPages += drawTableRest(pdf, c, x0, contentW, pageH);
+        c._cont = null;
+      }
     }
 
     const total = pdf.internal.getNumberOfPages();
     for (let p = 1; p <= total; p++) { pdf.setPage(p); drawFooter(pdf, pageW, pageH, p, total, opts); }
     // Resumen de lo que se dibujó — lo leen los tests y sirve para diagnosticar un informe raro.
     window.__gxLast = { pages: total, cards: opts.cards.length, mode: mode || 'save', html: _htmlDrawn,
+      tableCont: contPages,
       kinds: opts.cards.reduce((a, c) => { const k = cardKind(c.el); a[k] = (a[k] || 0) + 1; return a; }, {}) };
     if (mode === 'print') {
       // Imprimir = EL MISMO informe, abierto en el visor de PDF con el diálogo de impresión listo.
@@ -854,6 +927,7 @@
          <div class="gx-row">
            <label class="gx-ck"><input type="checkbox" id="gxCrest" checked><span>${T('gps_analysis.export_crest', 'Club crest')}</span></label>
            <label class="gx-ck"><input type="checkbox" id="gxFilters" ${fl.length ? 'checked' : 'disabled'}><span>${T('gps_analysis.export_filters_opt', 'Filters applied')}${fl.length ? '' : ' —'}</span></label>
+           <label class="gx-ck" title="${esc(T('gps_analysis.export_full_tables_hint', 'A table that does not fit in its card keeps going on its own page, with the header repeated.'))}"><input type="checkbox" id="gxTables" checked><span>${T('gps_analysis.export_full_tables', 'Full tables')}</span></label>
            <div class="mgp-seg" id="gxOrient" style="margin-left:auto">
              <button type="button" data-o="portrait" class="is-on">${T('gps_analysis.export_portrait', 'Portrait')}</button>
              <button type="button" data-o="landscape">${T('gps_analysis.export_landscape', 'Landscape')}</button>
@@ -887,6 +961,9 @@
       clubName: club?.name || '',
       subtitle,
       showFilters: body.querySelector('#gxFilters').checked,
+      // Una tabla más larga que su card sigue en páginas propias en vez de cortarse. Se puede
+      // apagar: hay informes de una sola hoja donde el corte es lo que se quiere.
+      fullTables: body.querySelector('#gxTables').checked,
       orientation,
       cards: cards.map((c, i) => ({ ...c, note: (body.querySelector(`[data-gx-note="${i}"]`)?.value || '').trim() }))
         .filter((_, i) => body.querySelector(`[data-gx-on="${i}"]`)?.checked),

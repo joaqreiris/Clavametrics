@@ -580,7 +580,13 @@
       }
     });
     const fuera = [...todos.keys()].filter(x => !conDato.has(x));
-    if (info) info.dropped = fuera.map(x => todos.get(x));
+    if (info) {
+      info.dropped = fuera.map(x => todos.get(x));
+      // Cuántos SÍ se pudieron comparar: sin ese número, «17 quedaron fuera» no dice si lo que
+      // se está mirando son 4 jugadores o 40.
+      info.kept = conDato.size;
+      info.total = todos.size;
+    }
     if (!fuera.length) return out;
     // Sólo se filtran las series en Δ%: una métrica sin el modo puesto conserva su eje.
     const quitar = new Set(fuera);
@@ -624,21 +630,97 @@
                              pct: r.from ? (r.to - r.from) / r.from * 100 : null }));
   }
 
-  /** Nota al pie: a quién no se pudo comparar entre las dos fechas, y por qué. */
-  function _delta2Note(body, info) {
+  /**
+   * Le hace sitio a una nota al pie dentro del cuerpo de una card.
+   *
+   * El gráfico se monta en un wrap `position:absolute; inset:0`: ocupa el cuerpo ENTERO. Una nota
+   * agregada después quedaba dibujada por encima del gráfico —y cualquier botón suyo, debajo del
+   * canvas, imposible de tocar—. Se le sube el borde de abajo al wrap lo que mide la nota, y la
+   * nota se ancla al pie. Si el cuerpo no tiene wrap absoluto (una tabla, un ranking), no toca nada.
+   */
+  function _noteRoom(body, note) {
     try {
+      note.style.marginTop = 'auto';
+      note.style.position = 'relative';
+      note.style.zIndex = '2';
+      const wrap = [...body.children].find(el => el !== note && getComputedStyle(el).position === 'absolute');
+      if (!wrap) return;
+      const h = Math.ceil(note.getBoundingClientRect().height) || 14;
+      wrap.style.bottom = (h + 2) + 'px';
+    } catch (_e) { /* el sitio de una nota jamás puede romper una card */ }
+  }
+
+  /**
+   * Nota al pie del Δ% entre dos fechas: a cuántos se pudo comparar, a quiénes no, y la salida.
+   *
+   * El Δ% necesita al jugador en LAS DOS fechas — no mira el tipo de sesión: comparar un partido
+   * con un entrenamiento está permitido, pero el día de partido juegan unos y el de después
+   * entrenan otros, así que la mitad del plantel no tiene los dos valores y queda fuera. Eso se
+   * leía como un filtro roto. Ahora la nota dice cuántos entraron de cuántos, y ofrece pasar al
+   * acumulado de las dos fechas —donde no falta nadie— sin abrir el editor ni tocar la card
+   * guardada: es un cambio de vista, y el botón de al lado devuelve el Δ%.
+   */
+  function _delta2Note(body, info, config, cardEl) {
+    try {
+      if (!body) return;
+      const nota = (html, btnLabel, onClick) => {
+        const n = document.createElement('div');
+        n.className = 'gp-delta2-note';
+        n.style.cssText = 'display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;'
+          + 'text-align:center;margin-top:2px;font:500 10.5px/1.3 var(--cm-font-sans);color:var(--cm-text-muted,#64748b)';
+        n.innerHTML = html;
+        if (btnLabel && onClick) {
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.className = 'gp-delta2-swap';
+          b.style.cssText = 'border:1px solid var(--cm-border,#e2e8f0);background:var(--cm-bg-soft,#f8fafc);'
+            + 'color:inherit;border-radius:999px;padding:1px 8px;font:600 10px/1.5 var(--cm-font-sans);cursor:pointer';
+          b.textContent = btnLabel;
+          b.addEventListener('click', onClick);
+          n.appendChild(b);
+        }
+        body.appendChild(n);
+        _noteRoom(body, n);
+      };
+
+      // Vista de acumulado (se salió del Δ% desde acá): decirlo y dejar la vuelta a mano.
+      if (config && config._d2off && cardEl) {
+        nota(`<span><i class="ti ti-info-circle" style="font-size:11px;vertical-align:-1px"></i> ${
+          esc(_tt('gps_analysis.delta2_sum_on', 'Both dates together, without Δ% — nobody is left out.'))}</span>`,
+          _tt('gps_analysis.delta2_back', 'Back to Δ%'),
+          () => { const base = cardEl.__d2cfg; if (base) { cardEl.__d2cfg = null; resolveAndRenderCard(cardEl, base); } });
+        return;
+      }
+
       const fuera = info && info.dropped;
-      if (!body || !Array.isArray(fuera) || !fuera.length) return;
-      const note = document.createElement('div');
-      note.className = 'gp-delta2-note';
-      note.style.cssText = 'text-align:center;margin-top:2px;font:500 10.5px/1.3 var(--cm-font-sans);color:var(--cm-text-muted,#64748b)';
-      note.title = fuera.join(' · ');   // la lista completa, al pasar el mouse
+      if (!Array.isArray(fuera) || !fuera.length) return;
       const muestra = fuera.slice(0, 3).join(', ') + (fuera.length > 3 ? '…' : '');
-      note.innerHTML = `<i class="ti ti-info-circle" style="font-size:11px;vertical-align:-1px"></i> ${
-        esc(_tt('gps_analysis.delta2_dropped',
-            '{n} without data on one of the two dates, left out: {who}',
-            { n: fuera.length, who: muestra }))}`;
-      body.appendChild(note);
+      const partes = [];
+      // Con el «2 de 3» delante, repetir «sin datos en una de las dos fechas» sobra: se dice corto.
+      if (info.kept != null && info.total != null) {
+        partes.push(esc(_tt('gps_analysis.delta2_kept',
+          'Δ% only compares who has both dates: {ok} of {all}', { ok: info.kept, all: info.total })));
+        partes.push(esc(_tt('gps_analysis.delta2_dropped_short', '{n} left out: {who}',
+          { n: fuera.length, who: muestra })));
+      } else {
+        partes.push(esc(_tt('gps_analysis.delta2_dropped',
+          '{n} without data on one of the two dates, left out: {who}',
+          { n: fuera.length, who: muestra })));
+      }
+      // El botón sólo tiene sentido si el Δ% está puesto en alguna métrica de ESTA card.
+      const puedeSalir = !!(cardEl && config && (config.metrics || []).some(m => m && m.rel === 'delta2'));
+      nota(`<span title="${esc(fuera.join(' · '))}"><i class="ti ti-info-circle" style="font-size:11px;vertical-align:-1px"></i> ${
+        partes.join(' · ')}</span>`,
+        puedeSalir ? _tt('gps_analysis.delta2_show_sum', 'See both dates together') : null,
+        puedeSalir ? () => {
+          // La card guardada no se toca: se redibuja con una copia sin el Δ%. Cualquier
+          // re-render normal (cambiar un filtro) vuelve a la configuración de verdad.
+          cardEl.__d2cfg = JSON.parse(JSON.stringify(config));
+          const cfg2 = JSON.parse(JSON.stringify(config));
+          (cfg2.metrics || []).forEach(m => { if (m && m.rel === 'delta2') delete m.rel; });
+          cfg2._d2off = true;
+          resolveAndRenderCard(cardEl, cfg2);
+        } : null);
     } catch (e) { /* un aviso nunca puede romper una card */ }
   }
 
@@ -3892,7 +3974,7 @@
       if (stale()) return;
       _renderCardInto(body, config, series, drawOpts);
       _taskDurationNote(body, config, rows);
-      _delta2Note(body, _d2info);
+      _delta2Note(body, _d2info, config, cardEl);
       cardEl.classList.remove('is-draft');
       clearTimeout(cardEl.__loadWatchdog);   // render completo: guardián de baja
 
@@ -3946,6 +4028,7 @@
             'The drills last between {lo} and {hi} min — compare per minute to weigh the demand',
             { lo: lo.toFixed(0), hi: hi.toFixed(0) })}`;
       body.appendChild(note);
+      _noteRoom(body, note);
     } catch (e) { /* un aviso nunca puede romper una card */ }
   }
 
@@ -7846,6 +7929,7 @@
       note.title = fuera.join(' · ');
       note.innerHTML = `<i class="ti ti-info-circle" style="font-size:11px;vertical-align:-1px"></i> ${esc(partes.join(' · '))}`;
       body.appendChild(note);
+      _noteRoom(body, note);
     } catch (e) { /* un aviso nunca puede romper una card */ }
   }
 

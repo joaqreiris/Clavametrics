@@ -163,6 +163,28 @@ test.describe('GPS · Δ% entre dos fechas', () => {
     expect(de('Alfa')).toBe(25);                   // si D0 entrara, no daría 25
   });
 
+  // Comparar un día de partido con uno de entrenamiento deja fuera a media plantilla: no es un
+  // filtro roto, es que el Δ% necesita las dos fechas. La nota lo dice Y ofrece la salida: ver el
+  // acumulado de las dos, donde no falta nadie. La card guardada no se toca — se puede volver.
+  test('desde la nota se pasa al acumulado y se vuelve al Δ%', async ({ page }) => {
+    await open(page);
+    await elegirDosDias(page, [D1, D2]);
+    const nota = page.locator('.gp-c[data-card-id="card-d2"] .gp-delta2-note');
+    await expect(nota).toContainText(/2 de 3|2 of 3/);        // cuántos se pudieron comparar
+
+    await nota.locator('.gp-delta2-swap').click();
+    await esperarCardQuieta(page, 'card-d2');
+    const acum = await barras(page);
+    expect(acum.labels).toHaveLength(3);                       // ya no falta nadie
+    expect(acum.data[acum.labels.findIndex(l => l.includes('Alfa'))]).toBe(4500);
+
+    await nota.locator('.gp-delta2-swap').click();             // volver
+    await esperarCardQuieta(page, 'card-d2');
+    const pct = await barras(page);
+    expect(pct.labels).toHaveLength(2);
+    expect(pct.data[pct.labels.findIndex(l => l.includes('Alfa'))]).toBe(25);
+  });
+
   test('sin el modo puesto la card sigue mostrando metros, no porcentajes', async ({ page }) => {
     await open(page, null);                        // misma card, sin rel
     await elegirDosDias(page, [D1, D2]);
