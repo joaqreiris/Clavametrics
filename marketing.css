@@ -38,7 +38,33 @@ html {
   -webkit-backdrop-filter:saturate(160%) blur(12px); backdrop-filter:saturate(160%) blur(12px);
   -webkit-backdrop-filter: saturate(160%) blur(12px);
   border-bottom: 1px solid var(--cm-border);
+  transition: background var(--cm-dur-2) var(--cm-ease),
+              border-color var(--cm-dur-2) var(--cm-ease),
+              color var(--cm-dur-2) var(--cm-ease);
 }
+
+/* ── La barra sobre el panel oscuro del hero ──
+   El nav es sticky y vive fuera del panel, así que al inicio se dibujaría como
+   una franja blanca encima del verde-negro. Mientras el hero ocupa la parte
+   alta, la barra se vuelve transparente y clara; al salir de él recupera su
+   estilo. La clase la pone un IntersectionObserver en Home.html.
+   Sin JS no pasa nada: se queda con el estilo claro de siempre, legible. */
+.mk-nav.on-dark {
+  background: transparent;
+  border-bottom-color: transparent;
+  -webkit-backdrop-filter: none; backdrop-filter: none;
+}
+.mk-nav.on-dark .mk-brand .name { color: #F2F7F4; }
+.mk-nav.on-dark .mk-brand .mark { background: #4ADE80; color: #06230F; }
+.mk-nav.on-dark .mk-links a { color: rgba(242,247,244,0.72); }
+.mk-nav.on-dark .mk-links a:hover { color: #F2F7F4; background: rgba(255,255,255,0.08); }
+.mk-nav.on-dark .mk-cta .signin { color: #F2F7F4; }
+.mk-nav.on-dark .mk-lang { color: rgba(242,247,244,0.72); border-color: rgba(255,255,255,0.22); }
+.mk-nav.on-dark .mk-lang:hover { color: #F2F7F4; border-color: rgba(255,255,255,0.4); }
+.mk-nav.on-dark .cm-btn.is-primary {
+  background: #4ADE80; color: #06230F; border-color: transparent;
+}
+.mk-nav.on-dark .cm-btn.is-primary:hover { background: #6EE7A0; }
 .mk-brand { display: flex; align-items: center; gap: 10px; text-decoration: none; }
 .mk-brand .mark {
   width: 28px; height: 28px; border-radius: 7px;

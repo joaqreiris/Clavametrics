@@ -60,6 +60,7 @@
 </nav>
 
 <!-- ════════════════ HERO ════════════════ -->
+<div class="hero-shell">
 <header class="hero">
   <span class="mk-eyebrow hero-eyebrow" data-i18n="hero.eyebrow">Performance OS for sport</span>
   <h1><span data-i18n="hero.h1pre">The performance OS for</span><br><span class="rotator" id="rotator"><span>football clubs</span></span></h1>
@@ -74,6 +75,9 @@
     <span data-i18n="hero.trust3">Cancel anytime</span>
   </div>
 
+  <!-- Centinela para la barra: marca dónde acaba el fondo oscuro puro y
+       empieza la viñeta, que es clara. Ver el observer más abajo. -->
+  <span id="navSentinel" aria-hidden="true"></span>
   <!-- Product vignette — hand-built mini Hub -->
   <div class="vignette" aria-label="ClavaMetrics Hub preview">
     <div class="brchrome">
@@ -165,6 +169,7 @@
     </div>
   </div>
 </header>
+</div>
 
 <!-- ════════════════ TRUSTED BY ════════════════ -->
 <section class="trust">
@@ -536,6 +541,28 @@
   };
   window.__stopRotator = function () { clearInterval(rotatorTimer); };
   window.__startRotator();
+
+  /* ── La barra de navegación sobre el panel oscuro ──
+     El nav es sticky y queda fuera del panel del hero, así que al inicio se
+     pintaría como una franja blanca encima del verde-negro. Se le pone .on-dark
+     mientras el panel siga tocando la parte alta de la ventana.
+     Con IntersectionObserver en vez de escuchar el scroll: no dispara en cada
+     píxel y el navegador lo calcula fuera del hilo principal. */
+  (function () {
+    const sentinel = document.getElementById("navSentinel");
+    const nav = document.querySelector(".mk-nav");
+    if (!sentinel || !nav || !("IntersectionObserver" in window)) return;
+    // Se vigila el centinela, no el panel entero: el panel incluye la viñeta,
+    // que es CLARA, y con ella detrás de una barra transparente los enlaces en
+    // blanco se volvían ilegibles. El centinela está justo donde acaba el fondo
+    // oscuro puro, así que la barra recupera su estilo normal en cuanto la
+    // viñeta empieza a pasar por detrás.
+    const io = new IntersectionObserver(
+      ([e]) => nav.classList.toggle("on-dark", e.isIntersecting),
+      { rootMargin: "-64px 0px 0px 0px", threshold: 0 }
+    );
+    io.observe(sentinel);
+  })();
 
   /* ── Demo del producto ──
      Arranca con póster + botón: el vídeo no se descarga hasta que alguien lo
