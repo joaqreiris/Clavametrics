@@ -23,19 +23,29 @@
 
   // done(c) recibe los contadores. El corte de cada paso es "¿ya pasó algo?", salvo
   // staff: el club nace con su propio usuario, así que uno solo significa "nadie más".
+  // `help` es el slug del artículo en support/ (los mismos de support/help-map.json):
+  // el club no tiene que salir a buscar el manual, el paso lo trae al lado.
   var STEPS = [
-    { id: 'players',  href: 'Squad.html',          icon: 'ti-users',          done: function (c) { return c.players  > 0; } },
-    { id: 'season',   href: 'Annual Planner.html', icon: 'ti-calendar-stats', done: function (c) { return c.seasons  > 0; } },
-    { id: 'calendar', href: 'Calendar.html',       icon: 'ti-calendar-event', done: function (c) { return c.events   > 0; } },
-    { id: 'staff',    href: 'Admin.html',          icon: 'ti-mail-plus',      done: function (c) { return c.staff    > 1; } },
-    { id: 'checkin',  href: 'Wellness.html',       icon: 'ti-heartbeat',      done: function (c) { return c.checkins > 0; } },
-    { id: 'session',  href: 'Planner.html',        icon: 'ti-clipboard-list', done: function (c) { return c.sessions > 0; } },
+    { id: 'players',  href: 'Squad.html',          icon: 'ti-users',          help: 'squad',           done: function (c) { return c.players  > 0; } },
+    { id: 'season',   href: 'Annual Planner.html', icon: 'ti-calendar-stats', help: 'annual-planner',  done: function (c) { return c.seasons  > 0; } },
+    { id: 'calendar', href: 'Calendar.html',       icon: 'ti-calendar-event', help: 'calendar',        done: function (c) { return c.events   > 0; } },
+    { id: 'staff',    href: 'Admin.html',          icon: 'ti-mail-plus',      help: 'admin',           done: function (c) { return c.staff    > 1; } },
+    { id: 'checkin',  href: 'Wellness.html',       icon: 'ti-heartbeat',      help: 'wellness',        done: function (c) { return c.checkins > 0; } },
+    { id: 'session',  href: 'Planner.html',        icon: 'ti-clipboard-list', help: 'drill-designer',  done: function (c) { return c.sessions > 0; } },
   ];
+
+  // El artículo del centro de ayuda, en el idioma activo. El inglés vive en la raíz.
+  function helpUrl(slug) {
+    var l = (window.CM_I18N && window.CM_I18N.current) || 'en';
+    return 'support/' + (l === 'en' ? '' : l + '/') + slug + '.html';
+  }
 
   var FALLBACK = {
     'first_steps.title':     'First steps',
     'first_steps.progress':  '{done} of {total}',
     'first_steps.hide':      'Hide',
+    'first_steps.start':     'Start',
+    'first_steps.how':       'How it works',
     'first_steps.reopen':    'First steps · {done}/{total}',
     'first_steps.players.t': 'Add your players',
     'first_steps.players.d': 'Import a CSV or Excel file, or add them one by one. Everything else hangs off the squad.',
@@ -87,11 +97,25 @@
       '  display:grid;place-items:center;margin-top:1px;font-size:12px;color:var(--cm-fg-faint)}',
       '.cm-fs-item.is-done .cm-fs-dot{background:var(--cm-success,#1a9c5b);border-color:transparent;color:#fff}',
       '.cm-fs-body{min-width:0}',
-      '.cm-fs-t{font:600 13px/1.35 var(--cm-font-sans);color:var(--cm-fg-strong)}',
+      '.cm-fs-t{display:block;font:600 13px/1.35 var(--cm-font-sans);color:var(--cm-fg-strong)}',
       '.cm-fs-item.is-done .cm-fs-t{color:var(--cm-fg-muted);text-decoration:line-through}',
-      '.cm-fs-d{font:var(--cm-body-sm);color:var(--cm-fg-muted);line-height:1.5;margin-top:2px}',
+      '.cm-fs-d{display:block;font:var(--cm-body-sm);color:var(--cm-fg-muted);line-height:1.5;margin-top:3px}',
       '.cm-fs-item.is-done .cm-fs-d{display:none}',
       '.cm-fs-arw{margin-left:auto;flex:none;color:var(--cm-fg-faint);font-size:15px;align-self:center}',
+      '.cm-fs-item.is-next{background:var(--cm-surface-2,rgba(127,127,127,.06));',
+      '  border:1px solid var(--cm-border);padding:13px 14px;margin:2px 0}',
+      '.cm-fs-item.is-next .cm-fs-dot{border-color:var(--cm-accent,currentColor);color:var(--cm-accent,inherit)}',
+      // Los que todavía no tocan: legibles, pero claramente no son la tarea de ahora.
+      '.cm-fs-item:not(.is-next):not(.is-done) .cm-fs-t{color:var(--cm-fg-muted);font-weight:500}',
+      '.cm-fs-item:not(.is-next){cursor:default}',
+      '.cm-fs-actions{display:flex;align-items:center;gap:14px;margin-top:10px;flex-wrap:wrap}',
+      '.cm-fs-go{display:inline-flex;align-items:center;gap:6px;background:var(--cm-accent,#111);',
+      '  color:var(--cm-accent-fg,#fff);border-radius:8px;padding:7px 12px;text-decoration:none;',
+      '  font:600 12.5px/1 var(--cm-font-sans)}',
+      '.cm-fs-go:hover{filter:brightness(1.08)}',
+      '.cm-fs-help{display:inline-flex;align-items:center;gap:5px;color:var(--cm-fg-muted);',
+      '  text-decoration:none;font:500 12.5px/1 var(--cm-font-sans)}',
+      '.cm-fs-help:hover{color:var(--cm-fg-strong);text-decoration:underline}',
       '.cm-fs-reopen{background:none;border:1px solid var(--cm-border);border-radius:99px;cursor:pointer;',
       '  padding:6px 12px;margin:0 0 18px;font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted)}',
       '.cm-fs-reopen:hover{color:var(--cm-fg-strong)}',
@@ -129,18 +153,39 @@
       return true;
     }
 
+    // UN SOLO siguiente paso. Enseñar seis tareas a la vez no es orientar: es la misma
+    // parálisis de la pantalla en blanco, repartida en seis. Solo el primer pendiente
+    // lleva explicación y botón; los de más abajo quedan como un índice de lo que viene,
+    // para que se vea que hay un camino y cuánto falta, sin pedir que se elija.
+    var nextId = null;
+    for (var i = 0; i < STEPS.length; i++) {
+      if (!STEPS[i].done(counts)) { nextId = STEPS[i].id; break; }
+    }
+
     var items = STEPS.map(function (s) {
       var isDone = s.done(counts);
-      var tag = isDone ? 'div' : 'a';
-      var href = isDone ? '' : ' href="' + esc(s.href) + '"';
-      return '<' + tag + href + ' class="cm-fs-item' + (isDone ? ' is-done' : '') + '">' +
+      var isNext = s.id === nextId;
+      var cls = 'cm-fs-item' + (isDone ? ' is-done' : '') + (isNext ? ' is-next' : '');
+      // Siempre un <div>, nunca un <a> envolviendo la tarjeta: el paso actual lleva
+      // DENTRO dos enlaces (ir al sitio, y el artículo de ayuda), y un <a> dentro de otro
+      // <a> es HTML inválido — el navegador desanida el de dentro y lo escupe fuera de la
+      // tarjeta. Los pasos futuros no llevan enlace a propósito: que no se pueda saltar a
+      // "invitar staff" antes de tener un jugador cargado.
+      return '<div class="' + cls + '">' +
           '<span class="cm-fs-dot">' + (isDone ? '<i class="ti ti-check"></i>' : '<i class="ti ' + esc(s.icon) + '"></i>') + '</span>' +
           '<span class="cm-fs-body">' +
             '<span class="cm-fs-t">' + esc(tt('first_steps.' + s.id + '.t')) + '</span>' +
-            '<span class="cm-fs-d">'  + esc(tt('first_steps.' + s.id + '.d')) + '</span>' +
+            (isNext
+              ? '<span class="cm-fs-d">' + esc(tt('first_steps.' + s.id + '.d')) + '</span>' +
+                '<span class="cm-fs-actions">' +
+                  '<a class="cm-fs-go" href="' + esc(s.href) + '">' + esc(tt('first_steps.start')) +
+                    '<i class="ti ti-arrow-right" style="font-size:14px"></i></a>' +
+                  '<a class="cm-fs-help" href="' + esc(helpUrl(s.help)) + '" target="_blank" rel="noopener">' +
+                    '<i class="ti ti-help-circle" style="font-size:13px"></i>' + esc(tt('first_steps.how')) + '</a>' +
+                '</span>'
+              : '') +
           '</span>' +
-          (isDone ? '' : '<i class="ti ti-arrow-right cm-fs-arw"></i>') +
-        '</' + tag + '>';
+        '</div>';
     }).join('');
 
     host.innerHTML =
