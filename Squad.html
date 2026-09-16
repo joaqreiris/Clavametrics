@@ -2873,16 +2873,18 @@ async function reloadPlayers() {
   // Map sanitized CSV headers → canonical column. Accepts common export aliases so we
   // don't depend on exact header names (Excel exports, ES/PT headers, "Shirt #", etc.).
   const IMPORT_HEADER_ALIASES = {
-    first_name:'first_name', firstname:'first_name', first:'first_name', given_name:'first_name', givenname:'first_name', given:'first_name', nombre:'first_name', nombres:'first_name', primer_nombre:'first_name', nome:'first_name', prenom:'first_name',
+    first_name:'first_name', firstname:'first_name', first:'first_name', given_name:'first_name', givenname:'first_name', given:'first_name', nombre:'first_name', nombres:'first_name', primer_nombre:'first_name', nome:'first_name', prenom:'first_name', prenome:'first_name', primeiro_nome:'first_name',
     last_name:'last_name', lastname:'last_name', last:'last_name', surname:'last_name', family_name:'last_name', familyname:'last_name', apellido:'last_name', apellidos:'last_name', sobrenome:'last_name', apelido:'last_name',
-    name:'name', full_name:'name', fullname:'name', player_name:'name', playername:'name', player:'name', jugador:'name', jogador:'name', nombre_completo:'name', nome_completo:'name',
-    number:'number', number_:'number', num:'number', nro:'number', no:'number', n:'number', shirt:'number', shirt_number:'number', shirt_no:'number', jersey:'number', jersey_number:'number', jersey_no:'number', dorsal:'number', numero:'number', numero_camiseta:'number', camiseta:'number', camisa:'number',
-    position:'position', positions:'position', pos:'position', role:'position', posicion:'position', posicao:'position',
-    date_of_birth:'date_of_birth', dateofbirth:'date_of_birth', dob:'date_of_birth', birthdate:'date_of_birth', birth_date:'date_of_birth', birthday:'date_of_birth', born:'date_of_birth', nacimiento:'date_of_birth', fecha_nacimiento:'date_of_birth', fecha_de_nacimiento:'date_of_birth', nascimento:'date_of_birth', data_nascimento:'date_of_birth',
-    nationality:'nationality', country:'nationality', nation:'nationality', nacionalidad:'nationality', pais:'nationality', nacionalidade:'nationality',
-    height:'height', height_cm:'height', cm:'height', altura:'height', estatura:'height', altura_cm:'height',
-    weight:'weight', weight_kg:'weight', kg:'weight', peso:'weight', peso_kg:'weight',
+    name:'name', full_name:'name', fullname:'name', player_name:'name', playername:'name', player:'name', jugador:'name', jogador:'name', nombre_completo:'name', nome_completo:'name', atleta:'name', athlete:'name', nome_do_atleta:'name', nome_do_jogador:'name', nombre_del_jugador:'name', nombre_y_apellido:'name', nome_e_sobrenome:'name',
+    number:'number', number_:'number', num:'number', nro:'number', no:'number', n:'number', shirt:'number', shirt_number:'number', shirt_no:'number', jersey:'number', jersey_number:'number', jersey_no:'number', dorsal:'number', numero:'number', numero_camiseta:'number', camiseta:'number', camisa:'number', numero_da_camisa:'number', n_camisa:'number', no_camisa:'number', numero_de_camiseta:'number',
+    position:'position', positions:'position', pos:'position', role:'position', posicion:'position', posicao:'position', funcao:'position', funcion:'position', funcion_:'position', puesto:'position', rol:'position', posto:'position', demarcacion:'position',
+    date_of_birth:'date_of_birth', dateofbirth:'date_of_birth', dob:'date_of_birth', birthdate:'date_of_birth', birth_date:'date_of_birth', birthday:'date_of_birth', born:'date_of_birth', nacimiento:'date_of_birth', fecha_nacimiento:'date_of_birth', fecha_de_nacimiento:'date_of_birth', nascimento:'date_of_birth', data_nascimento:'date_of_birth', data_de_nascimento:'date_of_birth', dt_nascimento:'date_of_birth', data_de_nasc:'date_of_birth', data_nasc:'date_of_birth', nasc:'date_of_birth', aniversario:'date_of_birth', f_nac:'date_of_birth', fec_nac:'date_of_birth', fecha_nac:'date_of_birth', f_nacimiento:'date_of_birth', birth:'date_of_birth',
+    nationality:'nationality', country:'nationality', nation:'nationality', nacionalidad:'nationality', pais:'nationality', nacionalidade:'nationality', nacao:'nationality', pasaporte:'nationality', passaporte:'nationality',
+    height:'height', height_cm:'height', cm:'height', altura:'height', estatura:'height', altura_cm:'height', talla:'height', estatura_cm:'height',
+    weight:'weight', weight_kg:'weight', kg:'weight', peso:'weight', peso_kg:'weight', massa:'weight', masa:'weight', peso_corporal:'weight',
     dominant_foot:'dominant_foot', dominantfoot:'dominant_foot', foot:'dominant_foot', preferred_foot:'dominant_foot', strong_foot:'dominant_foot', pie:'dominant_foot', pie_habil:'dominant_foot', pierna:'dominant_foot', pe:'dominant_foot', pe_dominante:'dominant_foot', pied:'dominant_foot',
+    // El español faltaba entero: estaba `pe_dominante` (pt) pero no `pie_dominante`.
+    pie_dominante:'dominant_foot', pie_preferido:'dominant_foot', pierna_habil:'dominant_foot', pierna_dominante:'dominant_foot', perna_dominante:'dominant_foot', pe_preferido:'dominant_foot', perna:'dominant_foot', perfil:'dominant_foot', lateralidad:'dominant_foot', lateralidade:'dominant_foot',
   };
   // Sanitize a header: strip BOM, transliterate accents (Número→numero, Posición→posicion),
   // turn '#' into 'no', collapse spaces/dashes to '_'. Then look up in the alias map.
@@ -2924,12 +2926,26 @@ async function reloadPlayers() {
     }
     return { error:true };
   }
+  // Se comparan SIN acentos y con los espacios colapsados: si no, "Pé esquerdo" no
+  // entra por culpa de la tilde y "Perna  direita" por un espacio de más. Los términos
+  // que más pesan son los que un club escribe de verdad: en Brasil nadie pone
+  // "esquerdo" en la planilla, pone "canhoto".
   function _impFoot(v){
-    const k = String(v||'').trim().toLowerCase();
+    const k = String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+                .trim().toLowerCase().replace(/[\s\-_.]+/g,' ');
     if (!k) return { value:null };
-    if (['left','l','izquierda','izq','zurdo','esquerdo','gauche'].includes(k)) return { value:'left' };
-    if (['right','r','derecha','der','diestro','direito','droit'].includes(k)) return { value:'right' };
-    if (['both','ambidextrous','ambos','ambidiestro','ambidestro','b'].includes(k)) return { value:'both' };
+    const LEFT = ['left','l','lh','left foot','izquierda','izquierdo','izq','zurdo','zurda',
+                  'pie izquierdo','pierna izquierda','esquerdo','esquerda','canhoto','canhota',
+                  'pe esquerdo','perna esquerda','gauche'];
+    const RIGHT = ['right','r','rh','right foot','derecha','derecho','der','diestro','diestra',
+                   'pie derecho','pierna derecha','direito','direita','destro','destra',
+                   'pe direito','perna direita','droit'];
+    const BOTH = ['both','both feet','ambidextrous','ambidextro','ambos','ambas','ambos pies',
+                  'ambidiestro','ambidestro','os dois','as duas','ambos os pes','b','two footed',
+                  'two-footed','bipede'];
+    if (LEFT.includes(k))  return { value:'left' };
+    if (RIGHT.includes(k)) return { value:'right' };
+    if (BOTH.includes(k))  return { value:'both' };
     return { value:null, warn:true };
   }
 
@@ -3354,12 +3370,51 @@ async function reloadPlayers() {
   // los dos formatos compartan detección de cabecera, alias y validación.
   // cellDates + dateNF: una celda con fecha real de Excel sale ya en ISO, así que para
   // esos archivos el selector DD/MM vs MM/DD no tiene nada que adivinar.
+  // Excel → matriz de celdas. Las fechas salen SIEMPRE en ISO, y ahí está el detalle
+  // que costó encontrar:
+  //
+  //   · `dateNF` no le gana al formato guardado en la celda: un 17 de abril escrito
+  //     con formato estadounidense vuelve "4/17/01" — ambiguo, mes delante y año en
+  //     dos dígitos.
+  //   · `cellDates:true` tampoco sirve: el número de serie de Excel es un flotante, y
+  //     ese mismo 17 de abril vuelve como un Date del día 16 a las 23:59:56. Leerlo
+  //     con getDate() da el día ANTERIOR, en cualquier zona horaria.
+  //
+  // Lo que sí es exacto es formatear el número de serie con el formateador de SheetJS.
+  // Por eso se recorren las celdas en vez de usar sheet_to_json: hace falta el tipo y
+  // el formato de cada una (cellNF) para saber cuáles son fechas de verdad.
   async function _impReadXlsx(file){
     const X  = await _impLoadXlsx();
-    const wb = X.read(await file.arrayBuffer(), { type:'array', cellDates:true });
+    const wb = X.read(await file.arrayBuffer(), { type:'array', cellNF:true });
     const ws = wb.Sheets[wb.SheetNames[0]];
-    if (!ws) return [];
-    return X.utils.sheet_to_json(ws, { header:1, raw:false, defval:'', dateNF:'yyyy-mm-dd' });
+    if (!ws || !ws['!ref']) return [];
+    const rng = X.utils.decode_range(ws['!ref']);
+    const out = [];
+    for (let r = rng.s.r; r <= rng.e.r; r++){
+      const row = [];
+      for (let c = rng.s.c; c <= rng.e.c; c++){
+        const cell = ws[X.utils.encode_cell({ r, c })];
+        row.push(cell ? _impCellValue(X, cell) : '');
+      }
+      out.push(row);
+    }
+    return out;
+  }
+
+  // Una celda de Excel → texto. Solo las numéricas CON formato de fecha se convierten;
+  // un dorsal o un peso son números con el mismo tipo 'n' y no se pueden tocar.
+  function _impCellValue(X, cell){
+    if (cell.t === 'n' && cell.z && X.SSF && X.SSF.is_date && X.SSF.is_date(cell.z)){
+      try { return X.SSF.format('yyyy-mm-dd', cell.v); } catch (_e) { /* cae al valor crudo */ }
+    }
+    if (cell.v instanceof Date && !isNaN(cell.v)) return _impDateToISO(cell.v);
+    return cell.v == null ? '' : cell.v;
+  }
+
+  // Respaldo para una celda que ya venga como Date (otras rutas de SheetJS). Getters
+  // locales: es como la construye, y leerla en UTC correría un día.
+  function _impDateToISO(d){
+    return d.getFullYear() + '-' + _impPad(d.getMonth() + 1) + '-' + _impPad(d.getDate());
   }
 
   // Matriz de celdas → filas canónicas + apertura del modal. Compartido por CSV y Excel.

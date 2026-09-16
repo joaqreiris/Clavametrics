@@ -99,6 +99,27 @@ describe('cabeceras: el club exporta con los nombres que quiere', () => {
   });
 });
 
+/* Las tres lenguas, con los términos que un club escribe DE VERDAD en su planilla.
+   Cada uno de estos falló alguna vez: el patrón que se repetía era tener la variante
+   de un idioma y no la del otro — 'fecha_de_nacimiento' sí y 'data_de_nascimento' no,
+   'pe_dominante' sí y 'pie_dominante' no. */
+describe('cabeceras: las tres lenguas, campo por campo', () => {
+  const alias = h => S.IMPORT_HEADER_ALIASES[S._impHeader(h)];
+  const todas = (destino, ...hs) => hs.forEach(h =>
+    expect([h, alias(h)]).toEqual([h, destino]));
+
+  it('nombre',       () => todas('first_name','Nome','Nombre','First name','Prenome','Primeiro nome','Primer nombre'));
+  it('apellido',     () => todas('last_name','Sobrenome','Apellido','Apellidos','Last name','Surname','Apelido'));
+  it('nombre completo', () => todas('name','Nome completo','Nombre completo','Full name','Atleta','Jogador','Jugador','Nome do atleta'));
+  it('dorsal',       () => todas('number','Camisa','Camiseta','Dorsal','Número','Shirt','Jersey','Número da camisa','Nº'));
+  it('posición',     () => todas('position','Posição','Posición','Position','Pos','Função','Puesto','Rol'));
+  it('nacimiento',   () => todas('date_of_birth','Data de nascimento','Data nascimento','Fecha de nacimiento','Date of birth','DOB','Nascimento','Aniversário','F. Nac.','Data de nasc.'));
+  it('nacionalidad', () => todas('nationality','Nacionalidade','Nacionalidad','Nationality','País','Nação','Country'));
+  it('altura',       () => todas('height','Altura (cm)','Altura','Height','Estatura','Talla'));
+  it('peso',         () => todas('weight','Peso (kg)','Peso','Weight','Massa'));
+  it('pie',          () => todas('dominant_foot','Pé dominante','Pie dominante','Dominant foot','Foot','Perna dominante','Pierna hábil','Pé preferido'));
+});
+
 // ── Fechas ───────────────────────────────────────────────────────────────────
 
 describe('fecha de nacimiento: de ella depende saber quién es menor', () => {
@@ -142,16 +163,25 @@ describe('fecha de nacimiento: de ella depende saber quién es menor', () => {
 
 describe('pie dominante en tres idiomas', () => {
   it('izquierdo', () => {
-    ['left','L','izquierda','zurdo','esquerdo'].forEach(v =>
-      expect(S._impFoot(v).value).toBe('left'));
+    // "canhoto" es como se dice zurdo en Brasil: es LA palabra que aparece en la
+    // planilla de un club brasileño, y no estaba.
+    ['left','L','izquierda','izquierdo','zurdo','esquerdo','esquerda','canhoto',
+     'Pé esquerdo','Perna esquerda','pie izquierdo'].forEach(v =>
+      expect([v, S._impFoot(v).value]).toEqual([v, 'left']));
   });
   it('derecho', () => {
-    ['right','R','derecha','diestro','direito'].forEach(v =>
-      expect(S._impFoot(v).value).toBe('right'));
+    ['right','R','derecha','derecho','diestro','direito','direita','destro',
+     'Pé direito','Perna direita','pie derecho'].forEach(v =>
+      expect([v, S._impFoot(v).value]).toEqual([v, 'right']));
   });
   it('ambos', () => {
-    ['both','ambos','ambidiestro','ambidestro'].forEach(v =>
-      expect(S._impFoot(v).value).toBe('both'));
+    ['both','ambos','ambas','ambidiestro','ambidestro','ambidextro','os dois',
+     'Ambos pies','two-footed'].forEach(v =>
+      expect([v, S._impFoot(v).value]).toEqual([v, 'both']));
+  });
+  it('los acentos y los espacios de más no cambian la respuesta', () => {
+    expect(S._impFoot('  PÉ   DIREITO  ').value).toBe('right');
+    expect(S._impFoot('Pe-Esquerdo').value).toBe('left');
   });
   it('desconocido avisa y deja el campo vacío', () => {
     expect(S._impFoot('cabeza')).toEqual({ value: null, warn: true });

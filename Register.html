@@ -649,10 +649,35 @@
   }
   const CREATE_ORG_BTN = () => `<i class="ti ti-building"></i> ${tt('register.createOrganization','Create organization')}`;
 
-  // Redirect if already authenticated
+  // Con sesión abierta esta página mandaba al Hub SIN DECIR NADA. Para quien quiere
+  // abrir una segunda organización —una academia con dos clubes, un consultor, o
+  // nosotros mismos probando el alta— era una pared muda: el formulario no se llegaba
+  // a ver nunca. Ahora se avisa y se ofrecen las dos salidas.
   (async () => {
     const { data: { session } } = await window.sb.auth.getSession();
-    if (session) window.location.replace('Hub.html');
+    if (!session) return;
+    const email = session.user?.email || '';
+    const form = document.querySelector('.reg-form');
+    if (!form) { window.location.replace('Hub.html'); return; }
+    const box = document.createElement('div');
+    box.className = 'reg-session-open';
+    box.style.cssText = 'display:flex;flex-direction:column;gap:10px;padding:14px 16px;margin:0 0 18px;' +
+      'border:1px solid var(--cm-border);border-radius:12px;background:var(--cm-surface-2,rgba(127,127,127,.06))';
+    box.innerHTML =
+      '<div style="font:var(--cm-body-sm);color:var(--cm-fg-muted);line-height:1.5"></div>' +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
+        '<a class="cm-btn is-primary is-sm" href="Hub.html" style="text-decoration:none"></a>' +
+        '<button type="button" class="cm-btn is-outline is-sm" id="reg-signout"></button>' +
+      '</div>';
+    box.children[0].textContent = tt('register.sessionOpen',
+      'You are signed in as {email}. An account belongs to one organization: to create another one, sign out first.', { email });
+    box.children[1].children[0].textContent = tt('register.goToWorkspace', 'Go to my workspace');
+    box.children[1].children[1].textContent = tt('register.signOutAndCreate', 'Sign out and create another');
+    form.parentNode.insertBefore(box, form);
+    box.querySelector('#reg-signout').addEventListener('click', async () => {
+      await window.sb.auth.signOut();
+      window.location.reload();
+    });
   })();
 
   // El placeholder del select se arma por JS, y este script corre antes que i18n.js
@@ -828,7 +853,13 @@
 
       btn.disabled = false;
       btn.innerHTML = CREATE_ORG_BTN();
-      showRegError(err.message || tt('register.regFailed', 'Registration failed. Please try again.'));
+      // "User already registered" en crudo no le dice a nadie qué hacer. Una cuenta
+      // pertenece a UNA organización, así que para abrir otra hay que usar otro correo
+      // — y el alias con + llega a la misma bandeja, que es lo que la gente no sabe.
+      const yaExiste = /already\s*registered|already\s*exists|user_repeated/i.test(err.message || '');
+      showRegError(yaExiste
+        ? tt('register.emailTaken', 'That email already has an account. Sign in instead — or, to open a second organization, use an alias like you+club2@gmail.com (it reaches the same inbox).')
+        : (err.message || tt('register.regFailed', 'Registration failed. Please try again.')));
     }
   }
 

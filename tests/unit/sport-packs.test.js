@@ -250,6 +250,37 @@ describe('positions · football parity', () => {
     expect(window.cmNormalizePosition('Enganche')).toBe('CAM');
     expect(window.cmNormalizePosition('tuba')).toBe(null);
   });
+
+  /* Las tres lenguas. El portugués tenía los términos sueltos (GOLEIRO, VOLANTE,
+     PONTA) pero NINGUNO de los compuestos, que son justo como los escribe un club
+     brasileño: "Lateral direito" caía como posición desconocida teniendo
+     'LATERAL DERECHO' dos líneas más arriba en la misma tabla. */
+  it('reconoce las posiciones como las escribe cada club', () => {
+    const CASOS = {
+      // portugués
+      'Goleiro':'GK', 'Zagueiro':'CB', 'Zagueiro central':'CB',
+      'Lateral direito':'RB', 'Lateral esquerdo':'LB', 'Lateral-direito':'RB',
+      'Primeiro volante':'CDM', 'Segundo volante':'CM', 'Volante':'CM',
+      'Meia':'CM', 'Meia atacante':'CAM', 'Meia-atacante':'CAM', 'Meio-campista':'CM',
+      'Ponta':'WG', 'Ponta direita':'RW', 'Ponta esquerda':'LW',
+      'Atacante':'ST', 'Centroavante':'CF', 'Segundo atacante':'SS',
+      // español
+      'Arquero':'GK', 'Portero':'GK', 'Defensa central':'CB', 'Lateral derecho':'RB',
+      'Mediocentro':'CM', 'Media punta':'CAM', 'Pivote':'CDM', 'Carrilero':'WB',
+      'Extremo izquierdo':'LW', 'Delantero':'ST', 'Delantero centro':'CF',
+      // inglés
+      'Goalkeeper':'GK', 'Centre-back':'CB', 'Right back':'RB', 'Defensive mid':'CDM',
+      'Attacking midfielder':'CAM', 'Left winger':'LW', 'Striker':'ST',
+    };
+    Object.entries(CASOS).forEach(([texto, code]) =>
+      expect([texto, window.cmNormalizePosition(texto)]).toEqual([texto, code]));
+  });
+
+  it('los acentos y las mayúsculas no cambian la respuesta', () => {
+    expect(window.cmNormalizePosition('POSIÇÃO')).toBe(window.cmNormalizePosition('posicao'));
+    expect(window.cmNormalizePosition('goleiro')).toBe('GK');
+    expect(window.cmNormalizePosition('GOLEIRO')).toBe('GK');
+  });
 });
 
 describe('positions · switching sport', () => {
