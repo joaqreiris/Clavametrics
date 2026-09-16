@@ -196,6 +196,181 @@
     return { sides: sides, matched: matched, unknown: unknown };
   }
 
+  // ── Varios partidos en un mismo archivo ──────────────────────────────────────
+  /*
+     Wyscout deja pedir el Team Stats de un partido o de un rango de jornadas, y el
+     archivo se ve casi igual: mismos encabezados, más filas. Un export de dos partidos
+     trae cuatro — nosotros y Angkor Tiger, nosotros y Visakha — y hasta acá se tomaban
+     las dos primeras como si fueran los dos lados de un solo partido. El resultado era
+     silencioso y peor que un error: al partido abierto le quedaban pegadas las
+     estadísticas del rival de otra jornada.
+
+     `parseMatches` agrupa por partido en vez de por fila, y de paso saca lo que hace
+     falta para emparejar contra la base: la fecha, el rival y si se jugó de local.
+  */
+
+  const pad2 = n => (String(n).length < 2 ? '0' + n : String(n));
+  const ymd = (y, m, d) => y + '-' + pad2(m) + '-' + pad2(d);
+
+  /**
+   * La fecha, como Wyscout la escriba. El Excel la manda como número de serie cuando la
+   * celda está formateada como fecha y como texto cuando no. Sale siempre ISO o null,
+   * porque es la mitad de la clave con la que se busca el partido en la base.
+   */
+  function isoDate(v) {
+    if (v == null || v === '') return null;
+    if (v instanceof Date) return isNaN(v.getTime()) ? null : ymd(v.getUTCFullYear(), v.getUTCMonth() + 1, v.getUTCDate());
+    if (typeof v === 'number') {
+      // Serie de Excel: días desde el 30/12/1899 (corre uno por el 1900 bisiesto que
+      // nunca existió y que Lotus 1-2-3 dio por bueno).
+      if (!isFinite(v) || v < 1 || v > 200000) return null;
+      const d = new Date(Date.UTC(1899, 11, 30) + Math.round(v) * 86400000);
+      return isNaN(d.getTime()) ? null : ymd(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate());
+    }
+    const s = String(v).trim();
+    if (!s) return null;
+    let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if (m) return ymd(m[1], m[2], m[3]);
+    // Con separadores, Wyscout escribe el día primero.
+    m = s.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})$/);
+    if (m) return ymd(m[3].length === 2 ? '20' + m[3] : m[3], m[2], m[1]);
+    const d = new Date(s);
+    // Sin UTC acá: "September 5, 2026" se parsea en hora local y pasarlo a ISO correría
+    // el día hacia atrás en cualquier huso al oeste de Greenwich.
+    return isNaN(d.getTime()) ? null : ymd(d.getFullYear(), d.getMonth() + 1, d.getDate());
+  }
+
+  /** Dos nombres de equipo que se refieren al mismo, tolerando sufijos ("FC", "B"). */
+  function like(a, b) {
+    if (!a || !b) return false;
+    return a === b || a.indexOf(b) !== -1 || b.indexOf(a) !== -1;
+  }
+
+  /**
+   * "Angkor Tiger - Kompong Dewa 0:0" → { home: 'Angkor Tiger', away: 'Kompong Dewa' }.
+   * Wyscout escribe siempre al local primero, así que de acá sale si jugamos de visita
+   * sin tener que preguntarlo. null cuando el rótulo no tiene esa forma — un nombre con
+   * guion y sin espacios alrededor no se parte, y se prefiere no saber a inventar.
+   */
+  function splitLabel(label) {
+    const s = String(label == null ? '' : label).replace(/\s+\d+\s*[:\-]\s*\d+\s*$/, '').trim();
+    if (!s) return null;
+    const parts = s.split(/\s+-\s+/);
+    if (parts.length !== 2) return null;
+    const home = parts[0].trim(), away = parts[1].trim();
+    return (home && away) ? { home: home, away: away } : null;
+  }
+
+  /**
+   * El archivo entero, partido por partido.
+   * @param {Array[]} rows        matriz cruda del sheet
+   * @param {string}  opponentName rival del partido abierto, si lo hay
+   * @param {string}  ourNameHint  nombre de nuestro equipo o club, si se sabe
+   * @returns {{matches: Array, ourTeam: string|null, identified: string, unknown: string[]}|null}
+   */
+  function parseMatches(rows, opponentName, ourNameHint) {
+    const p = parse(rows, null);   // sin nombre: la asignación de lados se hace acá
+    if (!p) return null;
+
+    // 1) Agrupar. Las dos filas de un partido repiten idéntico el rótulo de "Match" y la
+    //    fecha; alcanza con eso y no hace falta que el archivo venga ordenado.
+    const groups = [], byKey = {};
+    p.sides.forEach(s => {
+      const date = isoDate(s.match_date);
+      const key = (date || '') + '|' + norm(s.match_label || '');
+      if (!byKey[key]) {
+        byKey[key] = {
+          key: key, match_date: date, match_label: s.match_label || null,
+          competition: s.competition || null, rows: [],
+        };
+        groups.push(byKey[key]);
+      }
+      byKey[key].rows.push(s);
+    });
+
+    // 2) Cuál de los equipos somos. En un export de varias jornadas hay un nombre que
+    //    aparece en todas: el nuestro. Es más firme que el orden del archivo, porque el
+    //    rival cambia de partido en partido.
+    const seen = {};
+    groups.forEach((g, gi) => {
+      g.rows.forEach((r, ri) => {
+        const n = norm(r.team_name);
+        if (!n) return;
+        if (!seen[n]) seen[n] = { name: r.team_name, groups: {}, first: gi * 100 + ri };
+        seen[n].groups[gi] = true;
+      });
+    });
+    const cands = Object.keys(seen).map(n => ({
+      n: n, name: seen[n].name, count: Object.keys(seen[n].groups).length, first: seen[n].first,
+    })).sort((a, b) => (b.count - a.count) || (a.first - b.first));
+
+    let ourName = null, how = 'order';
+    const hint = ourNameHint ? norm(ourNameHint) : null;
+    if (hint) {
+      const c = cands.find(c => like(c.n, hint));
+      if (c) { ourName = c.name; how = 'hint'; }
+    }
+    // El de la frecuencia sólo vale si es único: jugar dos veces contra el mismo rival
+    // dejaría dos nombres en todas las jornadas y no diría nada.
+    if (!ourName && groups.length > 1 && cands.length && cands[0].count === groups.length
+        && !(cands[1] && cands[1].count === groups.length)) {
+      ourName = cands[0].name; how = 'repeated';
+    }
+    if (!ourName && opponentName) {
+      const opp = norm(opponentName);
+      const c = cands.find(c => like(c.n, opp));
+      if (c) {
+        const other = cands.find(x => x.n !== c.n);
+        if (other) { ourName = other.name; how = 'opponent'; }
+      }
+    }
+    // Último recurso: el orden del archivo, que en los exports de Wyscout pone primero
+    // al equipo del que se pidió el reporte.
+    if (!ourName && cands.length) { ourName = cands[0].name; how = 'order'; }
+
+    // 3) Un partido por grupo, con los dos lados ya resueltos.
+    const ourN = norm(ourName || '');
+    const matches = groups.map(g => {
+      const sides = g.rows.map(r => Object.assign({}, r));
+      let us = ourN ? sides.find(s => like(norm(s.team_name), ourN)) : null;
+      if (!us) us = sides[0];
+      us.side = 'us';
+      // Sólo un rival por partido: la tabla tiene una fila por (partido, lado) y una
+      // tercera pisaría a la segunda en silencio.
+      const them = sides.find(s => s !== us) || null;
+      if (them) them.side = 'them';
+
+      const ha = splitLabel(g.match_label);
+      let home_away = null;
+      if (ha && us.team_name) {
+        if (like(norm(ha.home), norm(us.team_name))) home_away = 'home';
+        else if (like(norm(ha.away), norm(us.team_name))) home_away = 'away';
+      }
+      let opponent = them ? them.team_name : null;
+      if (!opponent && ha) opponent = (home_away === 'home') ? ha.away : (home_away === 'away' ? ha.home : null);
+
+      return {
+        key: g.key,
+        match_date: g.match_date,
+        match_label: g.match_label,
+        competition: g.competition,
+        opponent: opponent,
+        home_away: home_away,
+        sides: them ? [us, them] : [us],
+      };
+    });
+
+    // De la más vieja a la más nueva. Las que no traen fecha van al final: no se pueden
+    // emparejar ni crear, y conviene que se lean como el caso raro que son.
+    matches.sort((a, b) => {
+      if (!a.match_date) return b.match_date ? 1 : 0;
+      if (!b.match_date) return -1;
+      return a.match_date < b.match_date ? -1 : (a.match_date > b.match_date ? 1 : 0);
+    });
+
+    return { matches: matches, ourTeam: ourName || null, identified: how, unknown: p.unknown };
+  }
+
   // ── Etiquetas ────────────────────────────────────────────────────────────────
   // Se traduce el grupo, no cada una de las 103 claves: "progressive_passes_accurate"
   // se arma con la etiqueta del grupo más el sufijo. Así el i18n son 47 nombres y un
@@ -347,7 +522,8 @@
   }
 
   window.cmWyscoutTeamStats = {
-    looks, parse, label, shortLabel, groupLabel, originalLabel, format, allKeys,
+    looks, parse, parseMatches, isoDate, splitLabel, label, shortLabel, groupLabel,
+    originalLabel, format, allKeys,
     split, groups, CATALOG, GROUPS, HIGHLIGHT, TREND, LOWER_IS_BETTER,
     lowerIsBetter: k => LOWER_IS_BETTER.indexOf(k) !== -1,
   };

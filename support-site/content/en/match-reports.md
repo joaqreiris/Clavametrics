@@ -25,6 +25,8 @@ After a match, to record the result and enter (or import) the players' stats, an
 
 **Add the team stats.** Wyscout's **Team Stats** export (an Excel file with one row per team) carries 53 metrics for both sides: possession, xG, PPDA, progressive passes, and recoveries and losses split by third of the pitch. Importing it fills two cards: the comparison against the opponent, and **Team trend**, which puts every match on one line so you can see how the team is developing across the season. No column mapping needed — the importer recognises the file by its headers and only asks you to confirm which of the two teams is yours.
 
+**When the file carries several matchdays.** Wyscout lets you request Team Stats for a date range, and that file looks just like a single-match one: same headers, more rows. The importer spots it and lists every match it carries instead of loading only one. Each row says whether it is already imported (it comes unticked), whether the match exists and will get its stats, or whether it has to be created — in which case the match is created with the date, opponent, competition and score the file itself carries. Untick whatever you don't want to touch and the rest goes in at once.
+
 ## Key concepts
 
 **What a match report captures.** Two layers: the **match result** (score, opponent, competition, venue, home/away, formation, possession, notes) and the **per-player stats** (minutes, rating, goals, assists, cards, position), with GPS metrics overlaid from the session.

@@ -578,3 +578,140 @@ test.describe('Match Reports · importar el export de equipo', () => {
     expect(captured.patch.possession).toBe(62);
   });
 });
+
+/* ── El export acumulado ────────────────────────────────────────────────────────
+   Wyscout deja pedir el Team Stats por rango de jornadas, y el archivo se ve igual que
+   el de un partido: mismos encabezados, más filas. Tomar las dos primeras como los dos
+   lados de un partido le dejaba al partido abierto las estadísticas del rival de otra
+   fecha, sin un solo aviso. */
+test.describe('Match Reports · un archivo con varias jornadas', () => {
+  const FIXTURE = 'tests/fixtures/wyscout-team-stats-multi.xlsx';
+
+  // El partido del 5 de septiembre ya está cargado Y ya tiene estadísticas; el del 12
+  // no existe todavía. Son los dos casos que la lista tiene que distinguir.
+  const EXISTING = {
+    id: 'mres-3', club_id: 'club-1', team_id: null, session_id: 'sess-m1',
+    match_date: '2026-09-05', competition: 'Cambodian Premier League',
+    opponent: 'Angkor Tiger', score_for: null, score_against: null, possession: null,
+  };
+
+  async function openImporter(page, cap) {
+    cap.upserts = []; cap.inserted = null;
+    await injectSession(page);
+    await page.addInitScript(() => {
+      Object.defineProperty(window, 'guardModule', { get: () => async () => true, set: () => {}, configurable: true });
+      Object.defineProperty(window, 'CM_PLAN_GATING_ENABLED', { get: () => false, set: () => {}, configurable: true });
+    });
+    await mockBase(page);
+    await page.route(`${SB}/rest/v1/**`, async route => {
+      const url = route.request().url(), method = route.request().method();
+      const one = (route.request().headers()['accept'] || '').includes('pgrst.object');
+      if (url.includes('/team_match_stats')) {
+        if (method === 'POST') {
+          cap.upserts.push(JSON.parse(route.request().postData() || '[]'));
+          return route.fulfill({ json: [] });
+        }
+        // El cruce contra la base: sólo el partido viejo tiene estadísticas.
+        if (url.includes('match_id=in.')) return route.fulfill({ json: [{ match_id: 'mres-3' }] });
+        return route.fulfill({ json: [] });
+      }
+      if (url.includes('/match_results')) {
+        if (method === 'POST') {
+          cap.inserted = JSON.parse(route.request().postData() || '{}');
+          return route.fulfill({ json: one ? { id: 'mres-new' } : [{ id: 'mres-new' }] });
+        }
+        if (method === 'PATCH') return route.fulfill({ json: [] });
+        return route.fulfill({ json: one ? EXISTING : [EXISTING] });
+      }
+      if (url.includes('/training_sessions')) return route.fulfill({ json: /session_type=eq\.match(&|$)/.test(url) ? [SESSION_M] : [] });
+      if (url.includes('/gps_reports')) return route.fulfill({ json: [] });
+      if (url.includes('/profiles')) return route.fulfill({ json: one ? PROFILE : [PROFILE] });
+      if (url.includes('/clubs')) return route.fulfill({ json: one ? CLUB : [CLUB] });
+      return route.fulfill({ json: one ? {} : [] });
+    });
+    await page.goto('/Match%20Reports.html');
+    await page.waitForSelector('#impOpen', { timeout: 15_000 });
+    await page.click('#impOpen');
+    await page.waitForSelector('#miSession', { timeout: 15_000 });
+    await page.selectOption('#miSession', 'sess-m1');
+    await page.waitForSelector('#miFile:not([disabled])', { timeout: 15_000 });
+    await page.setInputFiles('#miFile', FIXTURE);
+    await page.waitForSelector('.mi-ts-list', { timeout: 15_000 });
+  }
+
+  test('muestra los dos partidos del archivo en vez de mezclarlos en uno', async ({ page }) => {
+    const cap = {};
+    await openImporter(page, cap);
+    await expect(page.locator('.mi-ts-m')).toHaveCount(2);
+    // El nombre que se repite en las dos jornadas es el nuestro; el club del mock se
+    // llama distinto, así que se resolvió por el archivo y no por el dato de la base.
+    await expect(page.locator('.mi-ts')).toContainText('Kompong Dewa');
+    await expect(page.locator('.mi-ts-m').nth(0)).toContainText('Angkor Tiger');
+    await expect(page.locator('.mi-ts-m').nth(1)).toContainText('Visakha');
+  });
+
+  test('destilda el que ya está cargado y deja tildado el que falta', async ({ page }) => {
+    const cap = {};
+    await openImporter(page, cap);
+    const rows = page.locator('.mi-ts-m');
+    await expect(rows.nth(0).locator('.mi-ts-badge.is-in')).toHaveCount(1);
+    await expect(rows.nth(0).locator('input')).not.toBeChecked();
+    await expect(rows.nth(1).locator('.mi-ts-badge.is-new')).toHaveCount(1);
+    await expect(rows.nth(1).locator('input')).toBeChecked();
+  });
+
+  test('crea el partido que falta con lo que el propio archivo sabe', async ({ page }) => {
+    const cap = {};
+    await openImporter(page, cap);
+    const insertDone = page.waitForRequest(r =>
+      r.url().includes('/match_results') && r.method() === 'POST', { timeout: 15_000 });
+    await page.click('#miImportTS');
+    await insertDone;
+    await expect.poll(() => cap.inserted, { timeout: 10_000 }).toBeTruthy();
+
+    expect(cap.inserted.match_date).toBe('2026-09-12');
+    expect(cap.inserted.opponent).toBe('Visakha');
+    // "Kompong Dewa - Visakha 2:1": Wyscout pone primero al local, así que fue en casa.
+    expect(cap.inserted.home_away).toBe('home');
+    expect(cap.inserted.score_for).toBe(2);
+    expect(cap.inserted.score_against).toBe(1);
+    expect(cap.inserted.competition).toBe('Cambodian Premier League');
+  });
+
+  test('no toca el partido que ya tenía estadísticas', async ({ page }) => {
+    const cap = {};
+    await openImporter(page, cap);
+    const upsertDone = page.waitForRequest(r =>
+      r.url().includes('/team_match_stats') && r.method() === 'POST', { timeout: 15_000 });
+    await page.click('#miImportTS');
+    await upsertDone;
+    await expect.poll(() => cap.upserts.length, { timeout: 10_000 }).toBeGreaterThan(0);
+
+    const written = cap.upserts.flat();
+    // Un solo partido escrito, y es el nuevo: las jornadas no se pisan entre sí.
+    expect(new Set(written.map(r => r.match_id))).toEqual(new Set(['mres-new']));
+    const us = written.find(r => r.side === 'us');
+    const them = written.find(r => r.side === 'them');
+    expect(us.team_name).toBe('Kompong Dewa');
+    expect(them.team_name).toBe('Visakha');
+    // Y son los números de ESA jornada, no los de la otra.
+    expect(us.stats.possession_pct).toBeCloseTo(55.30, 2);
+    expect(them.stats.possession_pct).toBeCloseTo(44.70, 2);
+    expect(us.stats.goals).toBe(2);
+  });
+
+  test('tildar el que ya estaba lo vuelve a escribir: es cómo se corrige una carga mala', async ({ page }) => {
+    const cap = {};
+    await openImporter(page, cap);
+    await page.locator('.mi-ts-m').nth(0).locator('input').check();
+    const upsertDone = page.waitForRequest(r =>
+      r.url().includes('/team_match_stats') && r.method() === 'POST', { timeout: 15_000 });
+    await page.click('#miImportTS');
+    await upsertDone;
+    await expect.poll(() => cap.upserts.flat().length, { timeout: 10_000 }).toBeGreaterThanOrEqual(4);
+
+    const ids = new Set(cap.upserts.flat().map(r => r.match_id));
+    expect(ids.has('mres-3')).toBe(true);
+    expect(ids.has('mres-new')).toBe(true);
+  });
+});

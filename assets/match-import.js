@@ -23,6 +23,13 @@
   let _matchId = null, _players = null, _parsed = null, _provider = 'generic', _mapping = {};
   // El export de equipo de Wyscout, ya parseado y esperando confirmación.
   let _teamStats = null;
+  // El mismo export cuando trae varias jornadas acumuladas: la lista de partidos que
+  // se encontraron, ya cruzada contra lo que hay en la base.
+  let _teamBatch = null;
+  // El partido del archivo cuando es uno solo, para poder avisar si no es el abierto.
+  let _teamStatsMatch = null;
+  // Cómo se llama nuestro equipo, para saber cuál de las filas del archivo somos.
+  let _ourName;
 
   function esc(s){
     return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
@@ -71,6 +78,26 @@
       .mi-ts-peek b { font:600 12px/1 var(--cm-font-mono); color:var(--cm-fg-strong); }
       .mi-ts-peek u { text-decoration:none; color:var(--cm-fg-faint); }
       .mi-ts-warn { margin:0; font:500 12px/1.5 var(--cm-font-sans); color:var(--cm-warning); }
+
+      /* Export acumulado: una fila por partido, tildable. */
+      .mi-ts-tools { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+      .mi-ts-tools .mi-ts-lnk { border:0; background:none; padding:2px 4px; cursor:pointer; font:600 11.5px/1 var(--cm-font-sans); color:var(--cm-info); }
+      .mi-ts-tools .mi-ts-lnk:hover { text-decoration:underline; }
+      .mi-ts-tools .mi-ts-sep { color:var(--cm-fg-faint); font-size:11px; }
+      .mi-ts-list { display:flex; flex-direction:column; gap:5px; max-height:290px; overflow:auto; padding:1px; }
+      .mi-ts-m { display:flex; align-items:center; gap:9px; padding:7px 9px; background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-2); cursor:pointer; }
+      .mi-ts-m.is-off { opacity:.62; }
+      .mi-ts-m.is-dead { cursor:not-allowed; opacity:.5; }
+      .mi-ts-m input { flex:0 0 auto; margin:0; accent-color:var(--cm-accent); }
+      .mi-ts-m .mi-ts-d { flex:0 0 auto; font:500 11.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); }
+      /* min-width:0 para que el nombre se recorte en vez de empujar al badge fuera de la
+         fila: un flex item no baja de su ancho de contenido sin esto, y en español los
+         rótulos ya vienen un cuarto más largos que en inglés. */
+      .mi-ts-m b { flex:1 1 auto; min-width:0; font:600 13px/1.3 var(--cm-font-sans); color:var(--cm-fg-strong); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+      .mi-ts-m .mi-ts-ha { flex:0 0 auto; font:500 11px/1 var(--cm-font-mono); color:var(--cm-fg-faint); }
+      .mi-ts-badge { flex:0 0 auto; margin-left:auto; padding:2px 7px; border-radius:var(--cm-r-1); border:1px solid var(--cm-border); background:var(--cm-bg-sunk); font:600 10px/1.5 var(--cm-font-sans); letter-spacing:.03em; text-transform:uppercase; color:var(--cm-fg-muted); white-space:nowrap; }
+      .mi-ts-badge.is-new { border-color:var(--cm-accent); color:var(--cm-accent); background:transparent; }
+      .mi-ts-badge.is-dead { border-color:var(--cm-danger); color:var(--cm-danger); background:transparent; }
     `;
     const el = document.createElement('style'); el.id = 'mi-styles'; el.textContent = css;
     document.head.appendChild(el);
@@ -82,6 +109,7 @@
     showDrawer();
     injectStyles();
     _matchId = null; _parsed = null; _players = null; _provider = 'generic'; _mapping = {};
+    _teamStats = null; _teamBatch = null; _teamStatsMatch = null; _ourName = undefined;
     host.innerHTML = `<div style="padding:18px 4px;color:var(--cm-fg-faint);font:var(--cm-body-sm)">${esc(tt('common.loading', 'Loading…'))}</div>`;
     try {
       _clubId = await window.getClubId();
@@ -503,7 +531,7 @@
   async function onFile(e){
     const file = e.target.files && e.target.files[0]; if (!file) return;
     const msg = $('miStatsMsg'); if (msg){ msg.style.color = 'var(--cm-fg-muted)'; msg.textContent = tt('match_reports.parsing', 'Parsing…'); }
-    _teamStats = null;
+    _teamStats = null; _teamBatch = null; _teamStatsMatch = null;
     try {
       await fetchPlayers();
       _parsed = await parseFile(file);
@@ -513,9 +541,24 @@
       // en vez del diálogo de asignación se muestra lo que se encontró y se confirma.
       const W = window.cmWyscoutTeamStats;
       if (W && _parsed.grid && W.looks(_parsed.grid[0] || [])){
+        // El mismo archivo puede traer una jornada o media temporada. Se mira primero
+        // cuántos partidos hay: con más de uno, tomar las dos primeras filas como los
+        // dos lados de un partido le pega al partido abierto las estadísticas de otro.
+        const batch = W.parseMatches
+          ? W.parseMatches(_parsed.grid, currentOpponentName(), await ourTeamName())
+          : null;
+        if (batch && batch.matches.length > 1){
+          _teamBatch = batch;
+          if (msg) msg.textContent = tt('match_reports.ts_batch_checking', 'Checking which ones are already in…');
+          await reconcileBatch();
+          renderTeamBatch();
+          if (msg) msg.textContent = '';
+          return;
+        }
         const ts = W.parse(_parsed.grid, currentOpponentName());
         if (ts && ts.sides.length){
           _teamStats = ts;
+          _teamStatsMatch = (batch && batch.matches[0]) || null;
           renderTeamStats();
           if (msg) msg.textContent = '';
           return;
@@ -534,6 +577,273 @@
   function currentOpponentName(){
     const el = $('miOpp');                 // el campo "Rival" del formulario de arriba
     return (el && el.value.trim()) || null;
+  }
+
+  /* Cómo nos llamamos. Con el rival alcanzaba mientras el archivo traía un partido: el
+     otro equipo éramos nosotros. En un acumulado hay ocho rivales distintos y el único
+     nombre estable es el propio, así que se lo pregunta a la base una vez. */
+  async function ourTeamName(){
+    if (_ourName !== undefined) return _ourName;
+    _ourName = null;
+    try {
+      if (_teamId){
+        const { data } = await window.sb.from('teams').select('name').eq('id', _teamId).limit(1);
+        if (data && data[0]) _ourName = data[0].name || null;
+      }
+      if (!_ourName && _clubId){
+        const { data } = await window.sb.from('clubs').select('name').eq('id', _clubId).limit(1);
+        if (data && data[0]) _ourName = data[0].name || null;
+      }
+    } catch (_e) { _ourName = null; }
+    return _ourName;
+  }
+
+  /* ── El export acumulado: varios partidos en un archivo ─────────────────────
+     Wyscout deja pedir el Team Stats por rango de jornadas y el archivo se ve igual que
+     el de un partido, sólo que con más filas. Elegir sin mirar dejaba las estadísticas
+     de un rival colgadas de otro partido, y nada en la pantalla lo decía.
+
+     Acá se muestran los partidos que trae el archivo y se cruza cada uno contra la base
+     antes de escribir nada: el que ya tiene estadísticas viene destildado, el que existe
+     sin ellas se actualiza, y el que no existe se crea con lo que el propio Excel sabe
+     (fecha, rival, competición, marcador).
+     ────────────────────────────────────────────────────────────────────────── */
+
+  /** Fecha ISO → "5 sep 2026", en el idioma de quien mira. */
+  function miDayLabel(iso){
+    if (!iso) return '—';
+    const d = new Date(String(iso).slice(0, 10) + 'T00:00:00');
+    return isNaN(d.getTime()) ? String(iso).slice(0, 10) : miMonthDay(d);
+  }
+
+  /** Busca cada partido del archivo en la base y decide qué va a pasar con él. */
+  async function reconcileBatch(){
+    const b = _teamBatch; if (!b) return;
+    const dates = b.matches.map(m => m.match_date).filter(Boolean).sort();
+
+    // Se busca por club y rango de fechas, SIN filtrar por equipo: un partido cargado
+    // antes de que existieran los equipos tiene team_id en null, y filtrarlo lo dejaría
+    // fuera — es decir, lo volvería a crear duplicado.
+    let rows = [];
+    try {
+      let q = window.sb.from('match_results')
+        .select('id, match_date, opponent, competition, score_for, score_against, possession')
+        .eq('club_id', _clubId);
+      if (dates.length) q = q.gte('match_date', dates[0]).lte('match_date', dates[dates.length - 1]);
+      const { data } = await q;
+      rows = data || [];
+    } catch (_e) { rows = []; }
+
+    const taken = {};
+    b.matches.forEach(m => {
+      m.existing = null;
+      if (!m.match_date) return;
+      const sameDay = rows.filter(r => String(r.match_date).slice(0, 10) === m.match_date && !taken[r.id]);
+      let hit = null;
+      if (m.opponent){
+        const want = _norm(m.opponent);
+        hit = sameDay.find(r => {
+          const have = _norm(r.opponent || '');
+          return have && (have === want || have.indexOf(want) !== -1 || want.indexOf(have) !== -1);
+        }) || null;
+      }
+      // Un partido de ese día al que nunca se le puso rival: es ése, no hay otro
+      // candidato. Con dos sin rival el mismo día no se adivina y se crea uno nuevo.
+      if (!hit && sameDay.length === 1 && !sameDay[0].opponent) hit = sameDay[0];
+      if (hit){ taken[hit.id] = true; m.existing = hit; }
+    });
+
+    const ids = b.matches.map(m => m.existing && m.existing.id).filter(Boolean);
+    const withStats = {};
+    if (ids.length){
+      try {
+        const { data } = await window.sb.from('team_match_stats').select('match_id').in('match_id', ids);
+        (data || []).forEach(r => { withStats[r.match_id] = true; });
+      } catch (_e) {}
+    }
+
+    b.matches.forEach(m => {
+      if (!m.match_date && !m.existing){ m.state = 'nodate'; m.selected = false; return; }
+      m.state = (m.existing && withStats[m.existing.id]) ? 'imported'
+              : (m.existing ? 'existing' : 'new');
+      // El que ya está cargado viene destildado, pero se puede volver a tildar: subir de
+      // nuevo el archivo corregido es la forma de arreglar una importación mal hecha.
+      m.selected = m.state !== 'imported';
+    });
+  }
+
+  function batchSelected(){ return (_teamBatch ? _teamBatch.matches : []).filter(m => m.selected); }
+
+  function renderTeamBatch(){
+    const wrap = $('miMapWrap'); if (!wrap || !_teamBatch) return;
+    const b = _teamBatch;
+    const nAlready = b.matches.filter(m => m.state === 'imported').length;
+
+    // La clase dice el estado además del texto: es lo que mira el test, que no puede
+    // depender del idioma en el que esté abierta la app.
+    const BADGE = {
+      imported: ['is-in',  tt('match_reports.ts_badge_imported', 'already in')],
+      existing: ['is-upd', tt('match_reports.ts_badge_update', 'will update')],
+      new:      ['is-new', tt('match_reports.ts_badge_create', 'will create')],
+      nodate:   ['is-dead', tt('match_reports.ts_badge_nodate', 'no date')],
+    };
+
+    const rowHTML = (m, i) => {
+      const dead = m.state === 'nodate';
+      const badge = BADGE[m.state] || BADGE.new;
+      const nMetrics = m.sides.reduce((n, sd) => Math.max(n, Object.keys(sd.stats).length), 0);
+      const who = m.opponent
+        ? tt('match_reports.ts_vs_name', 'vs {name}', { name: m.opponent })
+        : (m.match_label || tt('match_reports.ts_unknown_match', 'Unknown match'));
+      const ha = m.home_away === 'home' ? tt('match_reports.home', 'Home')
+               : (m.home_away === 'away' ? tt('match_reports.away', 'Away') : '');
+      return `
+        <label class="mi-ts-m ${dead ? 'is-dead' : (m.selected ? '' : 'is-off')}" data-i="${i}">
+          <input type="checkbox" data-i="${i}" ${m.selected ? 'checked' : ''} ${dead ? 'disabled' : ''}>
+          <span class="mi-ts-d">${esc(miDayLabel(m.match_date))}</span>
+          <b>${esc(who)}</b>
+          ${ha ? `<span class="mi-ts-ha">${esc(ha)}</span>` : ''}
+          <span class="mi-ts-badge ${badge[0]}">${esc(badge[1])}</span>
+          <span class="mi-ts-n">${nMetrics}</span>
+        </label>`;
+    };
+
+    wrap.style.display = '';
+    wrap.innerHTML = `
+      <div class="mi-ts">
+        <div class="mi-ts-h"><i class="ti ti-stack-2"></i>${esc(tt('match_reports.ts_batch_title',
+          '{count} matches in this file', { count: b.matches.length }))}</div>
+        <p class="mi-ts-p">${esc(tt('match_reports.ts_batch_hint',
+          'This Wyscout export is cumulative — it carries several matches, not just the one you are editing. Pick which ones to import.'))}</p>
+        ${nAlready ? `<p class="mi-ts-warn">${esc(tt('match_reports.ts_batch_already',
+          '{count} of them already have team stats and come unticked. Tick one to overwrite it.',
+          { count: nAlready }))}</p>` : ''}
+        ${b.ourTeam ? `<p class="mi-ts-p">${esc(tt('match_reports.ts_batch_ourteam',
+          'Our team in the file: {name}', { name: b.ourTeam }))}</p>`
+          : `<p class="mi-ts-warn">${esc(tt('match_reports.ts_batch_noteam',
+          'Could not tell which side is ours, so the first row of each match was taken as ours. Check before importing.'))}</p>`}
+        <div class="mi-ts-tools">
+          <button class="mi-ts-lnk" data-sel="all" type="button">${esc(tt('match_reports.ts_sel_all', 'Select all'))}</button><span class="mi-ts-sep">·</span>
+          <button class="mi-ts-lnk" data-sel="none" type="button">${esc(tt('match_reports.ts_sel_none', 'Select none'))}</button><span class="mi-ts-sep">·</span>
+          <button class="mi-ts-lnk" data-sel="missing" type="button">${esc(tt('match_reports.ts_sel_missing', 'Only the ones missing'))}</button>
+        </div>
+        <div class="mi-ts-list">${b.matches.map(rowHTML).join('')}</div>
+        ${b.unknown && b.unknown.length ? `<p class="mi-ts-warn">${esc(tt('match_reports.ts_unknown_cols',
+          '{count} column(s) not recognised and skipped: {list}',
+          { count: b.unknown.length, list: b.unknown.slice(0, 3).join(', ') }))}</p>` : ''}
+      </div>
+      <div class="mi-actions" style="margin-top:10px">
+        <span style="flex:1"></span>
+        <button id="miImportCancel" class="cm-btn is-outline is-sm" type="button">${esc(tt('common.cancel', 'Cancel'))}</button>
+        <button id="miImportTS" class="cm-btn is-primary is-sm" type="button"><i class="ti ti-database-import" style="font-size:14px"></i>${
+          esc(tt('match_reports.ts_import_matches', 'Import {count} matches', { count: batchSelected().length }))}</button>
+      </div>`;
+
+    wrap.querySelectorAll('.mi-ts-m input').forEach(cb => cb.addEventListener('change', ev => {
+      const m = b.matches[Number(ev.target.dataset.i)];
+      if (m){ m.selected = ev.target.checked; }
+      const row = ev.target.closest('.mi-ts-m');
+      if (row) row.classList.toggle('is-off', !ev.target.checked);
+      syncBatchBtn();
+    }));
+    wrap.querySelectorAll('.mi-ts-lnk').forEach(btn => btn.addEventListener('click', () => {
+      const how = btn.dataset.sel;
+      b.matches.forEach(m => {
+        if (m.state === 'nodate'){ m.selected = false; return; }
+        m.selected = how === 'all' ? true : (how === 'none' ? false : m.state !== 'imported');
+      });
+      renderTeamBatch();
+    }));
+    $('miImportCancel').addEventListener('click', close);
+    $('miImportTS').addEventListener('click', doImportBatch);
+    syncBatchBtn();
+    // La lista aparece al pie de un formulario largo: sin esto queda abajo del pliegue y
+    // el aviso de que el archivo trae varias jornadas no lo lee nadie.
+    try { wrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } catch (_e) {}
+  }
+
+  function syncBatchBtn(){
+    const btn = $('miImportTS'); if (!btn) return;
+    const n = batchSelected().length;
+    btn.disabled = n === 0;
+    btn.innerHTML = `<i class="ti ti-database-import" style="font-size:14px"></i>${
+      esc(tt('match_reports.ts_import_matches', 'Import {count} matches', { count: n }))}`;
+  }
+
+  function tsInt(v){ return (v == null || !isFinite(v)) ? null : Math.round(v); }
+
+  async function doImportBatch(){
+    const b = _teamBatch, msg = $('miStatsMsg');
+    if (!b) return;
+    const sel = batchSelected();
+    if (!sel.length) return;
+    const btn = $('miImportTS'); if (btn) btn.disabled = true;
+    if (msg){ msg.style.color = 'var(--cm-fg-muted)'; msg.textContent = tt('match_reports.ts_batch_importing', 'Importing…'); }
+
+    let uid = null; try { uid = (await window.sb.auth.getUser()).data.user?.id || null; } catch (_e) {}
+    let done = 0, created = 0; const failed = [];
+
+    // De a uno: cada partido puede necesitar que antes se cree su fila en match_results,
+    // y si uno falla los demás igual entran. Un lote entero que se cae por un partido
+    // raro obliga a repetir todo el trabajo.
+    for (const m of sel){
+      const us = m.sides.find(sd => sd.side === 'us');
+      const them = m.sides.find(sd => sd.side === 'them') || null;
+      try {
+        let matchId = m.existing ? m.existing.id : null;
+        if (!matchId){
+          if (!m.match_date) throw new Error(tt('match_reports.ts_badge_nodate', 'no date'));
+          const gf = us ? us.stats.goals : null;
+          const ga = (them && them.stats.goals != null) ? them.stats.goals : (us ? us.stats.conceded_goals : null);
+          const res = await window.sb.from('match_results').insert({
+            club_id: _clubId, team_id: _teamId || null,
+            match_date: m.match_date,
+            competition: m.competition || null,
+            opponent: m.opponent || null,
+            home_away: m.home_away || null,
+            score_for: tsInt(gf), score_against: tsInt(ga),
+            possession: us && us.stats.possession_pct != null ? Math.round(us.stats.possession_pct) : null,
+            formation: (us && us.formation) || null,
+            created_by: uid,
+          }).select('id').single();
+          if (res.error) throw res.error;
+          matchId = res.data.id;
+          created++;
+        } else {
+          // El partido ya estaba: se completan sólo los huecos, nunca se pisa un dato
+          // que alguien cargó a mano.
+          await fillMatchFromSides(matchId, us, them);
+        }
+
+        const payloads = m.sides.map(sd => ({
+          club_id: _clubId, match_id: matchId, side: sd.side,
+          team_name: sd.team_name || null, formation: sd.formation || null,
+          stats: sd.stats, source: 'wyscout_xlsx',
+        }));
+        const up = await window.sb.from('team_match_stats').upsert(payloads, { onConflict: 'match_id,side' });
+        if (up.error) throw up.error;
+        m.existing = m.existing || { id: matchId };
+        m.state = 'imported'; m.selected = false;
+        done++;
+      } catch (e){
+        failed.push((m.opponent || miDayLabel(m.match_date)) + ': ' + (e.message || e));
+      }
+    }
+
+    if (msg){
+      const parts = [];
+      if (done) parts.push(tt('match_reports.ts_batch_done', '✓ {count} matches imported', { count: done }));
+      if (created) parts.push(tt('match_reports.ts_batch_created', '{count} created', { count: created }));
+      if (failed.length) parts.push(tt('match_reports.ts_batch_failed', '{count} failed: {list}',
+        { count: failed.length, list: failed.slice(0, 2).join(' · ') }));
+      msg.style.color = failed.length ? 'var(--cm-danger)' : 'var(--cm-success)';
+      msg.textContent = parts.join(' · ');
+    }
+    if (done && !failed.length){ close(); location.reload(); return; }
+    // Con algo fallado no se recarga: la lista se vuelve a dibujar con lo que sí entró
+    // ya destildado, para poder reintentar sólo lo que quedó afuera. El mensaje vive
+    // fuera de #miMapWrap, así que sobrevive al redibujado.
+    renderTeamBatch();
   }
 
   /* ── El export de equipo: confirmar, no mapear ─────────────────────────────── */
@@ -568,6 +878,7 @@
         ${sides.map(sideRow).join('')}
         ${_teamStats.matched ? '' : `<p class="mi-ts-warn">${esc(tt('match_reports.ts_guessed_sides',
           'Could not match either team to this match’s opponent, so the first row was taken as ours. Check before importing.'))}</p>`}
+        ${mismatchWarning()}
         <div class="mi-ts-peeks">${peekHTML}</div>
         ${_teamStats.unknown && _teamStats.unknown.length ? `<p class="mi-ts-warn">${esc(tt('match_reports.ts_unknown_cols',
           '{count} column(s) not recognised and skipped: {list}',
@@ -583,6 +894,22 @@
     $('miImportTS').addEventListener('click', doImportTeamStats);
   }
 
+  /* El archivo trae un solo partido, pero puede no ser el que está abierto: el analista
+     baja el export de la última jornada y lo sube desde el partido anterior, y hasta acá
+     eso escribía las estadísticas de un partido en otro sin decir nada. Se compara la
+     fecha del archivo con la del formulario y se avisa — no se bloquea, porque un
+     partido cargado con la fecha corrida es un caso legítimo. */
+  function mismatchWarning(){
+    const m = _teamStatsMatch; if (!m || !m.match_date) return '';
+    const open = ($('miDate') && $('miDate').value || '').slice(0, 10);
+    if (!open || open === m.match_date) return '';
+    return `<p class="mi-ts-warn">${esc(tt('match_reports.ts_other_match',
+      'This file is for the match on {file}{opp}, but the match open here is on {open}. Check before importing.',
+      { file: miDayLabel(m.match_date),
+        opp: m.opponent ? ' (' + tt('match_reports.ts_vs_name', 'vs {name}', { name: m.opponent }) + ')' : '',
+        open: miDayLabel(open) }))}</p>`;
+  }
+
   /**
    * Pasa al partido lo que el export de equipo sabe y el informe todavía no: el marcador
    * y la posesión. Sólo rellena huecos — un valor ya cargado no se pisa, porque puede
@@ -591,15 +918,20 @@
    */
   async function fillMatchFromTeamStats(){
     if (!_teamStats || !_matchId) return [];
-    const us = _teamStats.sides.find(s => s.side === 'us');
-    const them = _teamStats.sides.find(s => s.side === 'them');
-    if (!us) return [];
+    return fillMatchFromSides(_matchId,
+      _teamStats.sides.find(s => s.side === 'us'),
+      _teamStats.sides.find(s => s.side === 'them'));
+  }
+
+  /** Lo mismo, para un partido cualquiera del lote. @see fillMatchFromTeamStats */
+  async function fillMatchFromSides(matchId, us, them){
+    if (!matchId || !us) return [];
 
     let current = null;
     try {
       const { data } = await window.sb.from('match_results')
         .select('score_for, score_against, possession, competition')
-        .eq('id', _matchId).limit(1);
+        .eq('id', matchId).limit(1);
       current = (data && data[0]) || null;
     } catch (_e) { return []; }
     if (!current) return [];
@@ -622,7 +954,7 @@
     if (!names.length) return [];
 
     try {
-      const { error } = await window.sb.from('match_results').update(patch).eq('id', _matchId);
+      const { error } = await window.sb.from('match_results').update(patch).eq('id', matchId);
       if (error) return [];
     } catch (_e) { return []; }
     return names;

@@ -25,6 +25,8 @@ Después de un partido, para registrar el resultado e introducir (o importar) la
 
 **Añade las estadísticas del equipo.** El export **Team Stats** de Wyscout (un Excel con una fila por equipo) trae 53 métricas de los dos lados: posesión, xG, PPDA, pases progresivos, y las recuperaciones y pérdidas partidas por tercio del campo. Al importarlo se llenan dos tarjetas: la comparación contra el rival y **Cómo viene el equipo**, que pone cada partido en una línea para ver la evolución a lo largo de la temporada. No hace falta mapear columnas: el importador reconoce el archivo por sus encabezados y sólo pide confirmar cuál de los dos equipos es el tuyo.
 
+**Si el Excel trae varias jornadas.** Wyscout deja pedir el Team Stats de un rango de fechas, y ese archivo se ve igual que el de un partido: mismos encabezados, más filas. El importador lo detecta y, en vez de cargar uno solo, lista todos los partidos que trae. Cada uno muestra si ya está cargado (viene destildado), si existe y se le van a sumar las estadísticas, o si hay que crearlo — en ese caso el partido se crea con la fecha, el rival, la competición y el marcador que el propio archivo trae. Destildá los que no quieras tocar y el resto entra de una vez.
+
 ## Conceptos clave
 
 **Qué captura un informe de partido.** Dos capas: el **resultado del partido** (marcador, rival, competición, sede, local/visitante, formación, posesión, notas) y las **estadísticas por jugador** (minutos, valoración, goles, asistencias, tarjetas, posición), con las métricas de GPS superpuestas desde la sesión.
