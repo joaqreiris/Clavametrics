@@ -38,6 +38,7 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js" defer></script>
 <script src="assets/supabase-init.js"></script>
+<script src="assets/cm-select.js" defer></script>
 <script src="assets/sport-packs.js"></script>
 <script src="assets/sport.js"></script>
 <script src="lib/day-context.js"></script>
@@ -261,7 +262,7 @@
             <div class="ap-field"><label data-i18n="annual_planner.start">Start</label><input type="date" id="apStart" style="display:none"><button type="button" class="ap-datebtn" id="apStart_btn" onclick="apOpenCal('apStart', this)"><i class="ti ti-calendar"></i><span class="lbl ph" data-i18n="annual_planner.select_date">Select date</span></button></div>
             <div class="ap-field"><label data-i18n="annual_planner.end">End</label><input type="date" id="apEnd" style="display:none"><button type="button" class="ap-datebtn" id="apEnd_btn" onclick="apOpenCal('apEnd', this)"><i class="ti ti-calendar"></i><span class="lbl ph" data-i18n="annual_planner.select_date">Select date</span></button></div>
           </div>
-          <div class="ap-field" style="margin-bottom:14px"><label data-i18n="annual_planner.planning_model">Planning model</label><select id="apModelSel" style="height:38px;padding:0 8px;background:var(--cm-surface);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:7px;font:500 13px/1 var(--cm-font-sans)"><option value="free" data-i18n="annual_planner.model_free">No model — free planning</option><option value="tactical" data-i18n="annual_planner.model_tactical">Tactical Periodization — Frade · morphocycle</option><option value="structured" data-i18n="annual_planner.model_structured">Structured Microcycle — Seirul·lo · typed micros</option><option value="atr" data-i18n="annual_planner.model_atr">ATR (block) — Issurin · 4–6 wk macrocycles</option><option value="verheijen" data-i18n="annual_planner.model_verheijen">Verheijen — football · 6-week blocks</option></select></div>
+          <div class="ap-field" style="margin-bottom:14px"><label data-i18n="annual_planner.planning_model">Planning model</label><select id="apModelSel" data-cm-select style="height:38px;padding:0 8px;background:var(--cm-surface);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:7px;font:500 13px/1 var(--cm-font-sans)"><option value="free" data-icon="ti-free-rights" data-i18n="annual_planner.model_free">No model — free planning</option><option value="tactical" data-icon="ti-chess" data-i18n="annual_planner.model_tactical">Tactical Periodization — Frade · morphocycle</option><option value="structured" data-icon="ti-layout-grid" data-i18n="annual_planner.model_structured">Structured Microcycle — Seirul·lo · typed micros</option><option value="atr" data-icon="ti-stack-2" data-i18n="annual_planner.model_atr">ATR (block) — Issurin · 4–6 wk macrocycles</option><option value="verheijen" data-icon="ti-ball-football" data-i18n="annual_planner.model_verheijen">Verheijen — football · 6-week blocks</option></select></div>
           <div style="display:flex;justify-content:flex-end;gap:8px">
             <button class="ap-btn" onclick="apHideForm()" data-i18n="common.cancel">Cancel</button>
             <button class="ap-btn primary" onclick="apSaveSeason()" data-i18n="annual_planner.save_season">Save season</button>
@@ -1659,6 +1660,13 @@ const MICRO_TYPES = {
   competitive: { label:'Competitive', bg:'#E1F5EE', tx:'#085041' }
 };
 function apModelCfg(){ return PLAN_MODELS[_apModel] || PLAN_MODELS.tactical; }
+
+// Al cambiar de idioma, CM_I18N reescribe el texto de los <option>; el desplegable
+// mejorado pinta su botón aparte y hay que pedirle que se refresque.
+document.addEventListener('cm:langchanged', () => {
+  document.querySelectorAll('select[data-cm-select]').forEach(s =>
+    s.dispatchEvent(new CustomEvent('cm:refresh')));
+});
 
 /* ── Localized labels for the JS-driven maps (data-* keys stay canonical) ── */
 function apPlanLabel(k){ const m = PLAN_MODELS[k] || PLAN_MODELS.tactical; return tt('annual_planner.plan_' + (PLAN_MODELS[k] ? k : 'tactical'), m.label); }
