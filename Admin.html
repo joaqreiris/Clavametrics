@@ -44,6 +44,7 @@
 <script src="assets/global-search.js" defer></script>
 <script src="assets/gps-matcher.js"></script>
 <script src="assets/cm-daterange.js"></script>
+<script src="assets/subscribe.js" defer></script>
 <style>
   body.cm { background: var(--cm-bg); }
 
@@ -467,6 +468,7 @@
           <div class="ad-kpi-l"><i class="ti ti-credit-card"></i><span data-i18n="admin.kpi_plan">Plan</span></div>
           <div class="ad-kpi-v" id="adKpiPlan">—</div>
           <div class="ad-kpi-t" id="adKpiPlanSub"></div>
+          <div id="adKpiPlanCta" hidden style="margin-top:8px"></div>
         </div>
         <div class="ad-kpi" style="display:none"><!-- Storage: placeholder oculto hasta tener uso real del bucket -->
           <div class="ad-kpi-l"><i class="ti ti-database"></i><span data-i18n="admin.kpi_storage">Storage</span></div>
@@ -1054,6 +1056,31 @@ const _esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&a
         else if (sub?.current_period_end) ks.textContent = `$${price}/mo · ` + tt('admin.next_bill','next bill {date}',{ date: fmtD(sub.current_period_end) });
         else ks.textContent = `$${price}/mo`;
       }
+      // Durante la prueba, el paso siguiente es comprar — y hasta ahora no había por
+      // dónde: el checkout vivía solo en el último paso del alta, que el club ya pasó.
+      // El botón aparece únicamente mientras dura el trial; después, la facturación se
+      // gestiona desde Billing, que es su sitio.
+      const cta = document.getElementById('adKpiPlanCta');
+      if (cta) {
+        if (enPrueba && window.CM_SUBSCRIBE) {
+          // Con DOM y no con innerHTML: `esc` vive en otro bloque <script> de esta
+          // página y acá no existe, así que interpolar sería una bomba de relojería.
+          cta.hidden = false;
+          cta.textContent = '';
+          const btn = document.createElement('button');
+          btn.className = 'cm-btn is-primary is-sm';
+          btn.style.width = '100%';
+          const ico = document.createElement('i');
+          ico.className = 'ti ti-credit-card';
+          ico.style.fontSize = '14px';
+          const txt = document.createElement('span');
+          txt.textContent = tt('admin.subscribe_now', 'Subscribe');
+          btn.append(ico, txt);
+          btn.addEventListener('click', () => window.CM_SUBSCRIBE.open());
+          cta.appendChild(btn);
+        } else { cta.hidden = true; cta.textContent = ''; }
+      }
+
       const ht = document.getElementById('adHeadTeam'); if (ht) ht.textContent = '· ' + clubName + (teamName ? ' · ' + teamName : '');
     } catch(_){}
   })();
