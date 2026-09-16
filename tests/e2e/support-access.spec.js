@@ -87,7 +87,7 @@ test.describe('Admin — acceso de soporte', () => {
 
   test('con la ventana abierta se ve hasta cuándo, quién está dentro y cómo cerrarla', async ({ page }) => {
     await montar(page, {
-      grants:   [{ id:'g-1', reason:'revisar el GPS', created_at:new Date().toISOString(), expires_at: EN_UNA_HORA, granted_by:'user-1' }],
+      grants:   [{ id:'g-1', reason:'revisar el GPS', created_at:new Date().toISOString(), expires_at: EN_UNA_HORA, granted_by:'user-1', conflict_waived:false, waiver_reason:null }],
       sesiones: [{ admin_user_id:'pa-1', reason:'revisar sync', opened_at:new Date().toISOString(), expires_at: EN_UNA_HORA }],
       log: LOG,
     });
@@ -101,7 +101,7 @@ test.describe('Admin — acceso de soporte', () => {
 
   test('cerrar la puerta revoca ESE permiso', async ({ page }) => {
     const rpcs = await montar(page, {
-      grants: [{ id:'g-1', reason:null, created_at:new Date().toISOString(), expires_at: EN_UNA_HORA, granted_by:'user-1' }],
+      grants: [{ id:'g-1', reason:null, created_at:new Date().toISOString(), expires_at: EN_UNA_HORA, granted_by:'user-1', conflict_waived:false, waiver_reason:null }],
       log: LOG,
     });
     await page.locator('#supRevoke').click({ timeout: 15_000 });
@@ -129,13 +129,16 @@ test.describe('Admin — acceso de soporte', () => {
     // lista que alguien cargó a mano: sale de que la persona declaró dónde ejerce y este
     // club está en ese país. Un club camboyano que se dé de alta mañana ya lo ve.
     await montar(page, { log: LOG, restricciones: [], conflictos: [
-      { admin_email:'reiris.joaquin@gmail.com', country:'Cambodia', started_on:'2026-09-16', ended_on:null, cooloff_months:12, blocked_until:null, note:null },
+      { admin_email:'reiris.joaquin@gmail.com', country:'Cambodia', started_on:'2026-09-16', ended_on:null, cooloff_months:12, blocked_until:null, note:null, waived_until:null, waiver_reason:null },
     ]});
     const vetos = page.locator('#supVetos');
     // Registro formal: es una manifestación con efectos jurídicos, no copy de producto.
     await expect(vetos).toContainText('Declaración de conflicto de interés', { timeout: 15_000 });
     await expect(vetos).toContainText('queda inhabilitado para acceder');
-    await expect(vetos).toContainText('aun mediando autorización expresa');
+    // La 172 dejó obsoleto el «aun mediando autorización expresa»: ahora el club SÍ puede
+    // dispensar la inhabilitación. Si la pantalla y el contrato divergen, vale la peor.
+    await expect(vetos).toContainText('no decae por la mera concesión de un acceso de soporte');
+    await expect(vetos).not.toContainText('aun mediando autorización expresa');
     await expect(vetos).toContainText('irrevocable');
     // Y NO puede decir "no hay nadie vetado" justo debajo: se contradice y le quita
     // credibilidad a lo único que de verdad importa de esta tarjeta.
@@ -144,13 +147,51 @@ test.describe('Admin — acceso de soporte', () => {
 
   test('si esa persona ya se fue, se dice que el veto sigue en enfriamiento', async ({ page }) => {
     await montar(page, { log: LOG, conflictos: [
-      { admin_email:'reiris.joaquin@gmail.com', country:'Cambodia', started_on:'2024-01-01', ended_on:'2026-06-30', cooloff_months:12, blocked_until:'2027-06-30', note:null },
+      { admin_email:'reiris.joaquin@gmail.com', country:'Cambodia', started_on:'2024-01-01', ended_on:'2026-06-30', cooloff_months:12, blocked_until:'2027-06-30', note:null, waived_until:null, waiver_reason:null },
     ]});
     const v = page.locator('#supVetos');
     // Fecha CIERTA, no "un período": si no es oponible, no sirve para lo que está puesto.
     await expect(v).toContainText('permanece vigente hasta el', { timeout: 15_000 });
     await expect(v).toContainText('30 de junio de 2027');
     await expect(v).toContainText('período de carencia de 12 meses');
+  });
+
+  test('con conflicto declarado avisa que los botones normales no alcanzan, y ofrece la renuncia', async ({ page }) => {
+    // El punto de todo el diseño: un permiso corriente NO levanta el veto. Si esta segunda
+    // acción se mezclara con los botones de arriba, la garantía se vaciaría sola.
+    await montar(page, { log: LOG, conflictos: [
+      { admin_email:'reiris.joaquin@gmail.com', country:'Cambodia', started_on:'2026-09-16', ended_on:null, cooloff_months:12, blocked_until:null, note:null, waived_until:null, waiver_reason:null },
+    ]});
+    const est = page.locator('#supState');
+    await expect(est).toContainText('no van a dejar entrar a reiris.joaquin@gmail.com', { timeout: 15_000 });
+    await expect(est.locator('#supWaiveBtn')).toBeVisible();
+    await expect(est).toContainText('sólo para esta autorización');
+  });
+
+  test('la renuncia exige motivo y se manda marcada como renuncia', async ({ page }) => {
+    const rpcs = await montar(page, { log: LOG, conflictos: [
+      { admin_email:'reiris.joaquin@gmail.com', country:'Cambodia', started_on:'2026-09-16', ended_on:null, cooloff_months:12, blocked_until:null, note:null, waived_until:null, waiver_reason:null },
+    ]});
+    await page.locator('#supWaiveBtn').click({ timeout: 15_000 });
+    // Sin motivo no sale nada: la renuncia sin constancia no sirve de nada después.
+    expect(rpcs.some(r => r.nombre === 'support_grant_open')).toBe(false);
+
+    await page.fill('#supWaiveWhy', 'Lo preferimos a quedarnos sin soporte');
+    await page.locator('#supWaiveBtn').click();
+    await expect.poll(() => rpcs.some(r => r.nombre === 'support_grant_open'), { timeout: 10_000 }).toBe(true);
+    expect(rpcs.find(r => r.nombre === 'support_grant_open').body).toMatchObject({
+      p_club_id:'club-1', p_waive_conflict:true, p_waiver_reason:'Lo preferimos a quedarnos sin soporte',
+    });
+  });
+
+  test('una autorización con renuncia lo dice en vez de disimularlo', async ({ page }) => {
+    await montar(page, {
+      grants: [{ id:'g-1', reason:'GPS', created_at:new Date().toISOString(), expires_at: EN_UNA_HORA, granted_by:'user-1', conflict_waived:true, waiver_reason:'Lo preferimos así' }],
+      log: LOG,
+    });
+    const est = page.locator('#supState');
+    await expect(est).toContainText('Renunciaste al conflicto de interés', { timeout: 15_000 });
+    await expect(est).toContainText('Lo preferimos así');
   });
 
   test('un vetado se puede quitar, y el veto se ofrece sobre quien ya entró', async ({ page }) => {
