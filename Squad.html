@@ -811,6 +811,62 @@
 <div class="sq-toast" id="sqToast"></div>
 
 <!-- Bulk actions bar (shown when ≥1 player is selected) -->
+<!-- Declarar derechos de imagen para varios jugadores de una vez.
+     El caso real no es pedir permisos nuevos: el club YA los tiene firmados en la ficha de
+     inscripción, y lo que hace falta es volcar eso sin tipear el nombre de 92 madres. Por
+     eso aquí no se nombra a nadie: se declara DE DÓNDE sale el permiso. El papel se queda
+     en el club, que es el responsable del tratamiento; nosotros registramos la declaración. -->
+<div class="sq-modal-backdrop" id="sqConsentBackdrop">
+  <div class="sq-modal" role="dialog" aria-modal="true" aria-labelledby="sqConsentTitle" style="width:460px">
+    <div class="sq-modal-head">
+      <h2 id="sqConsentTitle" data-i18n="squad.declare_image_rights_title">Declare image rights</h2>
+      <button class="sq-modal-close" id="sqConsentClose" title="Close" aria-label="Close" data-i18n-attr="title:squad.close;aria-label:squad.close"><i class="ti ti-x"></i></button>
+    </div>
+    <div class="sq-modal-body">
+      <p id="sqConsentCount" style="font:600 var(--cm-body-sm);color:var(--cm-fg-strong);margin:0"></p>
+
+      <div class="sq-modal-field">
+        <label data-i18n="squad.consent_scope_label">What is being authorised</label>
+        <label style="display:flex;align-items:center;gap:7px;font:var(--cm-body-sm);color:var(--cm-fg);cursor:pointer;margin:2px 0">
+          <input type="radio" name="sqConsentScope" value="internal" checked>
+          <span data-i18n="squad.consent_scope_internal">Internal analysis only</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:7px;font:var(--cm-body-sm);color:var(--cm-fg);cursor:pointer;margin:2px 0">
+          <input type="radio" name="sqConsentScope" value="both">
+          <span data-i18n="squad.consent_scope_both">Internal analysis and public release</span>
+        </label>
+      </div>
+
+      <div class="sq-modal-field">
+        <label for="sqConsentNote" data-i18n="squad.consent_source">Where does the permission come from</label>
+        <input type="text" id="sqConsentNote" list="sqConsentNoteList" placeholder="e.g. 2026 enrolment form" data-i18n-ph="squad.consent_source_ph">
+        <datalist id="sqConsentNoteList">
+          <option data-i18n-attr="value:squad.consent_src_enrolment" value="Enrolment form"></option>
+          <option data-i18n-attr="value:squad.consent_src_signed" value="Signed image rights authorisation"></option>
+          <option data-i18n-attr="value:squad.consent_src_contract" value="Player contract"></option>
+        </datalist>
+      </div>
+
+      <div class="sq-modal-field">
+        <label for="sqConsentDate" data-i18n="squad.consent_date">Date it was given</label>
+        <input type="date" id="sqConsentDate">
+      </div>
+
+      <!-- Aviso, no bloqueo: que una ficha de inscripción cubra a un menor depende de que la
+           firmaran los dos progenitores, y eso el sistema no lo puede verificar. -->
+      <div id="sqConsentMinors" style="display:none;padding:9px 12px;border-radius:var(--cm-r-3);background:var(--cm-warning-bg);border:1px solid var(--cm-warning-bd);font:var(--cm-body-sm);color:var(--cm-warning)"></div>
+      <div id="sqConsentNoDob" style="display:none;padding:9px 12px;border-radius:var(--cm-r-3);background:var(--cm-danger-bg);border:1px solid var(--cm-danger-bd);font:var(--cm-body-sm);color:var(--cm-danger)"></div>
+
+      <p style="font:var(--cm-body-sm);color:var(--cm-fg-muted);margin:0" data-i18n="squad.consent_declare_disclaimer">By declaring this you state that the club holds this permission and can produce it if asked. The document is not uploaded here.</p>
+    </div>
+    <div class="sq-modal-foot">
+      <div class="grow"></div>
+      <button class="cm-btn is-ghost is-sm" id="sqConsentCancel" data-i18n="common.cancel">Cancel</button>
+      <button class="cm-btn is-primary is-sm" id="sqConsentApply" data-i18n="squad.consent_declare">Declare</button>
+    </div>
+  </div>
+</div>
+
 <div class="sq-bulkbar" id="sqBulkBar">
   <button class="sq-bulk-clear" id="sqBulkClear" title="Clear selection" data-i18n-attr="title:squad.clear_selection"><i class="ti ti-x"></i></button>
   <span class="sq-bulk-count"><span id="sqBulkCount">0</span> <span data-i18n="squad.bulk_selected_label">selected</span></span>
@@ -819,6 +875,7 @@
   <button class="cm-btn is-outline is-sm" id="sqBulkExport"><i class="ti ti-file-export" style="font-size:14px"></i><span data-i18n="common.export">Export</span></button>
   <button class="cm-btn is-outline is-sm" id="sqBulkMove"><i class="ti ti-arrows-exchange" style="font-size:14px"></i><span data-i18n="squad.move_to_team">Move to team</span></button>
   <button class="cm-btn is-outline is-sm" id="sqBulkEdit"><i class="ti ti-edit" style="font-size:14px"></i><span data-i18n="squad.change_pos_status">Change position/status</span></button>
+  <button class="cm-btn is-outline is-sm" id="sqBulkConsent"><i class="ti ti-license" style="font-size:14px"></i><span data-i18n="squad.declare_image_rights">Image rights</span></button>
 </div>
 
 <!-- Bulk: Move to team -->
@@ -1922,6 +1979,88 @@ async function reloadPlayers() {
   }
   document.getElementById('sqBulkMove')?.addEventListener('click', openBulkMove);
   document.getElementById('sqBulkEdit')?.addEventListener('click', openBulkChange);
+
+  // ── Bulk: declarar derechos de imagen ──────────────────────────
+  //
+  // No se piden permisos nuevos: el club ya los tiene firmados en la ficha de inscripción,
+  // y esto es para volcarlos. Por eso no se nombra a cada otorgante (tipear 92 nombres
+  // empuja a inventar, igual que la fecha de nacimiento) sino que se declara de dónde sale.
+  function openBulkConsent() {
+    const ids = getSelectedIds();
+    if (!ids.length) return;
+    const sel      = _allPlayers.filter(p => ids.includes(p.id));
+    const menores  = sel.filter(p => (consentGrantors(p.date_of_birth) || []).includes('guardian1')).length;
+    const sinFecha = sel.filter(p => !p.date_of_birth).length;
+
+    document.getElementById('sqConsentCount').textContent =
+      tt('squad.consent_n_selected', `Selected: ${sel.length}`, { count: sel.length });
+    document.getElementById('sqConsentNote').value = '';
+    document.getElementById('sqConsentDate').value = todayISO();
+
+    // Que una ficha de inscripción cubra a un menor depende de que la firmaran AMBOS
+    // progenitores. El sistema no lo puede verificar, así que avisa y deja seguir: el
+    // responsable del tratamiento es el club.
+    const avisoMenores = document.getElementById('sqConsentMinors');
+    avisoMenores.style.display = menores ? 'block' : 'none';
+    if (menores) {
+      avisoMenores.textContent = tt('squad.consent_minors_warn',
+        `Minors in the selection: ${menores}. The document must be signed by both parents to cover them.`,
+        { count: menores });
+    }
+
+    // Las fichas sin fecha quedan fuera igual: sin edad no se sabe si esa ficha alcanzaba.
+    const avisoSinFecha = document.getElementById('sqConsentNoDob');
+    avisoSinFecha.style.display = sinFecha ? 'block' : 'none';
+    if (sinFecha) {
+      avisoSinFecha.textContent = tt('squad.consent_nodob_warn',
+        `No date of birth: ${sinFecha}. They stay pending until it is filled in.`,
+        { count: sinFecha });
+    }
+
+    document.getElementById('sqBulkBar')?.classList.remove('is-show');
+    document.getElementById('sqConsentBackdrop').classList.add('is-open');
+  }
+
+  async function applyBulkConsent() {
+    const ids = getSelectedIds();
+    const backdrop = document.getElementById('sqConsentBackdrop');
+    if (!ids.length) { backdrop.classList.remove('is-open'); return; }
+
+    const note = document.getElementById('sqConsentNote').value.trim();
+    if (!note) {
+      showToast(tt('squad.consent_source_required','Say where the permission comes from.'));
+      document.getElementById('sqConsentNote').focus();
+      return;
+    }
+    const modo   = document.querySelector('input[name="sqConsentScope"]:checked')?.value || 'internal';
+    const scopes = modo === 'both' ? ['internal_analysis','public_release'] : ['internal_analysis'];
+    const fecha  = document.getElementById('sqConsentDate').value || todayISO();
+
+    const n = ids.length;
+    if (!confirm(tt('squad.consent_declare_confirm',
+        `Declare image rights for the selection (${n})?`, { count: n }))) return;
+
+    // La RPC saca el club de cada jugador e ignora los ids ajenos: devuelve cuántas FILAS
+    // escribió, que son jugadores × alcances.
+    const { data, error } = await window.sb.rpc('declare_image_consent', {
+      p_player_ids: ids, p_scopes: scopes, p_note: note, p_date: fecha
+    });
+    if (error) { showToast(tt('squad.generic_error','Error: ' + error.message, { msg: error.message })); return; }
+
+    const hechos = Math.floor((Number(data) || 0) / scopes.length);
+    backdrop.classList.remove('is-open');
+    clearBulkSelection();
+    await reloadPlayers();
+    showToast(tt('squad.consent_declared',
+      `Image rights recorded for the selection (${hechos}).`, { count: hechos }));
+  }
+
+  document.getElementById('sqBulkConsent')?.addEventListener('click', openBulkConsent);
+  document.getElementById('sqConsentApply')?.addEventListener('click', applyBulkConsent);
+  document.getElementById('sqConsentCancel')?.addEventListener('click',
+    () => document.getElementById('sqConsentBackdrop').classList.remove('is-open'));
+  document.getElementById('sqConsentClose')?.addEventListener('click',
+    () => document.getElementById('sqConsentBackdrop').classList.remove('is-open'));
   document.getElementById('sqMoveApply')?.addEventListener('click', applyBulkMove);
   document.getElementById('sqMoveCancel')?.addEventListener('click', () => closeBulkModal('sqMoveBackdrop'));
   document.getElementById('sqMoveClose')?.addEventListener('click', () => closeBulkModal('sqMoveBackdrop'));
@@ -2543,11 +2682,50 @@ async function reloadPlayers() {
     });
   }
 
+  /* Un plantel vacío NO es lo mismo que un filtro sin resultados, y hasta ahora los dos
+     decían "No players found." en gris, sin nada que hacer. Para un club que acaba de
+     entrar, esa pantalla es el final del camino: es donde se quedaron dos de los cuatro
+     clubes creados con el asistente. */
+  function emptyStateHTML() {
+    // Con jugadores cargados pero ninguno visible, el problema es el filtro, no el club.
+    if (_allPlayers.length) {
+      return `<p style="color:var(--cm-fg-muted);padding:24px">${esc(tt('squad.empty_filtered','No players match this filter.'))}</p>`;
+    }
+    return `
+      <div style="grid-column:1/-1;display:flex;flex-direction:column;align-items:center;gap:6px;
+                  padding:56px 24px;text-align:center">
+        <i class="ti ti-users" style="font-size:30px;color:var(--cm-fg-faint)"></i>
+        <div style="font:600 15px/1.3 var(--cm-font-sans);color:var(--cm-fg-strong);margin-top:6px">
+          ${esc(tt('squad.empty_title','No players yet'))}</div>
+        <div style="font:var(--cm-body-sm);color:var(--cm-fg-muted);max-width:42ch;line-height:1.55">
+          ${esc(tt('squad.empty_body','Import your squad from a CSV or Excel file, or add players one by one.'))}</div>
+        <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;justify-content:center">
+          <button class="cm-btn is-primary is-sm" data-empty-action="import">
+            <i class="ti ti-file-import" style="font-size:14px"></i>
+            <span>${esc(tt('squad.import_file','Import'))}</span></button>
+          <button class="cm-btn is-outline is-sm" data-empty-action="add">
+            <i class="ti ti-plus" style="font-size:14px"></i>
+            <span>${esc(tt('squad.add_player','Add player'))}</span></button>
+        </div>
+      </div>`;
+  }
+
+  // Los dos botones reutilizan los de la cabecera: un solo camino de alta, no dos que se
+  // puedan desincronizar.
+  function wireEmptyState(root) {
+    root.querySelectorAll('[data-empty-action]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = btn.dataset.emptyAction === 'import' ? 'sqImportBtn' : 'sqAddPlayerBtn';
+        document.getElementById(id)?.click();
+      });
+    });
+  }
+
   function renderCards() {
     const grid = document.getElementById('sqCardsGrid');
     if (!grid) return;
     const filtered = getFiltered();
-    if (!filtered.length) { grid.innerHTML = `<p style="color:var(--cm-fg-muted);padding:24px">${tt('squad.no_players_found','No players found')}.</p>`; return; }
+    if (!filtered.length) { grid.innerHTML = emptyStateHTML(); wireEmptyState(grid); return; }
     grid.innerHTML = filtered.map(p => {
       const fullName = ((p.first_name||'') + ' ' + (p.last_name||'')).trim();
       const initials = (((p.first_name||'')[0]||'') + ((p.last_name||'')[0]||'')).toUpperCase();

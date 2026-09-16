@@ -332,3 +332,75 @@ test.describe('derechos de imagen', () => {
     await expect(page.locator('#sqToast')).toContainText(/autoriza|authoris/i, { timeout: 8000 });
   });
 });
+
+/**
+ * Declaración en bloque.
+ *
+ * El caso real de un club no es pedir 92 permisos nuevos: ya los tiene firmados en la ficha
+ * de inscripción y hay que volcarlos. Lo que se prueba es que se pueda hacer de una, que no
+ * deje declarar sin decir de dónde sale el permiso, y que avise cuando hay menores — porque
+ * que una ficha los cubra depende de que la firmaran los dos progenitores, y eso el sistema
+ * no lo puede verificar.
+ */
+test.describe('derechos de imagen en bloque', () => {
+  const MENOR = {
+    id: 'p-2', club_id: 'club-1', first_name: 'Nicolás', last_name: 'Ferreyra',
+    number: 7, position: 'CM', status: 'active', nationality: 'Uruguay',
+    date_of_birth: (() => { const d = new Date(); d.setFullYear(d.getFullYear() - 16); return d.toISOString().slice(0, 10); })(),
+  };
+
+  async function seleccionarTodos(page) {
+    await page.locator('#sqTbody tr [data-cb]').first().click();
+    await expect(page.locator('#sqBulkBar')).toHaveClass(/is-show/);
+  }
+
+  test('declara para varios jugadores de una vez, sin nombrar a nadie', async ({ page }) => {
+    await gotoSquad(page, { players: [PLAYER, MENOR] });
+    let llamada = null;
+    await page.route(`${SB}/rest/v1/rpc/declare_image_consent`, async route => {
+      llamada = JSON.parse(route.request().postData() || '{}');
+      return route.fulfill({ json: 1 });
+    });
+    page.on('dialog', d => d.accept());
+
+    await seleccionarTodos(page);
+    await page.click('#sqBulkConsent');
+    await expect(page.locator('#sqConsentBackdrop')).toHaveClass(/is-open/);
+
+    await page.fill('#sqConsentNote', 'Ficha de inscripción 2026');
+    await page.click('#sqConsentApply');
+
+    await expect.poll(() => llamada, { timeout: 8000 }).not.toBeNull();
+    // Lo que viaja es el ORIGEN del permiso, no el nombre de ningún progenitor.
+    expect(llamada.p_note).toBe('Ficha de inscripción 2026');
+    expect(llamada.p_scopes).toEqual(['internal_analysis']);
+    expect(llamada.p_player_ids.length).toBeGreaterThan(0);
+  });
+
+  test('no deja declarar sin decir de dónde sale el permiso', async ({ page }) => {
+    await gotoSquad(page, { players: [PLAYER] });
+    let llamada = false;
+    await page.route(`${SB}/rest/v1/rpc/declare_image_consent`, async route => {
+      llamada = true; return route.fulfill({ json: 1 });
+    });
+
+    await seleccionarTodos(page);
+    await page.click('#sqBulkConsent');
+    await page.click('#sqConsentApply');
+
+    await expect(page.locator('#sqToast')).toContainText(/permiso|permission/i, { timeout: 8000 });
+    // Una declaración sin origen no acredita nada: ni siquiera sale a la red.
+    expect(llamada).toBe(false);
+    await expect(page.locator('#sqConsentBackdrop')).toHaveClass(/is-open/);
+  });
+
+  test('avisa cuando entre los seleccionados hay menores', async ({ page }) => {
+    await gotoSquad(page, { players: [MENOR] });
+    await seleccionarTodos(page);
+    await page.click('#sqBulkConsent');
+
+    const aviso = page.locator('#sqConsentMinors');
+    await expect(aviso).toBeVisible();
+    await expect(aviso).toContainText(/progenitor|parent/i);
+  });
+});
