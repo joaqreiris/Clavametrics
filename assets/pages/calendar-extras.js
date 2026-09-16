@@ -1565,10 +1565,16 @@ async function dsPrefillFromEvents(){
         sub: [names.join(', '), o.notes || ''].filter(Boolean).join(' — ') });
     });
   }
-  // Drop any stale event-derived info from a previous open, then re-append this day's
-  // untimed events (e.g. a pre-departure smoothie) as editable, non-persisted items.
+  // Eventos del día sin hora (tratamientos de fisio, recuperación, un batido antes de salir):
+  // van al final del cronograma con un guion en la columna de la hora, para que el jugador los
+  // lea como parte del día y el coach pueda escribirles la hora ahí mismo. Antes caían en la
+  // caja de datos de la cabecera, donde pasaban desapercibidos.
+  const untimed = evs.filter(e => !e.start_time && e.session_type !== 'match')
+    .sort((a,b) => (a.sort_order||0) - (b.sort_order||0));
+  untimed.forEach(e => _dsState.tl.push({ t:'\u2014', type:dsMapType(e.session_type), icon:DS_EVT_ICONS[e.session_type]||'',
+    label:dsEvLabel(e), sub:e.notes || e.location || '' }));
+  // Limpiar las fichas derivadas de eventos que guardaron aperturas anteriores.
   _dsState.info = (_dsState.info || []).filter(i => !i._ev);
-  evs.filter(e => !e.start_time && e.session_type !== 'match').forEach(e => _dsState.info.push({ k:calMetaLabel(e.session_type), v:dsEvLabel(e) + (e.notes?(' — '+e.notes):''), wide:true, _ev:true }));
 }
 
 // Fixed sheet labels, translatable to a chosen output language regardless of the app locale.
