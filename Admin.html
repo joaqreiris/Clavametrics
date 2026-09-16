@@ -1319,6 +1319,18 @@ const _esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&a
       : d.toLocaleString(loc, { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' });
   }
 
+  // Fecha en formato largo para el bloque con efectos jurídicos. OJO con el parseo:
+  // new Date('2026-09-16') se interpreta como medianoche UTC y en husos negativos imprime
+  // el día ANTERIOR. En un texto del que depende un contrato, una fecha corrida un día no
+  // es un detalle cosmético. Se construye la fecha en horario local a partir de los números.
+  function supFechaLegal(ymd) {
+    if (!ymd) return '';
+    const [a, m, d] = String(ymd).slice(0, 10).split('-').map(Number);
+    if (!a || !m || !d) return String(ymd);
+    const loc = (window.CM_I18N && window.CM_I18N.current) || 'es';
+    return new Date(a, m - 1, d).toLocaleDateString(loc, { day:'numeric', month:'long', year:'numeric' });
+  }
+
   function supWhen(iso) {
     const ms = new Date(iso) - Date.now();
     if (ms <= 0) return tt('admin.sup_expired', 'expired');
@@ -1464,15 +1476,20 @@ const _esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&a
     // Conflicto de interés DECLARADO: no es una fila que alguien se acordó de cargar, sale
     // de que la persona declaró dónde ejerce y este club está en ese país. Va arriba de todo
     // porque es lo que de verdad contesta la pregunta "¿el dueño puede ver mis datos?".
+    // A diferencia del resto del panel, que va en lenguaje llano porque es de uso diario,
+    // este bloque se redacta en registro formal: no es una explicación de producto, es una
+    // manifestación del declarante en la que el club se apoya para contratar, y el texto
+    // debe coincidir con el de la cláusula de conflicto de interés del contrato.
     const aviso = conflictos.map(c => `
-      <div style="display:flex;gap:11px;align-items:flex-start;padding:12px 13px;margin-bottom:12px;border-radius:9px;background:color-mix(in srgb,var(--cm-accent) 9%,transparent);border:1px solid color-mix(in srgb,var(--cm-accent) 30%,transparent)">
-        <i class="ti ti-shield-lock" style="font-size:17px;color:var(--cm-accent);flex:0 0 auto"></i>
+      <div style="display:flex;gap:11px;align-items:flex-start;padding:13px 14px;margin-bottom:12px;border-radius:9px;background:color-mix(in srgb,var(--cm-accent) 9%,transparent);border:1px solid color-mix(in srgb,var(--cm-accent) 30%,transparent)">
+        <i class="ti ti-shield-lock" style="font-size:17px;color:var(--cm-accent);flex:0 0 auto;margin-top:1px"></i>
         <div style="min-width:0">
-          <div style="font:600 12.5px/1.4 var(--cm-font-sans);color:var(--cm-fg-strong)">${tt('admin.sup_conflict_title','{who} declared they work in {country} — so they cannot enter your club, even with the door open.',{ who:_esc(c.admin_email), country:_esc(c.country) })}</div>
-          <div style="font:500 11.5px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);margin-top:3px">
+          <div style="font:600 11px/1 var(--cm-font-sans);letter-spacing:.07em;text-transform:uppercase;color:var(--cm-accent)">${tt('admin.sup_conflict_heading','Conflict of interest disclosure')}</div>
+          <div style="font:500 12.5px/1.55 var(--cm-font-sans);color:var(--cm-fg-strong);margin-top:6px;max-width:78ch">${tt('admin.sup_conflict_body','{who}, in their capacity as platform administrator, has disclosed that they carry on professional activity in {country}. As this club falls within that jurisdiction, the declarant is barred from accessing its data, notwithstanding any support access authorisation granted by the club.',{ who:_esc(c.admin_email), country:_esc(c.country) })}</div>
+          <div style="font:500 11.5px/1.5 var(--cm-font-sans);color:var(--cm-fg-muted);margin-top:6px;max-width:78ch">
             ${c.ended_on
-              ? tt('admin.sup_conflict_ended','Left on {d}. The block stays in place for a cooling-off period.',{ d:_esc(c.ended_on) })
-              : tt('admin.sup_conflict_since','Declared since {d}. This declaration is public and cannot be deleted or softened.',{ d:_esc(c.started_on) })}
+              ? tt('admin.sup_conflict_ended','Declared activity ceased on {d}. The bar remains in force until {until}, pursuant to the {m}-month restrictive period.',{ d: supFechaLegal(c.ended_on), until: supFechaLegal(c.blocked_until), m: c.cooloff_months })
+              : tt('admin.sup_conflict_since','Disclosure made on {d}, public and irrevocable. It is not capable of deletion, amendment or mitigation by the declarant.',{ d: supFechaLegal(c.started_on) })}
           </div>
         </div>
       </div>`).join('');

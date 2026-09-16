@@ -129,12 +129,14 @@ test.describe('Admin — acceso de soporte', () => {
     // lista que alguien cargó a mano: sale de que la persona declaró dónde ejerce y este
     // club está en ese país. Un club camboyano que se dé de alta mañana ya lo ve.
     await montar(page, { log: LOG, restricciones: [], conflictos: [
-      { admin_email:'reiris.joaquin@gmail.com', country:'Cambodia', started_on:'2026-09-16', ended_on:null, note:null },
+      { admin_email:'reiris.joaquin@gmail.com', country:'Cambodia', started_on:'2026-09-16', ended_on:null, cooloff_months:12, blocked_until:null, note:null },
     ]});
     const vetos = page.locator('#supVetos');
-    await expect(vetos).toContainText('declaró que ejerce en Cambodia', { timeout: 15_000 });
-    await expect(vetos).toContainText('ni con la puerta abierta');
-    await expect(vetos).toContainText('no se puede borrar ni ablandar');
+    // Registro formal: es una manifestación con efectos jurídicos, no copy de producto.
+    await expect(vetos).toContainText('Declaración de conflicto de interés', { timeout: 15_000 });
+    await expect(vetos).toContainText('queda inhabilitado para acceder');
+    await expect(vetos).toContainText('aun mediando autorización expresa');
+    await expect(vetos).toContainText('irrevocable');
     // Y NO puede decir "no hay nadie vetado" justo debajo: se contradice y le quita
     // credibilidad a lo único que de verdad importa de esta tarjeta.
     await expect(vetos).not.toContainText('No hay nadie vetado');
@@ -142,9 +144,13 @@ test.describe('Admin — acceso de soporte', () => {
 
   test('si esa persona ya se fue, se dice que el veto sigue en enfriamiento', async ({ page }) => {
     await montar(page, { log: LOG, conflictos: [
-      { admin_email:'reiris.joaquin@gmail.com', country:'Cambodia', started_on:'2024-01-01', ended_on:'2026-06-30', note:null },
+      { admin_email:'reiris.joaquin@gmail.com', country:'Cambodia', started_on:'2024-01-01', ended_on:'2026-06-30', cooloff_months:12, blocked_until:'2027-06-30', note:null },
     ]});
-    await expect(page.locator('#supVetos')).toContainText('enfriamiento', { timeout: 15_000 });
+    const v = page.locator('#supVetos');
+    // Fecha CIERTA, no "un período": si no es oponible, no sirve para lo que está puesto.
+    await expect(v).toContainText('permanece vigente hasta el', { timeout: 15_000 });
+    await expect(v).toContainText('30 de junio de 2027');
+    await expect(v).toContainText('período de carencia de 12 meses');
   });
 
   test('un vetado se puede quitar, y el veto se ofrece sobre quien ya entró', async ({ page }) => {
