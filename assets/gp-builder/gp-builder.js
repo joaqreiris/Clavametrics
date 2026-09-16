@@ -80,6 +80,10 @@
     // 5.000 o de 400 a 500. Necesita DOS fechas elegidas en el filtro; sin eso no hay antes ni
     // después, y la card lo dice en vez de dibujar cualquier cosa.
     dumbbell: { name: 'Before → after', icon: 'ti-arrows-horizontal', min: 1, max: 1, dimMax: 1, squadOnly: true, sessionOnly: true },
+    // Dos métricas que se leen como un par —acelerar contra frenar es el caso— enfrentadas a los
+    // lados de un eje central. El desbalance se ve como una barra más larga que su par, sin
+    // dividir nada mentalmente: con dos columnas de números esa relación hay que calcularla.
+    diverging: { name: 'Side by side', icon: 'ti-arrow-bar-both', min: 2, max: 2, dimMax: 1, squadOnly: true },
   };
 
   // DIMENSIONS — fields you group / label / filter by (no aggregation).
@@ -3002,6 +3006,7 @@
     else if (S.type === 'box') mountBoxPreview(body, S);
     else if (S.type === 'demand') mountDemandPreview(body, S);
     else if (S.type === 'dumbbell') mountDumbbellPreview(body, S);
+    else if (S.type === 'diverging') mountDivergingPreview(body, S);
     else body.innerHTML = renderType(S);
   }
 
@@ -3245,6 +3250,7 @@
       case 'box':     mountBoxCard(container, config, series, { example: opts.example }); break;
       case 'demand':  mountDemandCard(container, config, series, { demand: opts.demand || null, mixedTypes: opts.demandMixed || 0, example: opts.example }); break;
       case 'dumbbell': mountDumbbellCard(container, config, series, { dumbbell: opts.dumbbell || null, dumbbellInfo: opts.dumbbellInfo || null, example: opts.example }); break;
+      case 'diverging': mountDivergingCard(container, config, series, { example: opts.example }); break;
       default:        destroyBodyChart(container); container.innerHTML = renderTypeFromDataset(config, series, opts);
     }
   }
@@ -3554,8 +3560,15 @@
         } catch (e) { console.warn('gpb player-agg fast path — raw fallback:', e); }
       }
       if (!_usedFastAgg) {
+        // El agregador del resolver decide cómo agrupar según el TIPO, y no conoce los tipos
+        // nuevos: con 'dumbbell' o 'diverging' devolvía un solo grupo («all») en vez de una fila
+        // por jugador. Por debajo los dos son barras, así que se le pide como tales — el dibujo
+        // después hace lo suyo con esas mismas series.
         const _cfgQ = config.viz === 'box' ? _boxQueryConfig(config)
-                    : config.viz === 'demand' ? _demandQueryConfig(config) : config;
+                    : config.viz === 'demand' ? _demandQueryConfig(config)
+                    : (config.viz === 'dumbbell' || config.viz === 'diverging')
+                      ? { ...config, viz: 'bars' }
+                    : config;
         const rawRows = await fetchReports(sessionIds, _cfgQ, ctx, catalogMap, sb);
         rows = _fbFilterRows(rawRows, FBcard, config.source);
         if (stale()) return;
@@ -8062,6 +8075,125 @@
   }
 
   /** Preview: datos reales si hay backend; si no, un perfil de sesión corta e intensa. */
+  /**
+   * Barras enfrentadas a los lados de un eje central. La de la izquierda se dibuja NEGATIVA —es
+   * el truco que crea el eje en el cero— y se muestra en positivo en las etiquetas y el tooltip.
+   *
+   * Se marca en alerta a quien tiene el par muy desparejo: el desbalance entre acelerar y frenar
+   * es una señal de carga mecánica, y es justo lo que se pierde cuando los dos números viven en
+   * columnas separadas. El umbral es la razón entre el lado grande y el chico (1,5 por defecto:
+   * uno hace la mitad más que el otro).
+   */
+  function mountDivergingCard(body, config, series, opts = {}) {
+    destroyBodyChart(body);
+    const [sIzq, sDer] = series || [];
+    if (!sIzq || !sDer || !sIzq.points?.length) {
+      body.innerHTML = '';
+      showEmptyBody(body, _tt('gps_analysis.builder_no_rows_match',
+        'No rows match the current scope, range and filters.'), config);
+      return;
+    }
+    if (typeof Chart === 'undefined') { body.innerHTML = renderTypeFromDataset(config, series); return; }
+
+    const cats = sIzq.points.map(p => String(p.x));
+    const val  = (sr, x) => { const p = sr.points.find(q => String(q.x) === x); return p && p.y != null ? Number(p.y) : 0; };
+    const filas = cats.map(c => ({ label: c, izq: val(sIzq, c), der: val(sDer, c) }));
+
+    const umbral = Number(config.style?.divergeRatio) > 0 ? Number(config.style.divergeRatio) : 1.5;
+    const desparejo = (f) => {
+      const a = Math.abs(f.izq), b = Math.abs(f.der);
+      const chico = Math.min(a, b), grande = Math.max(a, b);
+      return chico > 0 ? (grande / chico) >= umbral : grande > 0;
+    };
+
+    const ordenadas = [...filas].sort((a, b) => (b.izq + b.der) - (a.izq + a.der));
+    const tope = _barLimit(config);
+    const vis  = tope > 0 ? ordenadas.slice(0, tope) : ordenadas;
+
+    const izqCol  = _cssVar('--cm-accent', '#2563EB');
+    const derCol  = config.style?.color || _cssVar('--cm-warning', '#B45309');
+    const alerta  = _cssVar('--cm-danger', '#C0392B');
+    const dec     = _decFor(config, config.metrics?.[0]?.id);
+    const nomIzq  = catalogMap.get(sIzq.label)?.name || sIzq.name || sIzq.label;
+    const nomDer  = catalogMap.get(sDer.label)?.name || sDer.name || sDer.label;
+
+    const canvas = document.createElement('canvas');
+    body.innerHTML = '';
+    body.appendChild(canvas);
+    body.style.minHeight = Math.max(180, vis.length * 26 + 56) + 'px';
+
+    body.__chart = _newChart(body, canvas, {
+      type: 'bar',
+      data: {
+        labels: vis.map(f => f.label),
+        datasets: [
+          { label: nomIzq, data: vis.map(f => -Math.abs(f.izq)),   // negativo = a la izquierda del cero
+            backgroundColor: izqCol, borderColor: izqCol, borderWidth: 0,
+            borderRadius: 3, barThickness: 14, stack: 'x' },
+          { label: nomDer, data: vis.map(f => Math.abs(f.der)),
+            backgroundColor: vis.map(f => (desparejo(f) ? alerta : derCol)),
+            borderColor: 'transparent', borderWidth: 0,
+            borderRadius: 3, barThickness: 14, stack: 'x' },
+        ],
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true, maintainAspectRatio: false,
+        animation: { duration: 300 },
+        layout: { padding: { left: 6, right: 14 } },
+        plugins: {
+          legend: { display: config.style?.legend !== false, position: 'top',
+                    labels: { boxWidth: 10, usePointStyle: true, font: { size: 11 }, padding: 12 } },
+          tooltip: {
+            callbacks: {
+              title: it => vis[it[0].dataIndex]?.label ?? '',
+              label: (ctx) => {
+                const f = vis[ctx.dataIndex]; if (!f) return '';
+                // El lado izquierdo viaja negativo: se muestra como lo que es.
+                return `${ctx.dataset.label}: ${fmtVal(Math.abs(Number(ctx.parsed.x)), dec)}`;
+              },
+              afterBody: (it) => {
+                const f = vis[it[0].dataIndex]; if (!f) return '';
+                const a = Math.abs(f.izq), b = Math.abs(f.der);
+                if (!a || !b) return '';
+                const r = (Math.max(a, b) / Math.min(a, b));
+                return desparejo(f)
+                  ? _tt('gps_analysis.diverging_unbalanced', '{n}× — clearly uneven', { n: r.toFixed(1) })
+                  : _tt('gps_analysis.diverging_balanced', '{n}× — balanced', { n: r.toFixed(1) });
+              },
+            },
+          },
+        },
+        scales: {
+          x: { display: config.style?.axes !== false, stacked: true,
+               grid: { color: 'rgba(148,163,184,0.18)', drawTicks: false },
+               // El eje central va en el cero, y a los dos lados se leen valores positivos.
+               ticks: { font: { size: 10 }, color: '#9CA3AF', callback: v => kfmt(Math.abs(v)) } },
+          y: { display: config.style?.axes !== false, stacked: true, grid: { display: false },
+               ticks: { font: { size: 11 }, color: '#6B7280', autoSkip: false } },
+        },
+      },
+    });
+    if (opts.example) _appendExampleBadge(body);
+    _divergingNote(body, vis.filter(desparejo).length, umbral, filas.length - vis.length);
+  }
+
+  /** Pie: cuántos quedaron marcados por desbalance, y cuántas filas se recortaron. */
+  function _divergingNote(body, marcados, umbral, recortadas) {
+    try {
+      if (!body || (!marcados && !recortadas)) return;
+      const partes = [];
+      if (marcados) partes.push(_tt('gps_analysis.diverging_note',
+        '{n} with one side {r}× the other', { n: marcados, r: umbral }));
+      if (recortadas) partes.push(_tt('gps_analysis.diverging_more', '{r} more not shown', { r: recortadas }));
+      const note = document.createElement('div');
+      note.className = 'gp-diverging-note';
+      note.style.cssText = 'text-align:center;margin-top:2px;font:500 10.5px/1.3 var(--cm-font-sans);color:var(--cm-fg-muted)';
+      note.innerHTML = `<i class="ti ti-info-circle" style="font-size:11px;vertical-align:-1px"></i> ${esc(partes.join(' · '))}`;
+      body.appendChild(note);
+    } catch (e) { /* un aviso nunca puede romper una card */ }
+  }
+
   /** Vista previa del «antes → después». Con datos reales resuelve la card de verdad; sin club
    *  todavía, dibuja un ejemplo para que se entienda la forma antes de configurar nada. */
   function mountDumbbellPreview(body, S) {
@@ -8077,6 +8209,27 @@
       scope: { level: S.scope }, style: { size: S.size, color: S.color, axes: S.axes, legend: S.legend },
       __example: true };
     mountDumbbellCard(body, config, [], { dumbbell: ej, example: true });
+  }
+
+  /** Vista previa de las barras enfrentadas: con datos reales resuelve la card; sin club todavía,
+   *  dibuja un ejemplo con la forma —incluido un caso desparejo, que es el que hay que ver—. */
+  function mountDivergingPreview(body, S) {
+    if ((S.metrics || []).length < 2) { destroyBodyChart(body); body.innerHTML = renderType(S); return; }
+    if (window.sb && _clubId) { resolveAndRenderCard(draftCard, buildConfig(S)); return; }
+    const ej = [
+      { x: 'NARONG',  a: 43, b: 37 },
+      { x: 'DARO',    a: 28, b: 23 },
+      { x: 'PHARANN', a: 15, b: 26 },   // el desparejo
+      { x: 'SILVA',   a: 16, b: 23 },
+      { x: 'VANDA',   a: 5,  b: 7  },
+    ];
+    const serie = (k, id) => ({ label: id, name: catalogMap.get(id)?.name || id,
+                                points: ej.map(r => ({ x: r.x, y: r[k] })) });
+    const config = { viz: 'diverging', metrics: S.metrics.slice(0, 2), dimensions: S.dimensions || [],
+      scope: { level: S.scope }, style: { size: S.size, color: S.color, axes: S.axes, legend: S.legend },
+      __example: true };
+    mountDivergingCard(body, config, [serie('a', S.metrics[0].id), serie('b', S.metrics[1].id)],
+                       { example: true });
   }
 
   function mountDemandPreview(body, S) {
@@ -9490,6 +9643,7 @@
     box:     { name:'Box plot', icon:'ti-chart-candle', dimAx:'group (optional dim)',  metAx:'metric to spread' },
     demand:  { name:'Match demand', icon:'ti-percentage', dimAx:'(no dimension)',        metAx:'metrics to compare vs the match' },
     dumbbell: { name:'Before → after', icon:'ti-arrows-horizontal', dimAx:'one row per (dim)', metAx:'metric to compare between the two dates' },
+    diverging: { name:'Side by side', icon:'ti-arrow-bar-both', dimAx:'one row per (dim)', metAx:'the two metrics to face off' },
   };
   let _bMode   = 'dd';       // el builder es SOLO Drag & drop (el Clásico fue eliminado); constante 'dd'
   let _ddQuery = '';         // texto del buscador del panel de campos
