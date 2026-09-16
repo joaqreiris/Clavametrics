@@ -72,29 +72,24 @@
         msgEl.textContent = 'Setting up your workspace…';
         try {
           const pending = JSON.parse(pendingRaw);
-          const { data: club, error: clubErr } = await window.sb.from('clubs')
-            .insert({ name: pending.clubName, country: pending.country || null,
-                      sport: pending.sport || 'football',
-                      // Atribución del registro. Va del blob y no de localStorage: la
-                      // confirmación puede abrirse en otro navegador, donde el origen
-                      // de la visita original no existe.
-                      ...(pending.leadSource || {}) })
-            .select('id').single();
-          if (clubErr) throw clubErr;
-
-          const { error: profErr } = await window.sb.from('profiles').insert({
-            id:         userId,
-            club_id:    club.id,
-            full_name:  pending.fullName || '',
-            first_name: pending.firstName || null,
-            last_name:  pending.lastName || null,
-            role:       'admin',
-            email:      pending.email || email,
-            phone:      pending.phone || null,
-            marketing_opt_in:    !!pending.marketing,
-            marketing_opt_in_at: pending.marketing ? new Date().toISOString() : null,
+          // Club y perfil en UNA llamada atómica. Insertarlos por separado arrastraba
+          // el mismo fallo que tuvo roto el alta días enteros: `.insert(clubs)
+          // .select('id')` obliga a pasar la policy de SELECT del club, y en ese
+          // instante el usuario todavía no tiene perfil, así que no puede leer el club
+          // que acaba de crear.
+          // La atribución va del blob y no de localStorage: la confirmación puede
+          // abrirse en otro navegador, donde el origen de la visita original no existe.
+          const { error: regErr } = await window.sb.rpc('register_new_club', {
+            p_club_name:  pending.clubName,
+            p_country:    pending.country || null,
+            p_sport:      pending.sport || 'football',
+            p_first_name: pending.firstName || null,
+            p_last_name:  pending.lastName || null,
+            p_phone:      pending.phone || null,
+            p_marketing:  !!pending.marketing,
+            p_lead:       pending.leadSource || {},
           });
-          if (profErr) throw profErr;
+          if (regErr) throw regErr;
           // La casilla la marcó en el formulario de registro; el club recién existe ahora,
           // así que la constancia se escribe acá. (El alta por OAuth no pasa por este
           // camino y nunca vio esa casilla: se la pide el Onboarding.)
@@ -143,15 +138,16 @@
           // ni consentimiento: eso lo pide el Onboarding. El origen sí lo tenemos, y es
           // el mismo navegador que vio el anuncio.
           const leadSource = (typeof window.cmLeadSource === 'function') ? window.cmLeadSource() : {};
-          const { data: club, error: clubErr } = await window.sb.from('clubs')
-            .insert({ name: stubName, ...leadSource })
-            .select('id').single();
-          if (clubErr) throw clubErr;
-
-          const { error: profErr } = await window.sb.from('profiles').insert({
-            id: userId, club_id: club.id, full_name: fullName, role: 'admin', email,
+          // Misma llamada atómica que el resto de las altas.
+          const partes = String(fullName || '').trim().split(/\s+/).filter(Boolean);
+          const { error: regErr } = await window.sb.rpc('register_new_club', {
+            p_club_name:  stubName,
+            p_sport:      'football',
+            p_first_name: partes.length > 1 ? partes.slice(0, -1).join(' ') : (partes[0] || null),
+            p_last_name:  partes.length > 1 ? partes[partes.length - 1] : null,
+            p_lead:       leadSource || {},
           });
-          if (profErr) throw profErr;
+          if (regErr) throw regErr;
           if (typeof window.cmClearLeadSource === 'function') window.cmClearLeadSource();
         } catch (err) {
           showError('Failed to create workspace: ' + err.message);

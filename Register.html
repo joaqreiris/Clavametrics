@@ -807,34 +807,30 @@
         return;
       }
 
-      // 2. Create club (only if session is active)
+      // 2. Club y perfil, en UNA llamada. Antes eran dos escrituras sueltas y el alta
+      // estuvo rota días: `.insert(clubs).select('id')` obliga a pasar también la
+      // policy de SELECT del club, y en ese instante el usuario todavía no tiene
+      // perfil, así que no puede leer el club que acaba de crear. PostgREST lo
+      // devolvía como "new row violates row-level security policy for table clubs"
+      // y nadie podía registrarse. La RPC es security definer y atómica: se crean
+      // los dos o ninguno, que además evita los usuarios huérfanos que dejaba el
+      // camino viejo cuando la segunda escritura fallaba.
       const country = document.getElementById('country')?.value || null;
-      // The picked sport used to be thrown away here, which left clubs.sport NULL for
-      // every club ever created. It drives the whole sport pack (positions, pitch,
-      // lineup, load metrics), so it has to be persisted at creation time.
+      // El deporte manda todo el pack (posiciones, cancha, alineación, métricas de
+      // carga), así que se guarda al crear el club, no después.
       const sport = selectedSport();
-      const { data: club, error: clubErr } = await window.sb.from('clubs')
-        .insert({ name: clubName, country, sport, ...leadSource })
-        .select('id')
-        .single();
-      if (clubErr) throw clubErr;
-      clubId = club.id;
-
-      // 3. Create profile
-      const { error: profErr } = await window.sb.from('profiles').insert({
-        id: userId,
-        club_id: clubId,
-        full_name: `${firstName} ${lastName}`.trim(),
-        first_name: firstName,
-        last_name: lastName,
-        role: 'admin',
-        email,
-        phone,
-        marketing_opt_in: marketing,
-        // Sin la fecha no se puede demostrar cuándo se dio el consentimiento.
-        marketing_opt_in_at: marketing ? new Date().toISOString() : null,
+      const { data: newClubId, error: regErr } = await window.sb.rpc('register_new_club', {
+        p_club_name:  clubName,
+        p_country:    country,
+        p_sport:      sport,
+        p_first_name: firstName,
+        p_last_name:  lastName,
+        p_phone:      phone,
+        p_marketing:  marketing,
+        p_lead:       leadSource || {},
       });
-      if (profErr) throw profErr;
+      if (regErr) throw regErr;
+      clubId = newClubId;
 
       // 4. Dejar constancia de QUÉ aceptó: la casilla de arriba es obligatoria y hasta
       // ahora no dejaba rastro, mientras que la opcional (marketing) sí se guardaba.
@@ -847,8 +843,9 @@
 
       window.location.href = 'Onboarding.html';
     } catch (err) {
-      // Cleanup partial state to avoid orphaned records
-      if (clubId) await window.sb.from('clubs').delete().eq('id', clubId);
+      // El club ya no hace falta limpiarlo: la RPC es atómica, si falló no quedó nada.
+      // La sesión sí se cierra — el usuario de auth queda creado igual, y dejarlo con
+      // sesión abierta sin perfil lo manda a un Hub que no puede cargar.
       if (userId) await window.sb.auth.signOut();
 
       btn.disabled = false;
@@ -856,7 +853,8 @@
       // "User already registered" en crudo no le dice a nadie qué hacer. Una cuenta
       // pertenece a UNA organización, así que para abrir otra hay que usar otro correo
       // — y el alias con + llega a la misma bandeja, que es lo que la gente no sabe.
-      const yaExiste = /already\s*registered|already\s*exists|user_repeated/i.test(err.message || '');
+      const yaExiste = /already\s*registered|already\s*exists|user_repeated/i.test(err.message || '')
+                    || err.code === '23505';
       showRegError(yaExiste
         ? tt('register.emailTaken', 'That email already has an account. Sign in instead — or, to open a second organization, use an alias like you+club2@gmail.com (it reaches the same inbox).')
         : (err.message || tt('register.regFailed', 'Registration failed. Please try again.')));
