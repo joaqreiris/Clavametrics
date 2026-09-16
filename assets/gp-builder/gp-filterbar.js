@@ -1833,6 +1833,21 @@
           // El pipeline de layout se auto-persiste durante el boot, así que un render de más puede
           // cementar posiciones a medio montar (ver _reconcileLayoutWithGrid en gps-analysis.js).
           let _tries = 0, _teamTries = 0;
+          // Esperar el AVISO de gpsInitTeamSwitch (window._gpTeamSwitchDone) en vez de sondear a
+          // ciegas: el sondeo cada segundo le sumaba al primer pintado hasta un segundo de puro
+          // redondeo. El temporizador sigue siendo el tope, así que si el aviso no existe o no
+          // llega, esto se comporta exactamente como antes. Una vez que el aviso llegó volvemos al
+          // temporizador: si no, los reintentos restantes se consumirían todos en el mismo tick y
+          // la red de seguridad dejaría de serlo.
+          let _avisoLlego = false;
+          const _esperar = (ms) => {
+            const aviso = window._gpTeamSwitchDone;
+            if (_avisoLlego || !aviso || typeof aviso.then !== 'function') { setTimeout(_lateBoot, ms); return; }
+            let hecho = false;
+            aviso.then(() => { if (hecho) return; hecho = true; _avisoLlego = true; _lateBoot(); },
+                       () => { if (hecho) return; hecho = true; _avisoLlego = true; _lateBoot(); });
+            setTimeout(() => { if (hecho) return; hecho = true; _lateBoot(); }, ms);
+          };
           const _lateBoot = () => {
             if (_loadedTeamId != null || _loadDataP) return;            // ya cargó / cargando
             const _sel = document.getElementById('gpsTeamSelect');
@@ -1841,13 +1856,13 @@
               // El equipo ya está resuelto → la carga esperada es el reload() de gpsInitTeamSwitch.
               // Si no llegó en ~4s (falló o nunca se llamó), cargamos nosotros: acá ya es seguro,
               // el scope sale bien porque _gpTeamId existe. Es la misma red de seguridad de antes.
-              if (++_teamTries < 4) { setTimeout(_lateBoot, 1000); return; }
+              if (++_teamTries < 4) { _esperar(1000); return; }
               console.warn('[gpFilterBar] el reload() del team-switch no llegó — cargando con el equipo ya resuelto');
-            } else if (!_noTeams && ++_tries < 30) { setTimeout(_lateBoot, 1000); return; }
+            } else if (!_noTeams && ++_tries < 30) { _esperar(1000); return; }
             else console.warn(`[gpFilterBar] carga sin equipo (${_noTeams ? 'usuario sin categorías' : 'gpsInitTeamSwitch no resolvió en 30s'})`);
             loadData().then(() => { try { fireNow(); } catch (_) {} }).catch(e => console.warn('gpFilterBar boot-fallback:', e));
           };
-          setTimeout(_lateBoot, 1000);
+          _esperar(1000);
           return;
         }
         try { await loadData(); } catch (e) { console.warn('gpFilterBar loadData:', e); }

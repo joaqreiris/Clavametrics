@@ -4853,7 +4853,15 @@ async function _detectSmartDefault(clubId, userId) {
 
   window._gpTeamId = null;
   window._gpPlayerIds = null;
+  // AVISO de «la categoría ya está resuelta». El filterbar lo necesita para saber cuándo puede
+  // cargar con el scope correcto; antes lo descubría sondeando cada segundo, así que el pintado
+  // del dashboard pagaba hasta un segundo de redondeo (y varios si el reload de abajo tardaba).
+  // Se resuelve por CUALQUIERA de las dos salidas de gpsInitTeamSwitch (sin categorías, o equipo
+  // resuelto + reload), de ahí el finally. No reemplaza al temporizador del filterbar: ese sigue
+  // como tope por si esta función nunca llega a ejecutarse.
+  window._gpTeamSwitchDone = new Promise(res => { window.__gpTeamSwitchResolve = res; });
   window.gpsInitTeamSwitch = async function gpsInitTeamSwitch() {
+   try {
     const clubId = window._gpClubId || await window.getClubId();
     const prof = await window.getProfile();
     const bucket = (prof?.role || prof?.club_role || '').toLowerCase();
@@ -4875,6 +4883,7 @@ async function _detectSmartDefault(clubId, userId) {
     if (window.gpFilterBar && typeof window.gpFilterBar.reload === 'function') {
       try { await window.gpFilterBar.reload(); } catch (e) { console.warn('filterbar reload:', e); }
     }
+   } finally { try { window.__gpTeamSwitchResolve?.(); } catch (_) {} }
   }
   // Ids de players archivados del club. Los usa el resolver para excluirlos de las cards
   // (scope squad). Queda VACÍO si el ajuste "incluir archivados" está ON → sin exclusión.
