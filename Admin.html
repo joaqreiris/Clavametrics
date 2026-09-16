@@ -130,6 +130,22 @@
   .ad-card-h .right { margin-left:auto; display:flex; align-items:center; gap:8px; }
 
   /* Member table */
+  /* La tabla de miembros dentro de su propia caja con scroll. Dos motivos distintos:
+     · a lo ANCHO — las columnas fijas suman ~930px y en una ventana normal se
+       apretaban unas contra otras; por eso los chips de categoría salían cortados.
+       Con min-width la tabla mantiene su ancho cómodo y se desplaza si no cabe.
+     · a lo ALTO — 17 miembros estiraban la página entera y dejaban el resto del panel
+       fuera de la vista. Con max-height, la lista se desplaza dentro de su tarjeta y
+       lo que viene debajo sigue alcanzable.
+     La cabecera se queda pegada arriba: sin eso, al bajar por la lista no se sabe qué
+     columna se está mirando. */
+  .ad-tablewrap { overflow:auto; max-height:min(62vh, 620px); overscroll-behavior:contain; }
+  .ad-tablewrap > .ad-table { min-width:1040px; }
+  .ad-tablewrap thead th { position:sticky; top:0; z-index:2; }
+  /* border-collapse se come los bordes de una cabecera sticky al desplazar: la línea
+     se pinta con una sombra interior, que sí viaja con la celda. */
+  .ad-tablewrap thead th { border-bottom:0; box-shadow:inset 0 -1px 0 var(--cm-border); }
+
   .ad-table { width:100%; border-collapse:collapse; }
   .ad-table thead th { text-align:left; padding:9px 14px; font:500 11px/1 var(--cm-font-sans); letter-spacing:0.08em; text-transform:uppercase; color:var(--cm-fg-muted); background:var(--cm-bg-soft); border-bottom:1px solid var(--cm-border); white-space:nowrap; }
   .ad-table tbody td { padding:11px 14px; border-bottom:1px solid var(--cm-border-soft); font:var(--cm-body-sm); color:var(--cm-fg); vertical-align:middle; }
@@ -582,6 +598,7 @@
             <button class="cm-icon-btn"><i class="ti ti-dots"></i></button>
           </div>
         </div>
+        <div class="ad-tablewrap">
         <table class="ad-table">
           <thead>
             <tr>
@@ -697,6 +714,7 @@
             </tr>
           </tbody>
         </table>
+        </div><!-- /ad-tablewrap -->
         <div class="ad-foot">
           <span id="adMemberFoot">Showing <strong style="color:var(--cm-fg)">11</strong> of 14 members</span>
           <div class="grow"></div>
