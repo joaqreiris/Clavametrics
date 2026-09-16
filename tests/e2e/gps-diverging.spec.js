@@ -26,9 +26,9 @@ const GENTE = [
   { id: 'p3', last: 'Pharann', acc: 15, dec: 26 },
   { id: 'p4', last: 'Vanda',   acc: 5,  dec: 7  },
 ];
-const PLAYERS = GENTE.map((g, i) => ({ id: g.id, club_id: CLUB_ID, first_name: 'N' + i, last_name: g.last,
-  number: 2 + i, position: 'CB', positions: ['CB'], status: 'active' }));
-const REPORTS = GENTE.map((g, i) => ({
+const jugadoresDe = (gente) => gente.map((g, i) => ({ id: g.id, club_id: CLUB_ID, first_name: 'N' + i,
+  last_name: g.last, number: 2 + i, position: 'CB', positions: ['CB'], status: 'active' }));
+const reportesDe = (gente) => gente.map((g, i) => ({
   player_id: g.id, session_id: 's-a', club_id: CLUB_ID, is_invalid: false, work_context: 'team',
   total_distance: 5000, high_speed_distance: 300, very_high_speed_distance: 100, sprint_distance: 40,
   sprint_count: 3, accelerations: g.acc, decelerations: g.dec, max_speed: 27, avg_speed: 6,
@@ -37,13 +37,16 @@ const REPORTS = GENTE.map((g, i) => ({
   training_sessions: { session_date: SESSIONS[0].session_date, session_attributes: null, microcycle_id: null,
     team_id: null, session_type: 'training', match_day_offset: -3, season_id: null },
 }));
+const PLAYERS = jugadoresDe(GENTE);
+const REPORTS = reportesDe(GENTE);
 
 const CARD = [{ id: 'card-dv', position: 0, source: 'builder', size: 'lg', config: {
   schema: 'gp.card/v1', title: 'Acelerar contra frenar', viz: 'diverging', scope: { level: 'squad' },
   metrics: [{ id: 'accelerations', agg: 'total' }, { id: 'decelerations', agg: 'total' }],
   dimensions: [{ id: 'player_name' }], range: { type: 'season' }, style: { color: '#B45309' } } }];
 
-async function abrir(page) {
+async function abrir(page, gente = GENTE) {
+  const _players = jugadoresDe(gente), _reports = reportesDe(gente);
   await page.route(`${SB}/rest/v1/**`, r => r.fulfill({ json: [], headers: { 'Content-Range': '0-0/0', 'Content-Type': 'application/json' } }));
   await page.route(`${SB}/auth/v1/**`, r => r.fulfill({ json: { access_token: 't', user: { id: 'user-1', email: 't@t.com' } } }));
   await page.route(`${SB}/rest/v1/profiles**`, r => r.fulfill({ json: [PROFILE] }));
@@ -58,8 +61,8 @@ async function abrir(page) {
     const one = acc.includes('object') || /[?&]limit=1(&|$)/.test(r.request().url());
     return r.fulfill({ json: one ? SESSIONS[0] : SESSIONS });
   });
-  await page.route(`${SB}/rest/v1/players**`, r => r.fulfill({ json: PLAYERS }));
-  await page.route(`${SB}/rest/v1/gps_reports**`, r => r.fulfill({ json: REPORTS }));
+  await page.route(`${SB}/rest/v1/players**`, r => r.fulfill({ json: _players }));
+  await page.route(`${SB}/rest/v1/gps_reports**`, r => r.fulfill({ json: _reports }));
   await page.route(`${SB}/rest/v1/dashboards**`, r => {
     const acc = r.request().headers()['accept'] || '';
     return r.fulfill({ json: acc.includes('object') ? DASH : [DASH] });
@@ -120,4 +123,30 @@ test.describe('GPS · barras enfrentadas', () => {
     // justo lo que el umbral tiene que hacer — si marcara a todos no serviría de señal.
     expect(nota).toMatch(/\b1\b/);
   });
+
+  // Con muchas filas el gráfico crece, y si esa altura EMPUJA la card se derrama por encima de
+  // las de abajo — que es lo que pasaba. Tiene que scrollear DENTRO, no desbordar.
+  test('con muchas filas la card no se desborda: scrollea adentro', async ({ page }) => {
+    const MUCHOS = Array.from({ length: 22 }, (_, i) => ({
+      id: `p${i}`, last: 'Jug' + String(i).padStart(2, '0'), acc: 20 + i, dec: 18 + i,
+    }));
+    await abrir(page, MUCHOS);
+    {
+      const m = await page.evaluate(() => {
+        const card = document.querySelector('.gp-view.is-on .gp-c[data-card-id="card-dv"]');
+        const body = card.querySelector('.gp-c-b');
+        return { cardH: Math.round(card.getBoundingClientRect().height),
+                 bodyH: Math.round(body.getBoundingClientRect().height),
+                 scroll: Math.round(body.scrollHeight),
+                 desbordaY: body.getBoundingClientRect().bottom - card.getBoundingClientRect().bottom };
+      });
+      // Lo que importa: el cuerpo NO sobresale de su card. Con 22 filas el gráfico pide 628px y
+      // la card tiene 403; antes esa diferencia se derramaba por encima de las cards de abajo.
+      expect(m.desbordaY, 'el gráfico se sale de la card').toBeLessThanOrEqual(2);
+      // Y el gráfico sigue dibujado —recortar el alto no puede dejarlo sin nada—.
+      const g = await grafico(page);
+      expect(g.filas.length).toBeGreaterThan(10);
+    }
+  });
 });
+

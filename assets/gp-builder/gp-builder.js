@@ -4040,6 +4040,9 @@
         _tt('gps_analysis.task_duration_spread',
             'The drills last between {lo} and {hi} min — compare per minute to weigh the demand',
             { lo: lo.toFixed(0), hi: hi.toFixed(0) })}`;
+      // La nota se ancla al pie, así que el cuerpo tiene que ser su referencia: fuera del
+      // tablero puede no serlo todavía.
+      if (!body.style.position) body.style.position = 'relative';
       body.appendChild(note);
       _noteRoom(body, note);
     } catch (e) { /* un aviso nunca puede romper una card */ }
@@ -4610,7 +4613,10 @@
         const note = document.createElement('div');
         note.style.cssText = 'text-align:center;margin-top:4px;font:500 10.5px/1.3 var(--cm-font-sans);color:var(--cm-fg-muted)';
         note.innerHTML = `<i class="ti ti-info-circle" style="font-size:11px;vertical-align:-1px"></i> ${d.baselineMissingNote}`;
-        body.appendChild(note);
+        // La nota se ancla al pie, así que el cuerpo tiene que ser su referencia: fuera del
+      // tablero puede no serlo todavía.
+      if (!body.style.position) body.style.position = 'relative';
+      body.appendChild(note);
       }
       // Comparación sobre tipos de sesión mezclados → el % no es comparable entre jugadores
       // (ver nota en el bloque del baseline de rol). Aviso, no bloqueo.
@@ -4698,12 +4704,50 @@
       if (!body || !ocultas) return;
       const note = document.createElement('div');
       note.className = 'gp-barlimit-note';
-      note.style.cssText = 'text-align:center;margin-top:2px;font:500 10.5px/1.3 var(--cm-font-sans);color:var(--cm-fg-muted)';
+      note.style.cssText = 'position:absolute;left:0;right:0;bottom:2px;text-align:center;pointer-events:none;font:500 10.5px/1.3 var(--cm-font-sans);color:var(--cm-fg-muted)';
       note.innerHTML = `<i class="ti ti-dots" style="font-size:11px;vertical-align:-1px"></i> ${
         esc(_tt('gps_analysis.builder_bar_limit_note', 'Showing the first {n} · {r} more not shown',
                 { n: tope, r: ocultas }))}`;
+      // La nota se ancla al pie, así que el cuerpo tiene que ser su referencia: fuera del
+      // tablero puede no serlo todavía.
+      if (!body.style.position) body.style.position = 'relative';
       body.appendChild(note);
     } catch (e) { /* un aviso nunca puede romper una card */ }
+  }
+
+  /**
+   * Prepara el cuerpo de una card para un gráfico que crece con las filas (barras horizontales,
+   * dumbbell, divergente) y devuelve el canvas listo.
+   *
+   * La clave es que en el tablero el envoltorio va ABSOLUTO: así no suma altura y la card nunca
+   * se pasa del alto que tiene guardado — si no, el gráfico se derrama por encima de las cards de
+   * abajo. Cuando el contenido no entra, se scrollea DENTRO de la card, que es preferible a
+   * aplastar veinte filas en un espacio para diez.
+   *
+   * Fuera del tablero (vista previa del builder, informes) no hay slot que respetar y el alto
+   * natural manda.
+   */
+  function _lienzoAlto(body, altoNatural) {
+    body.innerHTML = '';
+    const wrap = document.createElement('div');
+    if (body.closest && body.closest('.gp-grid.is-canvas')) {
+      body.style.position = 'relative';
+      const slot = body.clientHeight || 0;
+      if (altoNatural > slot + 8) {
+        body.style.overflowY = 'auto';
+        wrap.style.cssText = `position:relative;width:100%;height:${altoNatural}px`;
+      } else {
+        body.style.overflowY = '';
+        wrap.style.cssText = 'position:absolute;inset:0';
+      }
+    } else {
+      body.style.overflowY = '';
+      wrap.style.cssText = `position:relative;width:100%;height:${altoNatural}px`;
+    }
+    const canvas = document.createElement('canvas');
+    wrap.appendChild(canvas);
+    body.appendChild(wrap);
+    return canvas;
   }
 
   /** Cuántas barras dibujar como mucho (config.style.barLimit). 0 / vacío = todas. */
@@ -7863,11 +7907,7 @@
     const cats  = vis.map(r => r.label);
     const col   = vis.map(r => (r.delta >= 0 ? subiCol : bajaCol));
 
-    const canvas = document.createElement('canvas');
-    body.innerHTML = '';
-    body.appendChild(canvas);
-    const alto = Math.max(180, vis.length * 26 + 56);
-    body.style.minHeight = alto + 'px';
+    const canvas = _lienzoAlto(body, Math.max(180, vis.length * 26 + 56));
 
     const fmtN = (v) => fmtVal(v, dec) + (unidad ? ' ' + unidad : '');
     body.__chart = _newChart(body, canvas, {
@@ -7938,9 +7978,12 @@
         { n: fuera.length, who: fuera.slice(0, 3).join(', ') + (fuera.length > 3 ? '…' : '') }));
       const note = document.createElement('div');
       note.className = 'gp-dumbbell-note';
-      note.style.cssText = 'text-align:center;margin-top:2px;font:500 10.5px/1.3 var(--cm-font-sans);color:var(--cm-fg-muted)';
+      note.style.cssText = 'position:absolute;left:0;right:0;bottom:2px;text-align:center;pointer-events:none;font:500 10.5px/1.3 var(--cm-font-sans);color:var(--cm-fg-muted)';
       note.title = fuera.join(' · ');
       note.innerHTML = `<i class="ti ti-info-circle" style="font-size:11px;vertical-align:-1px"></i> ${esc(partes.join(' · '))}`;
+      // La nota se ancla al pie, así que el cuerpo tiene que ser su referencia: fuera del
+      // tablero puede no serlo todavía.
+      if (!body.style.position) body.style.position = 'relative';
       body.appendChild(note);
       _noteRoom(body, note);
     } catch (e) { /* un aviso nunca puede romper una card */ }
@@ -8117,10 +8160,7 @@
     const nomIzq  = catalogMap.get(sIzq.label)?.name || sIzq.name || sIzq.label;
     const nomDer  = catalogMap.get(sDer.label)?.name || sDer.name || sDer.label;
 
-    const canvas = document.createElement('canvas');
-    body.innerHTML = '';
-    body.appendChild(canvas);
-    body.style.minHeight = Math.max(180, vis.length * 26 + 56) + 'px';
+    const canvas = _lienzoAlto(body, Math.max(180, vis.length * 26 + 56));
 
     body.__chart = _newChart(body, canvas, {
       type: 'bar',
@@ -8188,8 +8228,11 @@
       if (recortadas) partes.push(_tt('gps_analysis.diverging_more', '{r} more not shown', { r: recortadas }));
       const note = document.createElement('div');
       note.className = 'gp-diverging-note';
-      note.style.cssText = 'text-align:center;margin-top:2px;font:500 10.5px/1.3 var(--cm-font-sans);color:var(--cm-fg-muted)';
+      note.style.cssText = 'position:absolute;left:0;right:0;bottom:2px;text-align:center;pointer-events:none;font:500 10.5px/1.3 var(--cm-font-sans);color:var(--cm-fg-muted)';
       note.innerHTML = `<i class="ti ti-info-circle" style="font-size:11px;vertical-align:-1px"></i> ${esc(partes.join(' · '))}`;
+      // La nota se ancla al pie, así que el cuerpo tiene que ser su referencia: fuera del
+      // tablero puede no serlo todavía.
+      if (!body.style.position) body.style.position = 'relative';
       body.appendChild(note);
     } catch (e) { /* un aviso nunca puede romper una card */ }
   }
