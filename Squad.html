@@ -337,6 +337,28 @@
   }
   .sq-modal-head .sq-modal-close:hover { background:var(--cm-bg-soft); color:var(--cm-fg); }
   .sq-modal-body { padding:20px; display:flex; flex-direction:column; gap:14px; }
+
+  /* Derechos de imagen: un bloque por alcance (análisis interno / difusión pública). */
+  .sq-consent { display:flex; flex-direction:column; gap:9px; }
+  .sq-consent-scope { border:1px solid var(--cm-border); border-radius:var(--cm-r-3); padding:10px 12px; background:var(--cm-bg-soft); }
+  .sq-consent-head { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .sq-consent-name { font:600 var(--cm-body-sm); color:var(--cm-fg-strong); flex:1 1 140px; }
+  .sq-consent-pill { font:600 10.5px/1.5 var(--cm-font-sans); letter-spacing:.03em; text-transform:uppercase; padding:3px 8px; border-radius:999px; white-space:nowrap; }
+  .sq-consent-pill.is-ok      { background:var(--cm-success-bg); border:1px solid var(--cm-success-bd); color:var(--cm-success); }
+  .sq-consent-pill.is-partial { background:var(--cm-warning-bg); border:1px solid var(--cm-warning-bd); color:var(--cm-warning); }
+  .sq-consent-pill.is-missing { background:var(--cm-bg-sunk);    border:1px solid var(--cm-border);    color:var(--cm-fg-muted); }
+  .sq-consent-pill.is-revoked,
+  .sq-consent-pill.is-unknown { background:var(--cm-danger-bg);  border:1px solid var(--cm-danger-bd);  color:var(--cm-danger); }
+  .sq-consent-desc { font:var(--cm-body-sm); color:var(--cm-fg-muted); margin:5px 0 0; }
+  .sq-consent-grantors { display:flex; flex-direction:column; gap:7px; margin-top:10px; }
+  .sq-consent-row { display:flex; align-items:center; gap:9px; flex-wrap:wrap; }
+  .sq-consent-row > label { display:flex; align-items:center; gap:6px; font:var(--cm-body-sm); color:var(--cm-fg); cursor:pointer; margin:0; flex:0 0 176px; }
+  .sq-consent-row input[type="text"] { flex:1 1 150px; min-width:0; padding:5px 8px; border:1px solid var(--cm-border); border-radius:6px; background:var(--cm-bg); color:var(--cm-fg-strong); font:var(--cm-body-sm); }
+  .sq-consent-row input[type="text"][disabled] { opacity:.45; cursor:not-allowed; }
+  .sq-consent-when { font:var(--cm-body-sm); color:var(--cm-fg-muted); flex:0 0 auto; font-variant-numeric:tabular-nums; }
+  .sq-consent-act { margin-top:9px; display:flex; gap:8px; flex-wrap:wrap; }
+  /* En pantalla angosta el nombre se va debajo de la casilla en vez de estrujarse. */
+  @media (max-width:560px){ .sq-consent-row > label { flex:1 1 100%; } }
   .sq-modal-row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
   .sq-modal-field { display:flex; flex-direction:column; gap:5px; }
   .sq-modal-field label { font:500 11.5px/1 var(--cm-font-sans); color:var(--cm-fg-muted); }
@@ -710,6 +732,18 @@
             <div class="sq-multi-menu" id="sqF_teamsMenu" role="listbox" aria-multiselectable="true"></div>
           </div>
           <p class="sq-multi-hint" data-i18n="squad.primary_team_hint">The starred team is the primary one — where the player shows as available by default. In the other teams he appears as “training with” the primary.</p>
+        </div>
+      </div>
+      <!-- Derechos de imagen. Es un derecho DISTINTO del RGPD (en España, LO 1/1982): que el
+           club tenga aceptados los Términos no da permiso sobre la cara de nadie. Quién debe
+           autorizar depende de la edad, así que el bloque se repinta cuando cambia sqF_dob.
+           Lo pinta paintConsent(). -->
+      <div class="sq-modal-row">
+        <!-- .sq-modal-row es un grid de dos columnas: para ocupar el ancho hace falta
+             grid-column, no flex-basis. -->
+        <div class="sq-modal-field" style="grid-column:1/-1">
+          <label data-i18n="squad.image_rights">Image rights</label>
+          <div id="sqF_consent" class="sq-consent"></div>
         </div>
       </div>
     </div>
@@ -1897,6 +1931,223 @@ async function reloadPlayers() {
   document.getElementById('sqChangeClose')?.addEventListener('click', () => closeBulkModal('sqChangeBackdrop'));
   document.getElementById('sqChangeBackdrop')?.addEventListener('click', e => { if (e.target === e.currentTarget) closeBulkModal('sqChangeBackdrop'); });
 
+  // ─────────────────────────── Derechos de imagen ───────────────────────────
+  //
+  // Es un derecho distinto del RGPD y por eso no cuelga de los Términos ni del opt-in
+  // comercial. Dos alcances independientes: autorizar el análisis del cuerpo técnico NO
+  // autoriza publicar el corte, y con menores ese va a ser el caso habitual.
+  //
+  // Quién tiene que autorizar depende de la edad:
+  //    18 o más    -> el propio jugador
+  //    de 14 a 17  -> ambos progenitores Y el menor (art. 156 CC + LO 1/1982)
+  //    menos de 14 -> ambos progenitores
+  //
+  // Sin fecha de nacimiento no se sabe qué régimen aplica, así que no se registra nada.
+  // Es el mismo criterio fail-closed que aplica image_consent_state() en la base, que es
+  // la que manda: esto de aquí sólo sirve para que la pantalla pueda decir QUÉ falta.
+  const CONSENT_SCOPES = ['internal_analysis','public_release'];
+  let _consent    = null;   // { scope: fila }
+  let _consentHad = null;   // Set de alcances que YA tenían fila, para saber si hay que borrar
+
+  const blankConsent = () => ({
+    by_player_at:null, by_player_name:'', by_guardian1_at:null, by_guardian1_name:'',
+    by_guardian2_at:null, by_guardian2_name:'', revoked_at:null
+  });
+
+  function todayISO(){
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  }
+
+  // null = no se puede saber (sin fecha o fecha inválida). No se asume el régimen más laxo.
+  function consentGrantors(dob){
+    if (!dob) return null;
+    const d = new Date(dob + 'T00:00:00');
+    if (isNaN(d.getTime())) return null;
+    const hoy = new Date();
+    let edad = hoy.getFullYear() - d.getFullYear();
+    const m = hoy.getMonth() - d.getMonth();
+    if (m < 0 || (m === 0 && hoy.getDate() < d.getDate())) edad--;
+    if (edad >= 18) return ['player'];
+    if (edad >= 14) return ['guardian1','guardian2','player'];
+    return ['guardian1','guardian2'];
+  }
+
+  function consentState(scope, dob){
+    const need = consentGrantors(dob);
+    if (!need) return 'unknown_age';
+    const c = _consent?.[scope] || blankConsent();
+    if (c.revoked_at) return 'revoked';
+    const dados = need.filter(g => c[`by_${g}_at`]);
+    if (!dados.length) return 'missing';
+    return dados.length === need.length ? 'ok' : 'partial';
+  }
+
+  function consentGrantorLabel(g, esMenor){
+    if (g === 'guardian1') return tt('squad.consent_guardian1','Parent or guardian 1');
+    if (g === 'guardian2') return tt('squad.consent_guardian2','Parent or guardian 2');
+    return esMenor ? tt('squad.consent_minor','The player (14+)')
+                   : tt('squad.consent_player','The player');
+  }
+
+  function paintConsent(){
+    const host = document.getElementById('sqF_consent');
+    if (!host) return;
+    if (!_consent) _consent = { internal_analysis: blankConsent(), public_release: blankConsent() };
+
+    const dob  = document.getElementById('sqF_dob')?.value || '';
+    const need = consentGrantors(dob);
+    const esMenor = !!need && need.includes('guardian1');
+
+    const pills = {
+      ok:          tt('squad.consent_ok','Granted'),
+      partial:     tt('squad.consent_partial','Incomplete'),
+      missing:     tt('squad.consent_missing','Not recorded'),
+      revoked:     tt('squad.consent_revoked','Revoked'),
+      unknown_age: tt('squad.consent_unknown_age','Needs date of birth')
+    };
+    const meta = {
+      internal_analysis: [tt('squad.consent_internal','Internal analysis'),
+                          tt('squad.consent_internal_desc','Video and images used by the coaching staff, and shared with the player.')],
+      public_release:    [tt('squad.consent_public','Public release'),
+                          tt('squad.consent_public_desc','Publishing on social media, the club website or any channel open to third parties.')]
+    };
+
+    host.innerHTML = `
+      <p class="sq-consent-desc" style="margin:0 0 2px">${tt('squad.consent_hint','Image rights are separate from the privacy policy. Who has to authorise depends on the player’s age.')}</p>
+      ${CONSENT_SCOPES.map(scope => {
+        const st = consentState(scope, dob);
+        const c  = _consent[scope];
+        const [titulo, desc] = meta[scope];
+        const cls = st === 'unknown_age' ? 'is-unknown' : `is-${st}`;
+        let cuerpo;
+        if (!need) {
+          cuerpo = `<p class="sq-consent-desc">${tt('squad.consent_need_dob','The date of birth is missing: without it we cannot tell who has to authorise.')}</p>`;
+        } else if (c.revoked_at) {
+          cuerpo = `<p class="sq-consent-desc">${tt('squad.consent_revoked_on','Revoked on {d}.', { d: c.revoked_at })}</p>
+            <div class="sq-consent-act">
+              <button type="button" class="cm-btn is-outline is-sm" data-consent-reset="${scope}">${tt('squad.consent_reregister','Record again')}</button>
+            </div>`;
+        } else {
+          cuerpo = `<div class="sq-consent-grantors">
+            ${need.map(g => {
+              const on = !!c[`by_${g}_at`];
+              return `<div class="sq-consent-row">
+                <label><input type="checkbox" data-consent-chk="${scope}:${g}" ${on?'checked':''}>
+                  <span>${consentGrantorLabel(g, esMenor)}</span></label>
+                <input type="text" data-consent-name="${scope}:${g}" ${on?'':'disabled'}
+                       value="${(c[`by_${g}_name`]||'').replace(/"/g,'&quot;')}"
+                       placeholder="${tt('squad.consent_name_ph','Full name of who authorised')}">
+                ${on ? `<span class="sq-consent-when">${c[`by_${g}_at`]}</span>` : ''}
+              </div>`;
+            }).join('')}
+          </div>
+          ${st === 'ok' ? `<div class="sq-consent-act">
+              <button type="button" class="cm-btn is-outline is-sm" data-consent-revoke="${scope}">${tt('squad.consent_revoke','Revoke')}</button>
+            </div>` : ''}`;
+        }
+        return `<div class="sq-consent-scope">
+          <div class="sq-consent-head">
+            <span class="sq-consent-name">${titulo}</span>
+            <span class="sq-consent-pill ${cls}">${pills[st]}</span>
+          </div>
+          <p class="sq-consent-desc">${desc}</p>
+          ${cuerpo}
+        </div>`;
+      }).join('')}`;
+
+    host.querySelectorAll('[data-consent-chk]').forEach(el => {
+      el.addEventListener('change', () => {
+        const [scope, g] = el.dataset.consentChk.split(':');
+        // Marcar SELLA la fecha de hoy; desmarcar borra fecha y nombre, porque una fecha
+        // sin nombre no acredita nada (y la base la rechaza por constraint).
+        _consent[scope][`by_${g}_at`]   = el.checked ? todayISO() : null;
+        if (!el.checked) _consent[scope][`by_${g}_name`] = '';
+        paintConsent();
+      });
+    });
+    host.querySelectorAll('[data-consent-name]').forEach(el => {
+      el.addEventListener('input', () => {
+        const [scope, g] = el.dataset.consentName.split(':');
+        _consent[scope][`by_${g}_name`] = el.value;
+      });
+    });
+    host.querySelectorAll('[data-consent-revoke]').forEach(el => {
+      el.addEventListener('click', () => {
+        const scope = el.dataset.consentRevoke;
+        // Revocar MARCA, no borra: hay que poder demostrar que en su día existió.
+        _consent[scope].revoked_at = todayISO();
+        paintConsent();
+      });
+    });
+    host.querySelectorAll('[data-consent-reset]').forEach(el => {
+      el.addEventListener('click', () => {
+        // Volver a registrar parte de cero: un consentimiento revocado no "revive".
+        _consent[el.dataset.consentReset] = blankConsent();
+        paintConsent();
+      });
+    });
+  }
+
+  async function loadConsent(playerId){
+    _consent    = { internal_analysis: blankConsent(), public_release: blankConsent() };
+    _consentHad = new Set();
+    if (playerId) {
+      const { data } = await window.sb.from('player_image_consents')
+        .select('scope,by_player_at,by_player_name,by_guardian1_at,by_guardian1_name,by_guardian2_at,by_guardian2_name,revoked_at')
+        .eq('player_id', playerId);
+      (data || []).forEach(r => {
+        _consentHad.add(r.scope);
+        _consent[r.scope] = {
+          by_player_at:r.by_player_at, by_player_name:r.by_player_name || '',
+          by_guardian1_at:r.by_guardian1_at, by_guardian1_name:r.by_guardian1_name || '',
+          by_guardian2_at:r.by_guardian2_at, by_guardian2_name:r.by_guardian2_name || '',
+          revoked_at:r.revoked_at
+        };
+      });
+    }
+    paintConsent();
+  }
+
+  // Devuelve el nombre del otorgante al que le falta el nombre, o null si está todo bien.
+  function consentMissingName(){
+    for (const scope of CONSENT_SCOPES) {
+      const c = _consent?.[scope]; if (!c) continue;
+      for (const g of ['player','guardian1','guardian2']) {
+        if (c[`by_${g}_at`] && !String(c[`by_${g}_name`] || '').trim()) return g;
+      }
+    }
+    return null;
+  }
+
+  async function saveConsent(playerId){
+    if (!playerId || !_consent) return null;
+    for (const scope of CONSENT_SCOPES) {
+      const c = _consent[scope];
+      const vacio = !c.by_player_at && !c.by_guardian1_at && !c.by_guardian2_at && !c.revoked_at;
+      if (vacio) {
+        // Quedó sin nada: si había fila, era un error de carga y se va. La revocación es
+        // otra cosa y tiene su propio camino (revoked_at).
+        if (_consentHad?.has(scope)) {
+          const { error } = await window.sb.from('player_image_consents')
+            .delete().eq('player_id', playerId).eq('scope', scope);
+          if (error) return error;
+        }
+        continue;
+      }
+      // club_id lo impone un trigger desde el jugador; se manda por el NOT NULL y nada más.
+      const { error } = await window.sb.from('player_image_consents').upsert({
+        player_id: playerId, scope, club_id: _currentClubId,
+        by_player_at:c.by_player_at, by_player_name:(c.by_player_name||'').trim() || null,
+        by_guardian1_at:c.by_guardian1_at, by_guardian1_name:(c.by_guardian1_name||'').trim() || null,
+        by_guardian2_at:c.by_guardian2_at, by_guardian2_name:(c.by_guardian2_name||'').trim() || null,
+        revoked_at:c.revoked_at
+      }, { onConflict:'player_id,scope' });
+      if (error) return error;
+    }
+    return null;
+  }
+
   async function openModal(player) {
     _editingId = player ? player.id : null;
     const backdrop = document.getElementById('sqModalBackdrop');
@@ -1915,6 +2166,11 @@ async function reloadPlayers() {
     })();
     setSecPositions((player?.positions || []).filter(p => p && p !== (player?.position || '')));
     document.getElementById('sqF_dob').value         = player?.date_of_birth   || '';
+    // Quién tiene que autorizar el uso de imagen cambia con la edad, así que el bloque de
+    // consentimiento se repinta al tocar la fecha. Asignación directa (no addEventListener)
+    // para que abrir el modal veinte veces no deje veinte listeners encima.
+    document.getElementById('sqF_dob').oninput = () => paintConsent();
+    loadConsent(player?.id || null);
     document.getElementById('sqF_joined_date').value = player?.joined_date     || '';
     document.getElementById('sqF_contract_until').value = player?.contract_until || '';
     fillNationalitySelect();
@@ -2096,6 +2352,17 @@ async function reloadPlayers() {
       return;
     }
 
+    // Un consentimiento marcado sin decir QUIÉN lo dio no acredita nada. La base lo rechaza
+    // por constraint; se avisa antes para no gastar el guardado del jugador en el error.
+    const faltaNombre = consentMissingName();
+    if (faltaNombre) {
+      showToast(tt('squad.consent_name_required','The name of who authorises the use of image is missing, or untick the box.'));
+      document.querySelector(`[data-consent-name$=":${faltaNombre}"]`)?.focus();
+      saving.style.display = 'none';
+      saveBtn.disabled = false;
+      return;
+    }
+
     // ── Pre-chequeo de límite de jugadores por categoría (upsell antes de crear) ──
     if (!_editingId && selectedTeamIds.length) {
       for (const tid of selectedTeamIds) {
@@ -2177,6 +2444,21 @@ async function reloadPlayers() {
           await reloadPlayers();
           return;
         }
+      }
+    }
+
+    // El consentimiento de imagen va DESPUÉS del jugador: en un alta no hay player_id hasta
+    // aquí. Si falla, la ficha ya está guardada — se avisa sin cerrar el modal, para que lo
+    // registrado no se pierda de la pantalla.
+    if (!error && savedPlayerId) {
+      const consentErr = await saveConsent(savedPlayerId);
+      if (consentErr) {
+        console.error('[Squad] image consent save error:', consentErr);
+        saving.style.display = 'none';
+        saveBtn.disabled = false;
+        showToast(tt('squad.consent_save_failed','The player was saved, but the image rights could not be recorded.'));
+        await reloadPlayers();
+        return;
       }
     }
 

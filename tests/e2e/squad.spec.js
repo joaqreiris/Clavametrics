@@ -253,3 +253,82 @@ test.describe('Squad — Auth guard', () => {
     await page.waitForURL(/Login(\.html)?(\?|$)/, { timeout: 8000 });
   });
 });
+
+/**
+ * Derechos de imagen.
+ *
+ * Son un derecho DISTINTO del RGPD: que el club tenga aceptada la política de privacidad no
+ * da permiso sobre la cara de nadie. Y quién tiene que autorizar depende de la edad, así que
+ * lo que se prueba aquí es que el formulario pida a las personas correctas — y que no deje
+ * registrar nada cuando no se sabe la edad, que es el caso de las fichas sin fecha.
+ *
+ * El mock se registra DESPUÉS de gotoSquad a propósito: mockBase trae un catch-all de
+ * /rest/v1 y en Playwright gana la ruta registrada más tarde. Como el GET de consentimientos
+ * sale al abrir el modal (no al cargar la página), llega a tiempo igual.
+ */
+test.describe('derechos de imagen', () => {
+  const iso = d => d.toISOString().slice(0, 10);
+  const haceAnios = n => { const d = new Date(); d.setFullYear(d.getFullYear() - n); return iso(d); };
+
+  async function mockConsents(page, filas = []) {
+    await page.route(`${SB}/rest/v1/player_image_consents**`, async route => {
+      if (route.request().method() === 'GET') return route.fulfill({ json: filas });
+      return route.fulfill({ status: 201, json: [] });
+    });
+  }
+
+  test('a un jugador adulto se le pide su propia autorización, y a nadie más', async ({ page }) => {
+    await gotoSquad(page);
+    await mockConsents(page);
+    await abrirEdicion(page);
+
+    const casillas = page.locator('[data-consent-chk^="internal_analysis:"]');
+    await expect(casillas).toHaveCount(1);
+    await expect(page.locator('[data-consent-chk="internal_analysis:player"]')).toBeVisible();
+    // Un mayor de edad no necesita a sus padres: si aparecen, el formulario está pidiendo
+    // datos de terceros que no hacen falta.
+    await expect(page.locator('[data-consent-chk="internal_analysis:guardian1"]')).toHaveCount(0);
+  });
+
+  test('a un menor de 14 a 17 se le piden los dos progenitores y él mismo', async ({ page }) => {
+    await gotoSquad(page);
+    await mockConsents(page);
+    await abrirEdicion(page);
+
+    // Fecha relativa, no fija: un menor con fecha fija cumple 18 y el test se cae solo.
+    await page.fill('#sqF_dob', haceAnios(16));
+
+    await expect(page.locator('[data-consent-chk^="internal_analysis:"]')).toHaveCount(3);
+    for (const quien of ['guardian1', 'guardian2', 'player']) {
+      await expect(page.locator(`[data-consent-chk="internal_analysis:${quien}"]`)).toBeVisible();
+    }
+    // Y los dos alcances son independientes: la difusión pide su propio permiso.
+    await expect(page.locator('[data-consent-chk^="public_release:"]')).toHaveCount(3);
+  });
+
+  test('sin fecha de nacimiento no se puede registrar el consentimiento', async ({ page }) => {
+    await gotoSquad(page);
+    await mockConsents(page);
+    await abrirEdicion(page);
+
+    await page.fill('#sqF_dob', '');
+
+    // Ni una sola casilla: sin saber la edad no se sabe quién tiene que firmar, y asumir el
+    // régimen más laxo es exactamente el error que esto evita.
+    await expect(page.locator('[data-consent-chk]')).toHaveCount(0);
+    await expect(page.locator('#sqF_consent')).toContainText(/fecha de nacimiento|date of birth/i);
+  });
+
+  test('un consentimiento marcado sin decir quién lo dio no se guarda', async ({ page }) => {
+    await gotoSquad(page);
+    await mockConsents(page);
+    await abrirEdicion(page);
+
+    await page.check('[data-consent-chk="internal_analysis:player"]');
+    // Se marca pero no se escribe el nombre: una fecha sin nombre no acredita nada.
+    await page.click('#sqModalSave');
+
+    await expect(page.locator('#sqModalBackdrop')).toHaveClass(/is-open/);
+    await expect(page.locator('#sqToast')).toContainText(/autoriza|authoris/i, { timeout: 8000 });
+  });
+});
