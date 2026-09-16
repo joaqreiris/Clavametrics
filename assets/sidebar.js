@@ -28,9 +28,39 @@
     if (window.CM_I18N) window.CM_I18N.applyTo(root || document);
   }
   // Translated string for text built in JS (data-i18n only works on rendered elements).
-  function _ttx(k, fb) {
-    try { const v = (window.CM_I18N && window.CM_I18N.t) ? window.CM_I18N.t(k) : null; return (v && v !== k) ? v : fb; }
-    catch (_e) { return fb; }
+  // Interpola {vars} también en el fallback: si no, cuando el diccionario todavía no
+  // cargó salía el texto con las llaves crudas.
+  function _ttx(k, fb, vars) {
+    let out = fb;
+    try {
+      const v = (window.CM_I18N && window.CM_I18N.t) ? window.CM_I18N.t(k, vars) : null;
+      if (v && v !== k) out = v;
+    } catch (_e) { /* fallback */ }
+    if (vars && out != null) {
+      for (const n of Object.keys(vars)) out = String(out).split('{' + n + '}').join(vars[n]);
+    }
+    return out;
+  }
+
+  /* Texto de una notificación, en el idioma de QUIEN LA LEE.
+     La base escribe title/body en inglés fijo porque no puede saber en qué idioma se va
+     a leer: en un mismo club hay un fisio en inglés y un entrenador en español. Desde la
+     178 las notificaciones guardan además los datos en `data`, y el texto se compone
+     acá. Sin `data` (las de antes) o con un tipo que no sabemos componer, se usa el
+     title/body tal cual: nunca se pierde el contenido. */
+  function _notifText(n) {
+    const d = n && n.data;
+    if (n && n.type === 'wellness_alert' && d && d.player) {
+      const areas = Array.isArray(d.areas) ? d.areas : [];
+      const zonas = areas.map(a => _ttx('wellness.pain.' + a, a)).join(', ');
+      const nota  = d.note ? ' · \u201C' + d.note + '\u201D' : '';
+      const post  = d.source === 'rpe' ? ' ' + _ttx('shell.notif.post_rpe', '(post-RPE)') : '';
+      return {
+        title: _ttx('shell.notif.discomfort', '{player} reported discomfort', { player: d.player }),
+        body: (zonas ? _ttx('shell.notif.discomfort_areas', 'Areas: {areas}', { areas: zonas }) : '') + nota + post,
+      };
+    }
+    return { title: (n && n.title) || '', body: (n && n.body) || '' };
   }
 
   // ── CSS ──────────────────────────────────────────────────────
@@ -758,16 +788,19 @@ html.cm-rail .hub-nav-grip{display:none}
       _applyI18n(list);
       return;
     }
-    list.innerHTML = visible.map(n => `
+    list.innerHTML = visible.map(n => {
+      const txt = _notifText(n);
+      return `
       <a class="cm-ni${n.read ? '' : ' unread'}" data-nid="${_escHtml(n.id)}" href="${_escHtml(_safeLink(n.link))}">
         ${_notifIcon(n.type)}
         <div class="cm-ni-body">
-          <div class="cm-ni-title">${_escHtml(n.title)}</div>
-          ${n.body ? `<div class="cm-ni-desc">${_escHtml(n.body)}</div>` : ''}
+          <div class="cm-ni-title">${_escHtml(txt.title)}</div>
+          ${txt.body ? `<div class="cm-ni-desc">${_escHtml(txt.body)}</div>` : ''}
           <div class="cm-ni-time">${_relTime(n.created_at)}</div>
         </div>
         ${n.read ? '' : '<div class="cm-ni-dot"></div>'}
-      </a>`).join('');
+      </a>`;
+    }).join('');
   }
 
   function _closeNotifPanel() {
@@ -781,11 +814,12 @@ html.cm-rail .hub-nav-grip{display:none}
     const [cls, icon] = types[notif.type] || ['def','ti-bell'];
     const toast = document.createElement('div');
     toast.className = 'cm-toast';
+    const txt = _notifText(notif);   // mismo idioma que la lista de la campana
     toast.innerHTML = `
       <div class="cm-toast-ico cm-ni-ico ${cls}"><i class="ti ${icon}"></i></div>
       <div class="cm-toast-body">
-        <div class="cm-toast-ttl">${_escHtml(notif.title)}</div>
-        ${notif.body ? `<div class="cm-toast-desc">${_escHtml(notif.body)}</div>` : ''}
+        <div class="cm-toast-ttl">${_escHtml(txt.title)}</div>
+        ${txt.body ? `<div class="cm-toast-desc">${_escHtml(txt.body)}</div>` : ''}
       </div>
       <button class="cm-toast-x" aria-label="Dismiss"><i class="ti ti-x"></i></button>`;
     toast.querySelector('.cm-toast-x').addEventListener('click', () => toast.remove());

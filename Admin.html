@@ -1031,10 +1031,25 @@ const _esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&a
       const price = Number(plan?.price_monthly || 0);
       const lang = (window.CM_I18N && CM_I18N.current) || 'en';
       const fmtD = d => { try { return new Date(d).toLocaleDateString(lang,{month:'short',day:'numeric'}); } catch(_){ return ''; } };
-      const kv = document.getElementById('adKpiPlan'); if (kv) kv.textContent = planName;
+
+      // Durante la prueba, team_plan_slug() devuelve 'full' — y es correcto, el club
+      // tiene todo abierto. Pero decir "Full · $X/mes" a alguien que no está pagando
+      // nada, y no decirle cuántos días le quedan, es la información justo al revés de
+      // la que necesita. El trial solo manda si NO hay suscripción propia: un club que
+      // ya contrató no está de prueba aunque la fecha siga en el futuro.
+      const club = (typeof window.getClub === 'function') ? await window.getClub().catch(() => null) : null;
+      const trialEnd = club?.trial_ends_at ? new Date(club.trial_ends_at) : null;
+      const enPrueba = !sub && trialEnd && trialEnd > new Date();
+      const diasPrueba = enPrueba
+        ? Math.max(0, Math.ceil((trialEnd - new Date()) / 86400000))
+        : 0;
+
+      const kv = document.getElementById('adKpiPlan');
+      if (kv) kv.textContent = enPrueba ? tt('admin.plan_trial','{plan} · trial',{ plan: planName }) : planName;
       const ks = document.getElementById('adKpiPlanSub');
       if (ks) {
-        if (planSlug === 'initiation' || price === 0) ks.textContent = tt('admin.plan_free','Free · no billing');
+        if (enPrueba) ks.textContent = tt('admin.trial_days_left','{n} days left · no card needed',{ n: diasPrueba });
+        else if (planSlug === 'initiation' || price === 0) ks.textContent = tt('admin.plan_free','Free · no billing');
         else if (sub?.is_comp) ks.textContent = tt('admin.plan_comp','Complimentary · no billing');
         else if (sub?.current_period_end) ks.textContent = `$${price}/mo · ` + tt('admin.next_bill','next bill {date}',{ date: fmtD(sub.current_period_end) });
         else ks.textContent = `$${price}/mo`;

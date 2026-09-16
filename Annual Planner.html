@@ -261,7 +261,7 @@
             <div class="ap-field"><label data-i18n="annual_planner.start">Start</label><input type="date" id="apStart" style="display:none"><button type="button" class="ap-datebtn" id="apStart_btn" onclick="apOpenCal('apStart', this)"><i class="ti ti-calendar"></i><span class="lbl ph" data-i18n="annual_planner.select_date">Select date</span></button></div>
             <div class="ap-field"><label data-i18n="annual_planner.end">End</label><input type="date" id="apEnd" style="display:none"><button type="button" class="ap-datebtn" id="apEnd_btn" onclick="apOpenCal('apEnd', this)"><i class="ti ti-calendar"></i><span class="lbl ph" data-i18n="annual_planner.select_date">Select date</span></button></div>
           </div>
-          <div class="ap-field" style="margin-bottom:14px"><label data-i18n="annual_planner.planning_model">Planning model</label><select id="apModelSel" style="height:38px;padding:0 8px;background:var(--cm-surface);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:7px;font:500 13px/1 var(--cm-font-sans)"><option value="tactical" data-i18n="annual_planner.model_tactical">Tactical Periodization — Frade · morphocycle</option><option value="structured" data-i18n="annual_planner.model_structured">Structured Microcycle — Seirul·lo · typed micros</option><option value="atr" data-i18n="annual_planner.model_atr">ATR (block) — Issurin · 4–6 wk macrocycles</option><option value="verheijen" data-i18n="annual_planner.model_verheijen">Verheijen — football · 6-week blocks</option></select></div>
+          <div class="ap-field" style="margin-bottom:14px"><label data-i18n="annual_planner.planning_model">Planning model</label><select id="apModelSel" style="height:38px;padding:0 8px;background:var(--cm-surface);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:7px;font:500 13px/1 var(--cm-font-sans)"><option value="free" data-i18n="annual_planner.model_free">No model — free planning</option><option value="tactical" data-i18n="annual_planner.model_tactical">Tactical Periodization — Frade · morphocycle</option><option value="structured" data-i18n="annual_planner.model_structured">Structured Microcycle — Seirul·lo · typed micros</option><option value="atr" data-i18n="annual_planner.model_atr">ATR (block) — Issurin · 4–6 wk macrocycles</option><option value="verheijen" data-i18n="annual_planner.model_verheijen">Verheijen — football · 6-week blocks</option></select></div>
           <div style="display:flex;justify-content:flex-end;gap:8px">
             <button class="ap-btn" onclick="apHideForm()" data-i18n="common.cancel">Cancel</button>
             <button class="ap-btn primary" onclick="apSaveSeason()" data-i18n="annual_planner.save_season">Save season</button>
@@ -624,11 +624,21 @@ async function apSaveSeason(){
 }
 
 /* ── Phase types ──────────────────────────────────────────── */
+/* Los tipos que vienen de fábrica están guardados en inglés en la base (Preseason,
+   In-season, Break…), compartidos por todos los clubes, así que su `name` no se puede
+   traducir en la tabla. Se traduce acá por `slug`. Los tipos que crea el club son
+   suyos: se muestran tal cual los escribió. */
+function apPhaseTypeLabel(t){
+  if (!t) return '';
+  return (t.is_preset && t.slug) ? tt('annual_planner.phase_' + t.slug, t.name) : t.name;
+}
+
 async function apLoadPhaseTypes(){
   const { data } = await window.sb.from('phase_types').select('*').order('is_preset', { ascending:false }).order('name');
   _apPhaseTypes = data || [];
   const sel = document.getElementById('apPhaseType');
-  sel.innerHTML = _apPhaseTypes.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
+  sel.innerHTML = _apPhaseTypes
+    .map(t => `<option value="${t.id}">${apEsc(apPhaseTypeLabel(t))}</option>`).join('');
   apOnPhaseTypeChange();
 }
 
@@ -636,7 +646,7 @@ function apOnPhaseTypeChange(){
   const t = _apPhaseTypes.find(x => x.id === document.getElementById('apPhaseType').value);
   if (!t) return;
   const nameInput = document.getElementById('apPhaseName');
-  if (!nameInput.value.trim()) nameInput.placeholder = t.name;
+  if (!nameInput.value.trim()) nameInput.placeholder = apPhaseTypeLabel(t);
   document.getElementById('apPhaseCounts').checked = !!t.default_counts_availability;
   if (t.color) document.getElementById('apPhaseColor').value = t.color;
 }
@@ -946,7 +956,10 @@ async function apSaveEdit(id){
 async function apAddPhase(){
   const typeId = document.getElementById('apPhaseType').value;
   const type   = _apPhaseTypes.find(t => t.id === typeId);
-  const name   = document.getElementById('apPhaseName').value.trim() || (type ? type.name : '');
+  // Sin nombre propio se toma el del tipo YA TRADUCIDO: es el que el club está viendo
+  // en el desplegable, y guardar "Preseason" a un club que trabaja en español sería
+  // escribirle en la agenda algo que él nunca escribió.
+  const name   = document.getElementById('apPhaseName').value.trim() || apPhaseTypeLabel(type);
   const start  = document.getElementById('apPhaseStart').value;
   const end    = document.getElementById('apPhaseEnd').value;
   const counts = document.getElementById('apPhaseCounts').checked;
@@ -1630,6 +1643,10 @@ let _apTL = { phases:[], matches:[], comps:[], macros:[], mesos:[], micros:[] };
 let _apTLTips = [], _apTLpop = null, _apTLwired = false;
 let _apTLZoom = 0, _apTLLevels = [], _apSelectedMicro = null;
 const PLAN_MODELS = {
+  // Sin modelo: el club planifica a su manera. No todos siguen una escuela, y los que
+  // la siguen no siempre la siguen entera. Se comporta como el táctico en cuanto a
+  // carriles (ni bloques ni micros tipados), pero sin decir que es Frade.
+  free:       { label:'No model',               sub:'free planning',              usesBlocks:false, usesMicroType:false },
   tactical:   { label:'Tactical Periodization', sub:'Frade · morphocycle',        usesBlocks:false, usesMicroType:false },
   structured: { label:'Structured Microcycle',  sub:'Seirul·lo · typed micros',    usesBlocks:false, usesMicroType:true  },
   atr:        { label:'ATR (block)',            sub:'Issurin · 4–6 wk macrocycles', usesBlocks:true,  usesMicroType:false },
