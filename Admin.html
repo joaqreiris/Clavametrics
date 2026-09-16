@@ -754,24 +754,18 @@
             <h3 data-i18n="admin.notif_title">Club notifications</h3>
             <span class="sub" data-i18n="admin.notif_sub">Who receives each alert and with what scope</span>
           </div>
-          <div style="padding:0 0 8px">
-            <div style="padding:12px 16px;border-bottom:1px solid var(--cm-border);background:var(--cm-bg-soft);display:flex;align-items:center;gap:8px">
-              <i class="ti ti-alert-triangle" style="font-size:16px;color:var(--cm-danger)"></i>
-              <span style="font:600 13.5px/1 var(--cm-font-sans);color:var(--cm-fg-strong)" data-i18n="admin.notif_discomfort">Discomfort reported (wellness / RPE)</span>
-            </div>
-            <table class="ad-table">
-              <thead><tr>
-                <th data-i18n="admin.notif_th_role">Role</th><th style="width:90px;text-align:center" data-i18n="admin.notif_th_receives">Receives</th><th style="width:220px" data-i18n="admin.notif_th_scope">Scope</th>
-              </tr></thead>
-              <tbody id="notifMatrixBody">
-                <tr><td colspan="3" style="padding:20px;text-align:center;color:var(--cm-fg-muted)" data-i18n="common.loading">Loading…</td></tr>
-              </tbody>
-            </table>
-            <div style="display:flex;justify-content:flex-end;padding:14px 16px">
-              <button class="cm-btn is-primary is-sm" id="notifSaveBtn" onclick="saveNotifSettings(this)"><i class="ti ti-check" style="font-size:14px"></i><span data-i18n="admin.save_changes">Save changes</span></button>
-            </div>
+          <!-- Una alerta por bloque, plegable. Con un solo tipo cabía una tabla suelta;
+               con cuatro, una tabla de veinte celdas deja de poder leerse. Cada bloque
+               resume a quién avisa sin desplegarse, que es la pregunta que uno trae al
+               abrir esta pantalla. -->
+          <div id="notifBlocks" style="padding:4px 0 8px">
+            <div style="padding:22px;text-align:center;color:var(--cm-fg-muted)" data-i18n="common.loading">Loading…</div>
           </div>
-        </div>
+          <div style="display:flex;align-items:center;gap:12px;justify-content:flex-end;padding:14px 16px;border-top:1px solid var(--cm-border)">
+            <span id="notifDirty" hidden style="font:500 12px/1 var(--cm-font-sans);color:var(--cm-warning,#d97706)"
+                  data-i18n="admin.notif_unsaved">Unsaved changes</span>
+            <button class="cm-btn is-primary is-sm" id="notifSaveBtn" onclick="saveNotifSettings(this)"><i class="ti ti-check" style="font-size:14px"></i><span data-i18n="admin.save_changes">Save changes</span></button>
+          </div>
       </div>
 
       <div class="ad-panel" data-panel="integrations">
@@ -2813,55 +2807,169 @@ const _esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&a
     { bucket:'admin',   label:'Admin / Owner',           defScope:'club', defOn:true },
     { bucket:'analyst', label:'Analyst',                 defScope:'team', defOn:false }
   ];
-  let _notifSettings = {};
+  // Escape propio: `esc` vive en OTRO bloque <script> de esta misma página y acá no
+  // existe. Ya me pasó una vez en este archivo — el error no lo ve el navegador hasta
+  // que alguien abre la pestaña.
+  const _nfEsc = v => String(v == null ? '' : v)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+  /* Las alertas que el club puede repartir. Solo están acá las que los emisores de
+     verdad respetan (cmNotifRecipients en supabase-init, y submit_survey en la base
+     para la molestia): una casilla que no cambia nada es peor que no tener la casilla.
+     Los avisos de tarea no entran — son personales, van a quien se le asigna, y "qué
+     rol la recibe" no significa nada ahí. */
+  const NOTIF_TYPES = [
+    { key:'discomfort',        icon:'ti-alert-triangle', color:'var(--cm-danger)',
+      label:'Discomfort reported', sub:'Wellness & post-RPE' },
+    { key:'injury_reported',   icon:'ti-bandage',        color:'var(--cm-danger)',
+      label:'Injury reported',     sub:'A new injury is recorded' },
+    { key:'medical_clearance', icon:'ti-heart-check',    color:'var(--cm-success)',
+      label:'Medical clearance',   sub:'A player is cleared to train' },
+    { key:'physio_adaptation', icon:'ti-stethoscope',    color:'var(--cm-warning)',
+      label:'Adaptation required', sub:'Physio asks to adapt a session' },
+  ];
+
+  let _notifSettings = {};     // tipo → rol → { enabled, scope }
+  let _notifOpen     = null;   // qué bloque está desplegado
+  let _notifDirty    = false;
+
+  const _notifDefs = tipo =>
+    (window.CM_NOTIF_DEFAULTS && window.CM_NOTIF_DEFAULTS[tipo]) || {};
+
+  function _notifCfg(tipo, bucket) {
+    const guardado = (_notifSettings[tipo] || {})[bucket];
+    if (guardado) return guardado;
+    const def = _notifDefs(tipo)[bucket];
+    return { enabled: def !== false && def !== undefined, scope: (def === false || !def) ? 'team' : def };
+  }
+
+  function _notifMarcarSucio() {
+    _notifDirty = true;
+    const d = document.getElementById('notifDirty');
+    if (d) d.hidden = false;
+  }
+
+  // "Cuerpo médico, Admin y 2 más" — para saber a quién avisa sin tener que abrirlo.
+  function _notifResumen(tipo) {
+    const on = NOTIF_ROLES.filter(r => _notifCfg(tipo, r.bucket).enabled)
+                          .map(r => tt('admin.notif_role_' + r.bucket, r.label));
+    if (!on.length) return tt('admin.notif_nobody', 'Nobody');
+    if (on.length <= 2) return on.join(', ');
+    return tt('admin.notif_and_more', '{first} and {n} more', { first: on.slice(0, 2).join(', '), n: on.length - 2 });
+  }
+
+  function renderNotifBlocks() {
+    const host = document.getElementById('notifBlocks');
+    if (!host) return;
+    host.innerHTML = NOTIF_TYPES.map(t2 => {
+      const abierto = _notifOpen === t2.key;
+      const filas = NOTIF_ROLES.map(r => {
+        const cfg = _notifCfg(t2.key, r.bucket);
+        return `<tr>
+          <td>${_nfEsc(tt('admin.notif_role_' + r.bucket, r.label))}</td>
+          <td style="text-align:center">
+            <input type="checkbox" data-nf-on="${_nfEsc(t2.key)}|${_nfEsc(r.bucket)}" ${cfg.enabled ? 'checked' : ''}
+              style="width:16px;height:16px;accent-color:var(--cm-accent);cursor:pointer"></td>
+          <td>
+            <select data-nf-sc="${_nfEsc(t2.key)}|${_nfEsc(r.bucket)}" ${cfg.enabled ? '' : 'disabled'}
+              style="height:32px;width:100%;background:var(--cm-surface);color:var(--cm-fg);border:1px solid var(--cm-border);border-radius:6px;font:500 12.5px/1 var(--cm-font-sans);padding:0 8px">
+              <option value="club" ${cfg.scope === 'club' ? 'selected' : ''}>${_nfEsc(tt('admin.scope_whole_club', 'Whole club'))}</option>
+              <option value="team" ${cfg.scope === 'team' ? 'selected' : ''}>${_nfEsc(tt('admin.scope_own_teams', 'Only their categories'))}</option>
+            </select></td>
+        </tr>`;
+      }).join('');
+
+      return `<section style="border-bottom:1px solid var(--cm-border)">
+        <button type="button" data-nf-toggle="${_nfEsc(t2.key)}"
+          style="display:flex;align-items:center;gap:11px;width:100%;box-sizing:border-box;padding:13px 16px;
+                 background:none;border:0;cursor:pointer;text-align:left">
+          <i class="ti ${_nfEsc(t2.icon)}" style="font-size:17px;color:${t2.color};flex:none"></i>
+          <span style="min-width:0;flex:1">
+            <span style="display:block;font:600 13.5px/1.3 var(--cm-font-sans);color:var(--cm-fg-strong)">${_nfEsc(tt('admin.notif_t_' + t2.key, t2.label))}</span>
+            <span style="display:block;font:500 11.5px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);margin-top:2px">${_nfEsc(tt('admin.notif_s_' + t2.key, t2.sub))} · ${_nfEsc(_notifResumen(t2.key))}</span>
+          </span>
+          <i class="ti ti-chevron-down" style="font-size:16px;color:var(--cm-fg-faint);flex:none;transition:transform .15s${abierto ? ';transform:rotate(180deg)' : ''}"></i>
+        </button>
+        ${abierto ? `<table class="ad-table" style="margin-bottom:6px">
+          <thead><tr>
+            <th>${_nfEsc(tt('admin.notif_th_role', 'Role'))}</th>
+            <th style="width:90px;text-align:center">${_nfEsc(tt('admin.notif_th_receives', 'Receives'))}</th>
+            <th style="width:220px">${_nfEsc(tt('admin.notif_th_scope', 'Scope'))}</th>
+          </tr></thead><tbody>${filas}</tbody></table>` : ''}
+      </section>`;
+    }).join('');
+
+    host.querySelectorAll('[data-nf-toggle]').forEach(b => b.addEventListener('click', () => {
+      _notifOpen = (_notifOpen === b.dataset.nfToggle) ? null : b.dataset.nfToggle;
+      renderNotifBlocks();
+    }));
+    host.querySelectorAll('[data-nf-on]').forEach(ch => ch.addEventListener('change', () => {
+      const [tipo, bucket] = ch.dataset.nfOn.split('|');
+      const sel = host.querySelector(`[data-nf-sc="${tipo}|${bucket}"]`);
+      if (sel) sel.disabled = !ch.checked;
+      _notifSettings[tipo] = _notifSettings[tipo] || {};
+      _notifSettings[tipo][bucket] = { enabled: ch.checked, scope: sel ? sel.value : 'team' };
+      _notifMarcarSucio();
+      // Repintar solo el resumen: rehacer el bloque cerraría el desplegable abierto.
+      const cab = host.querySelector(`[data-nf-toggle="${tipo}"] span span:last-child`);
+      if (cab) {
+        const t3 = NOTIF_TYPES.find(x => x.key === tipo);
+        cab.textContent = tt('admin.notif_s_' + tipo, t3.sub) + ' · ' + _notifResumen(tipo);
+      }
+    }));
+    host.querySelectorAll('[data-nf-sc]').forEach(sel => sel.addEventListener('change', () => {
+      const [tipo, bucket] = sel.dataset.nfSc.split('|');
+      _notifSettings[tipo] = _notifSettings[tipo] || {};
+      _notifSettings[tipo][bucket] = { enabled: !sel.disabled, scope: sel.value };
+      _notifMarcarSucio();
+    }));
+  }
 
   async function loadNotifSettings() {
-    const body = document.getElementById('notifMatrixBody');
-    if (!body) return;
+    const host = document.getElementById('notifBlocks');
+    if (!host) return;
     try {
       const cid = await window.getClubId();
       const { data } = await window.sb.from('notification_settings')
-        .select('role, enabled, scope').eq('club_id', cid).eq('alert_type', 'discomfort');
+        .select('alert_type, role, enabled, scope').eq('club_id', cid)
+        .in('alert_type', NOTIF_TYPES.map(t2 => t2.key));
       _notifSettings = {};
-      (data || []).forEach(r => { _notifSettings[r.role] = { enabled: r.enabled, scope: r.scope }; });
-      body.innerHTML = NOTIF_ROLES.map(r => {
-        const cfg = _notifSettings[r.bucket] || { enabled: r.defOn, scope: r.defScope };
-        return `<tr>
-          <td>${tt('admin.notif_role_'+r.bucket, r.label)}</td>
-          <td style="text-align:center">
-            <input type="checkbox" id="nf_on_${r.bucket}" ${cfg.enabled?'checked':''}
-              onchange="document.getElementById('nf_sc_'+'${r.bucket}').disabled=!this.checked"
-              style="width:16px;height:16px;accent-color:var(--cm-accent);cursor:pointer">
-          </td>
-          <td>
-            <select id="nf_sc_${r.bucket}" ${cfg.enabled?'':'disabled'}
-              style="height:32px;width:100%;background:#fff;color:#0f172a;border:1px solid var(--cm-border);border-radius:6px;font:500 12.5px/1 var(--cm-font-sans);padding:0 8px">
-              <option value="club" ${cfg.scope==='club'?'selected':''}>${tt('admin.scope_whole_club','Whole club')}</option>
-              <option value="team" ${cfg.scope==='team'?'selected':''}>${tt('admin.scope_own_teams','Only their categories')}</option>
-            </select>
-          </td>
-        </tr>`;
-      }).join('');
+      (data || []).forEach(r => {
+        _notifSettings[r.alert_type] = _notifSettings[r.alert_type] || {};
+        _notifSettings[r.alert_type][r.role] = { enabled: r.enabled, scope: r.scope };
+      });
+      _notifDirty = false;
+      const d = document.getElementById('notifDirty'); if (d) d.hidden = true;
+      if (_notifOpen === null) _notifOpen = NOTIF_TYPES[0].key;
+      renderNotifBlocks();
     } catch (e) {
-      body.innerHTML = `<tr><td colspan="3" style="padding:20px;text-align:center;color:var(--cm-fg-muted)">${tt('admin.could_not_load','Could not load.')}</td></tr>`;
+      host.innerHTML = `<div style="padding:22px;text-align:center;color:var(--cm-fg-muted)">${_nfEsc(tt('admin.could_not_load', 'Could not load.'))}</div>`;
       console.warn('[Admin] notif settings:', e.message);
     }
   }
 
   async function saveNotifSettings(btn) {
-    btn.disabled = true; const old = btn.innerHTML; btn.innerHTML = tt('common.saving','Saving…');
+    btn.disabled = true; const old = btn.innerHTML; btn.innerHTML = tt('common.saving', 'Saving…');
     try {
       const cid = await window.getClubId();
-      const rows = NOTIF_ROLES.map(r => ({
-        club_id: cid, alert_type: 'discomfort', role: r.bucket,
-        enabled: document.getElementById('nf_on_' + r.bucket).checked,
-        scope: document.getElementById('nf_sc_' + r.bucket).value
+      // Se guardan las CUATRO alertas enteras, con el valor efectivo de cada rol: si
+      // solo se mandara lo tocado, el default quedaría implícito y cambiar un default
+      // mañana le movería la configuración al club por debajo.
+      const rows = [];
+      NOTIF_TYPES.forEach(t2 => NOTIF_ROLES.forEach(r => {
+        const cfg = _notifCfg(t2.key, r.bucket);
+        rows.push({ club_id: cid, alert_type: t2.key, role: r.bucket, enabled: cfg.enabled, scope: cfg.scope });
       }));
       const { error } = await window.sb.from('notification_settings')
         .upsert(rows, { onConflict: 'club_id,alert_type,role' });
-      if (error) { btn.innerHTML = tt('common.error','Error'); console.warn(error.message); }
-      else { btn.innerHTML = '✓ ' + tt('common.saved','Saved'); }
-    } catch (e) { btn.innerHTML = tt('common.error','Error'); console.warn(e.message); }
+      if (error) { btn.innerHTML = tt('common.error', 'Error'); console.warn(error.message); }
+      else {
+        btn.innerHTML = '✓ ' + tt('common.saved', 'Saved');
+        _notifDirty = false;
+        const d = document.getElementById('notifDirty'); if (d) d.hidden = true;
+      }
+    } catch (e) { btn.innerHTML = tt('common.error', 'Error'); console.warn(e.message); }
     setTimeout(() => { btn.innerHTML = old; btn.disabled = false; }, 2000);
   }
 

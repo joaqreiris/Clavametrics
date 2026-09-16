@@ -3456,10 +3456,14 @@ async function saveInjury() {
           es: { locale:'es-ES', title:n=>`Nueva lesión: ${n}`,     body:(t,s,r)=>`${t} · ${s}. Retorno estimado: ${r}.`, tbd:'sin definir', anon:'Un jugador' },
           pt: { locale:'pt-BR', title:n=>`Nova lesão: ${n}`,       body:(t,s,r)=>`${t} · ${s}. Retorno estimado: ${r}.`, tbd:'a definir',   anon:'Um jogador' },
         };
-        const recips = await window.cmStaffByBuckets(_clubId, ['admin', 'coach', 'sc', 'medical']);
+        // Los roles ya no van escritos acá: los decide el club desde Admin, y sin
+        // configuración el reparto es el mismo de siempre. El veto personal
+        // (alertInjury) lo sigue aplicando cmNotifRecipients.
+        const recips = await window.cmNotifRecipients(_clubId, 'injury_reported', {
+          teamId:    (newInj.players || _playersMap[player_id] || {}).team_id || null,
+          excludeId: _profile?.id || null,
+        });
         const rows = recips
-          .filter(p => p.id && p.id !== (_profile?.id || null))
-          .filter(p => !p.notification_settings || p.notification_settings.alertInjury !== false)
           .map(p => {
             const L   = NL[p.preferred_lang] || NL.en;
             const ret = expected_return ? new Date(expected_return).toLocaleDateString(L.locale, { day:'numeric', month:'short' }) : L.tbd;
@@ -3601,7 +3605,10 @@ async function confirmDischarge() {
       es: { locale:'es-ES', title:n=>`${n} recibió el alta médica`,           body:d=>`Alta médica confirmada. Disponible desde el ${d}.`,      anon:'Un jugador' },
       pt: { locale:'pt-BR', title:n=>`${n} recebeu alta médica`,              body:d=>`Alta médica confirmada. Disponível a partir de ${d}.`,   anon:'Um jogador' },
     };
-    const recips = await window.cmStaffByBuckets(_clubId, ['admin', 'coach', 'sc', 'medical']);
+    const recips = await window.cmNotifRecipients(_clubId, 'medical_clearance', {
+      teamId:    pl.team_id || null,
+      excludeId: _profile?.id || null,
+    });
     if (recips.length) {
       const { error: nErr } = await window.sb.from('notifications').insert(
         recips.map(p => {

@@ -1456,7 +1456,11 @@ async function sendCoachNotifications(treatmentId, playerId, adaptText) {
   const player = _allPlayers.find(p => p.id === playerId);
   const playerName = player ? `${player.first_name} ${player.last_name}` : tt('common.player','Player');
   const physioName = _profile?.full_name || tt('physio.physio_word','Physio');
-  const coachStaff = await window.cmStaffByBuckets(_clubId, ['admin', 'coach', 'sc']);
+  // Igual que en Lesiones: quién recibe lo decide el club desde Admin. Sin configurar,
+  // los mismos tres roles de siempre.
+  const coachStaff = await window.cmNotifRecipients(_clubId, 'physio_adaptation', {
+    excludeId: (window.__cm_profile && window.__cm_profile.id) || null,
+  });
   const todayFmt   = new Date().toLocaleDateString(window.CM_I18N?.current || 'en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 
   const ops = [

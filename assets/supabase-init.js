@@ -1201,6 +1201,91 @@
     } catch (_) { return []; }
   };
 
+  /* ── Quién recibe cada alerta ──────────────────────────────────────────────
+     Hasta ahora cada pantalla decidía por su cuenta a qué roles avisaba, con la lista
+     escrita a mano en el propio archivo: Lesiones avisaba a cuatro, Fisio a tres, el
+     wellness a cuatro con alcance por equipo. El panel de Admin configuraba UNO de
+     esos avisos —la molestia— y los demás lo ignoraban, así que tocar esa pantalla no
+     cambiaba nada para el resto.
+
+     Acá está la decisión, una sola vez. CM_NOTIF_DEFAULTS es lo que hacía cada
+     pantalla antes: si el club no configuró nada, el comportamiento es idéntico.
+
+     `scope` decide a quién alcanza: 'club' recibe de cualquier categoría, 'team' solo
+     de las suyas. Sin teamId el alcance no aplica y reciben todos los del rol — un
+     aviso sin categoría (un cumpleaños, un miembro nuevo) no es de nadie en concreto.
+  */
+  window.CM_NOTIF_DEFAULTS = {
+    // rol → alcance por defecto. `false` = ese rol no lo recibe salvo que lo activen.
+    discomfort:              { medical:'club', admin:'club', sc:'team',  coach:'team', analyst:false },
+    injury_reported:         { medical:'club', admin:'club', sc:'team',  coach:'team', analyst:false },
+    medical_clearance:       { medical:'club', admin:'club', sc:'team',  coach:'team', analyst:false },
+    physio_adaptation:       { medical:false,  admin:'club', sc:'team',  coach:'team', analyst:false },
+    training_plan_published: { medical:false,  admin:'club', sc:'team',  coach:'team', analyst:'team' },
+    player_birthday:         { medical:false,  admin:'club', sc:'team',  coach:'team', analyst:false },
+    member_joined:           { medical:false,  admin:'club', sc:false,   coach:false,  analyst:false },
+  };
+
+  // Preferencia PERSONAL que ya existía en el drawer de ajustes (profiles.notification_settings).
+  // Es un veto del individuo sobre lo que el club habilitó: el club decide qué roles
+  // reciben, la persona puede silenciarlo para sí misma. No al revés.
+  const _NOTIF_PREF_KEY = { injury_reported: 'alertInjury', task_assigned: 'alertTask', training_plan_published: 'alertSession' };
+
+  /* Devuelve los perfiles que deben recibir `alertType`.
+     opts: { teamId, excludeId }  → teamId acota por alcance; excludeId saca a quien
+     dispara la acción, que no necesita que le avisen de lo que acaba de hacer. */
+  window.cmNotifRecipients = async function (clubId, alertType, opts) {
+    opts = opts || {};
+    const defs = window.CM_NOTIF_DEFAULTS[alertType];
+    if (!clubId || !defs) return [];
+    try {
+      // Lo que el club configuró, si configuró algo.
+      let cfg = {};
+      try {
+        const { data } = await window.sb.from('notification_settings')
+          .select('role, enabled, scope').eq('club_id', clubId).eq('alert_type', alertType);
+        (data || []).forEach(r => { cfg[r.role] = r; });
+      } catch (_) { /* sin configuración, mandan los defaults */ }
+
+      const activos = Object.keys(defs).filter(bucket => {
+        const c = cfg[bucket];
+        if (c) return c.enabled === true;
+        return defs[bucket] !== false;
+      });
+      if (!activos.length) return [];
+
+      const staff = await window.cmStaffByBuckets(clubId, activos);
+      const alcance = bucket => (cfg[bucket] && cfg[bucket].scope) || defs[bucket] || 'club';
+
+      // Alcance por categoría: solo hace falta si el aviso viene de una, y solo para
+      // quien no tiene alcance de club.
+      let miembrosPorEquipo = null;
+      if (opts.teamId) {
+        const necesita = activos.some(b => alcance(b) === 'team');
+        if (necesita) {
+          try {
+            const { data } = await window.sb.from('member_teams')
+              .select('profile_id').eq('team_id', opts.teamId);
+            miembrosPorEquipo = new Set((data || []).map(r => r.profile_id));
+          } catch (_) { miembrosPorEquipo = null; }   // sin datos, no se excluye a nadie
+        }
+      }
+
+      const prefKey = _NOTIF_PREF_KEY[alertType];
+      return staff.filter(p => {
+        if (!p.id) return false;
+        if (opts.excludeId && p.id === opts.excludeId) return false;
+        if (prefKey && p.notification_settings && p.notification_settings[prefKey] === false) return false;
+        const bucket = window.cmRoleBucket(p.role);
+        const b2     = p.club_role ? window.cmRoleBucket(p.club_role) : null;
+        const suBucket = activos.includes(bucket) ? bucket : (activos.includes(b2) ? b2 : null);
+        if (!suBucket) return false;
+        if (alcance(suBucket) === 'team' && miembrosPorEquipo) return miembrosPorEquipo.has(p.id);
+        return true;
+      });
+    } catch (_) { return []; }
+  };
+
   // ── GPS per-minute profile: catálogo de métricas + preferencia del usuario ──
   // Las columnas vienen de v_exercise_gps_profile. `mult` lleva total_distance de
   // Preferencia compartida entre pantallas (Exercises Library + Drill Designer) vía
