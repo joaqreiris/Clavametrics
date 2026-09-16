@@ -4245,20 +4245,20 @@ async function _mountSavedBuilderCards(clubId) {
   const REPORT_TYPES = { ind:'ind', grp:'grp', mind:'mind', mgrp:'mgrp', mc:'mc' };
 
   try {
-  for (const view of VIEWS) {
+  const _montarVista = async (view) => {
     const grid = document.querySelector(`.gp-view[data-view="${view}"] .gp-grid`);
-    if (!grid) continue;
+    if (!grid) return;
 
     let cards;
     try {
       cards = await window.loadCardsForView(clubId, REPORT_TYPES[view], window.sb);
-    } catch (e) { console.warn('_mountSavedBuilderCards:', view, e); continue; }
+    } catch (e) { console.warn('_mountSavedBuilderCards:', view, e); return; }
 
-    if (!cards?.length) continue;
+    if (!cards?.length) return;
 
     // filter to only 'builder' source cards (catalog defaults shown via old HTML)
     const builderCards = cards.filter(c => c.source === 'builder');
-    if (!builderCards.length) continue;
+    if (!builderCards.length) return;
 
     // Free-canvas coords for these builder cards from the saved layout. They mount HERE,
     // async, possibly AFTER applyDefaultLayoutGeneric already ran — so without re-applying
@@ -4342,7 +4342,17 @@ async function _mountSavedBuilderCards(clubId) {
     // cards keep dashboard_cards append order — and late mounts (after the 1500ms reveal race) land
     // scrambled. Re-sort the full grid by the user's saved gps_dashboard_layouts order.
     if (_lay?.length) _reorderGrid(grid, _lay);
-  }
+  };
+  // La vista que el usuario ESTA MIRANDO se monta primero y sola; las otras cuatro van despues,
+  // juntas. Antes las cinco iban en fila india: cada una esperaba las consultas de la anterior,
+  // asi que el arranque pagaba cinco rondas de ida y vuelta antes de mostrar nada — y el usuario
+  // mira una sola. Lanzarlas las cinco a la vez tampoco sirve: la avalancha de peticiones deja
+  // sin cupo justo a la que se ve (el navegador abre ~6 conexiones por dominio). Se montan todas
+  // igual, y cada una escribe solo en SU grid, asi que el resultado final no cambia.
+  const _activa = document.querySelector('.gp-view.is-on')?.dataset.view;
+  const _orden = VIEWS.includes(_activa) ? [_activa, ...VIEWS.filter(v => v !== _activa)] : VIEWS;
+  await _montarVista(_orden[0]);
+  await Promise.all(_orden.slice(1).map(_montarVista));
   } finally {
     window.__gptMountingCards = false;
   }
