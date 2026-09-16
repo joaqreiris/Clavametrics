@@ -445,6 +445,7 @@
                una pestaña es peor que una pestaña sin número. Lleva la marca de que no
                está lista para que nadie la abra esperando encontrarla. -->
           <button class="ad-tab" data-panel="sections"><i class="ti ti-layout-grid"></i><span data-i18n="admin.tab_sections">Sections</span></button>
+          <button class="ad-tab" data-panel="rules"><i class="ti ti-adjustments"></i><span data-i18n="admin.tab_rules">Club settings</span></button>
           <button class="ad-tab" data-panel="integrations"><i class="ti ti-plug"></i><span data-i18n="admin.tab_integrations">Integrations</span></button>
         </div>
       </div>
@@ -722,72 +723,30 @@
             </div>
           </div>
 
-          <!-- Role access templates card -->
-          <div class="ad-card is-collapsed">
-            <div class="ad-card-h">
-              <button class="ad-collapse" onclick="this.closest('.ad-card').classList.toggle('is-collapsed')" data-i18n-attr="title:admin.collapse_expand" title="Collapse/expand"><i class="ti ti-chevron-down" style="font-size:16px"></i></button>
-              <h3 data-i18n="admin.role_templates_title">Role access templates</h3>
-              <span class="sub" data-i18n="admin.role_templates_sub">Default pages per role on join</span>
-            </div>
-            <div class="ad-pending" id="adRoleTemplates"></div>
-          </div>
-
         </div>
 
         <!-- Right: module gates + recent audit -->
         <div>
-          <!-- Competition rules: how many sanctions cost a player a match. This is a LEAGUE
-               rule, not a sport one — Cambodia suspends at 3 yellows where most leagues use
-               5 — so it lives here and not in the sport pack. -->
-          <div class="ad-card" id="adLeagueCard">
-            <div class="ad-card-h">
-              <h3 data-i18n="admin.league_rules_title">Competition rules</h3>
-              <span class="sub" data-i18n="admin.league_rules_sub">sanctions &amp; suspensions</span>
-            </div>
-            <div style="padding:4px 2px 2px">
-              <div style="font:400 11px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:10px" data-i18n="admin.league_rules_help">How many sanctions a player can pick up before missing a match. The app warns the staff one sanction before the suspension, and again when it happens.</div>
-              <div class="cm-field" style="margin-bottom:10px">
-                <label class="cm-label" for="adLeagueName" data-i18n="admin.league_name">Competition</label>
-                <input id="adLeagueName" class="cm-input" placeholder="e.g. Cambodian Premier League" data-i18n-ph="admin.league_name_ph">
-              </div>
-              <div id="adLeagueRules"><!-- one row per accumulating sanction (renderLeagueRules) --></div>
-              <div class="cm-field" style="margin-top:10px">
-                <label class="cm-label" for="adLeagueReset" data-i18n="admin.league_reset">Counters reset on</label>
-                <input type="date" id="adLeagueReset" class="cm-input">
-                <span class="cm-hint" data-i18n="admin.league_reset_hint">Sanctions before this date stop counting. Leave empty to count the whole history.</span>
-              </div>
-              <button class="cm-btn is-sm" id="adLeagueSave" style="margin-top:10px"><i class="ti ti-device-floppy" style="font-size:14px"></i> <span data-i18n="common.save">Save</span></button>
-              <span id="adLeagueMsg" style="margin-left:8px;font:500 12px/1 var(--cm-font-sans)"></span>
-            </div>
-          </div>
 
-          <div class="ad-card" id="adSharingCard">
-            <div class="ad-card-h">
-              <h3 data-i18n="admin.exercise_sharing_title">Exercise sharing</h3>
-              <span class="sub" data-i18n="admin.exercise_sharing_sub">first team</span>
-            </div>
-            <div style="padding:4px 2px 2px">
-              <div style="font:600 12px/1.3 var(--cm-font-sans);color:var(--cm-fg-strong);margin-bottom:4px" data-i18n="admin.first_team_label">First team</div>
-              <div style="font:400 11px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:8px" data-i18n="admin.first_team_help">The senior team — used as the club's default category. Exercises are never shared between categories: each one stays in the team it was created in.</div>
-              <select id="adFirstTeam" class="ad-teamsel" style="width:100%;height:36px"></select>
-            </div>
-          </div>
 
-          <div class="ad-card">
-            <div class="ad-card-h">
-              <h3 data-i18n="admin.recent_activity_title">Recent activity</h3>
-              <span class="sub" data-i18n="admin.recent_activity_sub">audit log · last actions</span>
-              <div class="right"><button class="cm-btn is-ghost is-sm"><span data-i18n="admin.view_all">View all</span> <i class="ti ti-arrow-up-right" style="font-size:14px"></i></button></div>
-            </div>
-            <div class="ad-log" id="adLogContainer">
-              <!-- Populated by renderAuditLog() from audit_log table -->
-            </div>
-          </div>
+
         </div>
       </div>
       </div><!-- /panel members -->
 
       <div class="ad-panel" data-panel="roles">
+        <!-- Las plantillas de acceso por rol vivían en "Miembros". Definen qué ve cada
+             ROL al entrar: su sitio es esta pestaña, no la lista de personas. -->
+          <!-- Role access templates card -->
+        <div class="ad-card" style="margin-top:16px">
+          <div class="ad-card-h">
+            <button class="ad-collapse" onclick="this.closest('.ad-card').classList.toggle('is-collapsed')" data-i18n-attr="title:admin.collapse_expand" title="Collapse/expand"><i class="ti ti-chevron-down" style="font-size:16px"></i></button>
+            <h3 data-i18n="admin.role_templates_title">Role access templates</h3>
+            <span class="sub" data-i18n="admin.role_templates_sub">Default pages per role on join</span>
+          </div>
+          <div class="ad-pending" id="adRoleTemplates"></div>
+        </div>
+
         <div class="ad-card" style="margin-top:16px">
           <div class="ad-card-h"><h3 data-i18n="admin.tab_roles">Roles</h3><span class="sub" data-i18n="admin.roles_sub">7 roles · per-section access is set in Sections</span></div>
           <div id="adRolesPanel">
@@ -839,6 +798,48 @@
           </div>
         </div><!-- /card notificaciones -->
       </div><!-- /panel notifications -->
+
+      <!-- Reglas de competición y compartir ejercicios estaban en "Miembros" porque no
+           había dónde ponerlas: no son gente, no son control. Son ajustes deportivos
+           del club, y ahora tienen su pestaña. -->
+      <div class="ad-panel" data-panel="rules">
+        <!-- Competition rules: how many sanctions cost a player a match. This is a LEAGUE
+             rule, not a sport one — Cambodia suspends at 3 yellows where most leagues use
+             5 — so it lives here and not in the sport pack. -->
+        <div class="ad-card" id="adLeagueCard">
+          <div class="ad-card-h">
+            <h3 data-i18n="admin.league_rules_title">Competition rules</h3>
+            <span class="sub" data-i18n="admin.league_rules_sub">sanctions &amp; suspensions</span>
+          </div>
+          <div style="padding:4px 2px 2px">
+            <div style="font:400 11px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:10px" data-i18n="admin.league_rules_help">How many sanctions a player can pick up before missing a match. The app warns the staff one sanction before the suspension, and again when it happens.</div>
+            <div class="cm-field" style="margin-bottom:10px">
+              <label class="cm-label" for="adLeagueName" data-i18n="admin.league_name">Competition</label>
+              <input id="adLeagueName" class="cm-input" placeholder="e.g. Cambodian Premier League" data-i18n-ph="admin.league_name_ph">
+            </div>
+            <div id="adLeagueRules"><!-- one row per accumulating sanction (renderLeagueRules) --></div>
+            <div class="cm-field" style="margin-top:10px">
+              <label class="cm-label" for="adLeagueReset" data-i18n="admin.league_reset">Counters reset on</label>
+              <input type="date" id="adLeagueReset" class="cm-input">
+              <span class="cm-hint" data-i18n="admin.league_reset_hint">Sanctions before this date stop counting. Leave empty to count the whole history.</span>
+            </div>
+            <button class="cm-btn is-sm" id="adLeagueSave" style="margin-top:10px"><i class="ti ti-device-floppy" style="font-size:14px"></i> <span data-i18n="common.save">Save</span></button>
+            <span id="adLeagueMsg" style="margin-left:8px;font:500 12px/1 var(--cm-font-sans)"></span>
+          </div>
+        </div>
+
+        <div class="ad-card" id="adSharingCard">
+          <div class="ad-card-h">
+            <h3 data-i18n="admin.exercise_sharing_title">Exercise sharing</h3>
+            <span class="sub" data-i18n="admin.exercise_sharing_sub">first team</span>
+          </div>
+          <div style="padding:4px 2px 2px">
+            <div style="font:600 12px/1.3 var(--cm-font-sans);color:var(--cm-fg-strong);margin-bottom:4px" data-i18n="admin.first_team_label">First team</div>
+            <div style="font:400 11px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:8px" data-i18n="admin.first_team_help">The senior team — used as the club's default category. Exercises are never shared between categories: each one stays in the team it was created in.</div>
+            <select id="adFirstTeam" class="ad-teamsel" style="width:100%;height:36px"></select>
+          </div>
+        </div>
+      </div>
 
       <div class="ad-panel" data-panel="integrations">
         <h1 style="margin:0 0 6px" data-i18n="admin.gps_integrations">GPS integrations</h1>
@@ -898,6 +899,18 @@
       </div>
 
       <div class="ad-panel" data-panel="audit">
+        <!-- Estaba en "Miembros", donde competía con la lista de personas. Es el mismo
+             registro que la tabla de abajo, en corto: su sitio es esta pestaña. -->
+        <div class="ad-card" style="margin-top:16px">
+          <div class="ad-card-h">
+            <h3 data-i18n="admin.recent_activity_title">Recent activity</h3>
+            <span class="sub" data-i18n="admin.recent_activity_sub">audit log · last actions</span>
+            <div class="right"><button class="cm-btn is-ghost is-sm"><span data-i18n="admin.view_all">View all</span> <i class="ti ti-arrow-up-right" style="font-size:14px"></i></button></div>
+          </div>
+          <div class="ad-log" id="adLogContainer">
+            <!-- Populated by renderAuditLog() from audit_log table -->
+          </div>
+        </div>
         <div class="ad-card" style="margin-top:16px">
           <div class="ad-card-h"><h3 data-i18n="admin.tab_audit">Audit log</h3><span class="sub" data-i18n="admin.audit_full_sub">last 100 club actions</span></div>
           <div id="adAuditFull" class="ad-log">
