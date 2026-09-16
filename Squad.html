@@ -516,10 +516,10 @@
           </select>
         </div>
         <div class="meta">
-          <button class="cm-btn is-outline is-sm" id="sqImportBtn"><i class="ti ti-file-import" style="font-size:14px"></i><span data-i18n="squad.import_csv">Import CSV</span></button>
+          <button class="cm-btn is-outline is-sm" id="sqImportBtn"><i class="ti ti-file-import" style="font-size:14px"></i><span data-i18n="squad.import_file">Import</span></button>
           <button class="cm-btn is-outline is-sm" id="sqExportBtn"><i class="ti ti-file-export" style="font-size:14px"></i><span data-i18n="common.export">Export</span></button>
           <button class="cm-btn is-primary is-sm" id="sqAddPlayerBtn"><i class="ti ti-plus" style="font-size:14px"></i><span data-i18n="squad.add_player">Add player</span></button>
-          <input type="file" id="sqImportFile" accept=".csv" style="display:none">
+          <input type="file" id="sqImportFile" accept=".csv,.tsv,.txt,.xlsx,.xls" style="display:none">
         </div>
       </header>
 
@@ -761,7 +761,7 @@
 <div class="sq-modal-backdrop" id="sqImportBackdrop">
   <div class="sq-modal" style="width:660px" role="dialog" aria-modal="true">
     <div class="sq-modal-head">
-      <h2 data-i18n="squad.import_players_from_csv">Import players from CSV</h2>
+      <h2 data-i18n="squad.import_players_from_file">Import players from a file</h2>
       <button class="sq-modal-close" id="sqImportClose" title="Close" aria-label="Close" data-i18n-attr="title:squad.close;aria-label:squad.close"><i class="ti ti-x"></i></button>
     </div>
     <div class="sq-modal-body">
@@ -1430,6 +1430,45 @@ function paintDobGap() {
   });
 }
 
+/* Un plantel vacío NO es lo mismo que un filtro sin resultados, y hasta ahora los dos
+   decían "No players found." en gris, sin nada que hacer. Para un club que acaba de
+   entrar, esa pantalla es el final del camino: es donde se quedaron dos de los cuatro
+   clubes creados con el asistente. */
+function emptyStateHTML() {
+  // Con jugadores cargados pero ninguno visible, el problema es el filtro, no el club.
+  if (_allPlayers.length) {
+    return `<p style="color:var(--cm-fg-muted);padding:24px">${esc(tt('squad.empty_filtered','No players match this filter.'))}</p>`;
+  }
+  return `
+    <div style="grid-column:1/-1;display:flex;flex-direction:column;align-items:center;gap:6px;
+                padding:56px 24px;text-align:center">
+      <i class="ti ti-users" style="font-size:30px;color:var(--cm-fg-faint)"></i>
+      <div style="font:600 15px/1.3 var(--cm-font-sans);color:var(--cm-fg-strong);margin-top:6px">
+        ${esc(tt('squad.empty_title','No players yet'))}</div>
+      <div style="font:var(--cm-body-sm);color:var(--cm-fg-muted);max-width:42ch;line-height:1.55">
+        ${esc(tt('squad.empty_body','Import your squad from a CSV or Excel file, or add players one by one.'))}</div>
+      <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;justify-content:center">
+        <button class="cm-btn is-primary is-sm" data-empty-action="import">
+          <i class="ti ti-file-import" style="font-size:14px"></i>
+          <span>${esc(tt('squad.import_file','Import'))}</span></button>
+        <button class="cm-btn is-outline is-sm" data-empty-action="add">
+          <i class="ti ti-plus" style="font-size:14px"></i>
+          <span>${esc(tt('squad.add_player','Add player'))}</span></button>
+      </div>
+    </div>`;
+}
+
+// Los dos botones reutilizan los de la cabecera: un solo camino de alta, no dos que se
+// puedan desincronizar.
+function wireEmptyState(root) {
+  root.querySelectorAll('[data-empty-action]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.emptyAction === 'import' ? 'sqImportBtn' : 'sqAddPlayerBtn';
+      document.getElementById(id)?.click();
+    });
+  });
+}
+
 function renderTable() {
   const tbody = document.getElementById('sqTbody');
   const foot  = document.getElementById('sqTableFoot');
@@ -1503,6 +1542,15 @@ function renderTable() {
       </tr>`;
     });
   });
+
+  // Sin filas la tabla se quedaba en blanco, sin decir nada: ni "no hay jugadores" ni
+  // "el filtro no encuentra". Mismo bloque que en la vista de tarjetas.
+  if (!filtered.length) {
+    tbody.innerHTML = `<tr><td colspan="99" style="padding:0">${emptyStateHTML()}</td></tr>`;
+    wireEmptyState(tbody);
+    if (foot) foot.innerHTML = '';
+    return;
+  }
 
   tbody.innerHTML = html;
   // Reset select-all when table re-renders (filter/search change)
@@ -2682,45 +2730,6 @@ async function reloadPlayers() {
     });
   }
 
-  /* Un plantel vacío NO es lo mismo que un filtro sin resultados, y hasta ahora los dos
-     decían "No players found." en gris, sin nada que hacer. Para un club que acaba de
-     entrar, esa pantalla es el final del camino: es donde se quedaron dos de los cuatro
-     clubes creados con el asistente. */
-  function emptyStateHTML() {
-    // Con jugadores cargados pero ninguno visible, el problema es el filtro, no el club.
-    if (_allPlayers.length) {
-      return `<p style="color:var(--cm-fg-muted);padding:24px">${esc(tt('squad.empty_filtered','No players match this filter.'))}</p>`;
-    }
-    return `
-      <div style="grid-column:1/-1;display:flex;flex-direction:column;align-items:center;gap:6px;
-                  padding:56px 24px;text-align:center">
-        <i class="ti ti-users" style="font-size:30px;color:var(--cm-fg-faint)"></i>
-        <div style="font:600 15px/1.3 var(--cm-font-sans);color:var(--cm-fg-strong);margin-top:6px">
-          ${esc(tt('squad.empty_title','No players yet'))}</div>
-        <div style="font:var(--cm-body-sm);color:var(--cm-fg-muted);max-width:42ch;line-height:1.55">
-          ${esc(tt('squad.empty_body','Import your squad from a CSV or Excel file, or add players one by one.'))}</div>
-        <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;justify-content:center">
-          <button class="cm-btn is-primary is-sm" data-empty-action="import">
-            <i class="ti ti-file-import" style="font-size:14px"></i>
-            <span>${esc(tt('squad.import_file','Import'))}</span></button>
-          <button class="cm-btn is-outline is-sm" data-empty-action="add">
-            <i class="ti ti-plus" style="font-size:14px"></i>
-            <span>${esc(tt('squad.add_player','Add player'))}</span></button>
-        </div>
-      </div>`;
-  }
-
-  // Los dos botones reutilizan los de la cabecera: un solo camino de alta, no dos que se
-  // puedan desincronizar.
-  function wireEmptyState(root) {
-    root.querySelectorAll('[data-empty-action]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const id = btn.dataset.emptyAction === 'import' ? 'sqImportBtn' : 'sqAddPlayerBtn';
-        document.getElementById(id)?.click();
-      });
-    });
-  }
-
   function renderCards() {
     const grid = document.getElementById('sqCardsGrid');
     if (!grid) return;
@@ -2858,7 +2867,7 @@ async function reloadPlayers() {
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
   });
 
-  // ── Import CSV ─────────────────────────────────────────────────
+  // ── Import: CSV / Excel ────────────────────────────────────────
   const IMPORT_COLS = ['first_name','last_name','number','position','date_of_birth','nationality','height','weight','dominant_foot'];
 
   // Map sanitized CSV headers → canonical column. Accepts common export aliases so we
@@ -3320,53 +3329,106 @@ async function reloadPlayers() {
     await reloadPlayers();
   }
 
+  // ── Lectura del archivo ──────────────────────────────────────────────────
+  // Un club que empieza exporta de Excel, no un CSV. Obligarlo a "Guardar como CSV"
+  // antes de poder cargar su plantilla es la fricción que más caro sale: es el primer
+  // paso real dentro del producto. SheetJS se trae SOLO cuando hace falta (pesa ~900 KB)
+  // y desde la misma URL que usa Annual Planner, así el service worker la sirve del
+  // caché si el club ya pasó por ahí.
+  const SQ_XLSX_SRC = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+  let _xlsxLoading = null;
+  function _impLoadXlsx(){
+    if (window.XLSX) return Promise.resolve(window.XLSX);
+    if (_xlsxLoading) return _xlsxLoading;
+    _xlsxLoading = new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = SQ_XLSX_SRC;
+      s.onload  = () => window.XLSX ? resolve(window.XLSX) : reject(new Error('xlsx'));
+      s.onerror = () => { _xlsxLoading = null; reject(new Error('xlsx')); };
+      document.head.appendChild(s);
+    });
+    return _xlsxLoading;
+  }
+
+  // Excel → matriz de celdas, el MISMO formato que devuelve Papa sin header, para que
+  // los dos formatos compartan detección de cabecera, alias y validación.
+  // cellDates + dateNF: una celda con fecha real de Excel sale ya en ISO, así que para
+  // esos archivos el selector DD/MM vs MM/DD no tiene nada que adivinar.
+  async function _impReadXlsx(file){
+    const X  = await _impLoadXlsx();
+    const wb = X.read(await file.arrayBuffer(), { type:'array', cellDates:true });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    if (!ws) return [];
+    return X.utils.sheet_to_json(ws, { header:1, raw:false, defval:'', dateNF:'yyyy-mm-dd' });
+  }
+
+  // Matriz de celdas → filas canónicas + apertura del modal. Compartido por CSV y Excel.
+  function _impFromMatrix(rawMatrix){
+    const matrix = (rawMatrix || []).filter(row => Array.isArray(row) && row.some(c => String(c||'').trim()));
+    if (!matrix.length) { showToast(tt('squad.csv_empty','CSV empty or no matching columns (expected: first_name, last_name, number…).')); return; }
+
+    // Header row = first row where ≥2 cells map to a known column (or alias).
+    let hdrIdx = -1;
+    for (let i = 0; i < matrix.length; i++){
+      const mapped = new Set(matrix[i].map(c => IMPORT_HEADER_ALIASES[_impHeader(c)]).filter(Boolean));
+      if (mapped.size >= 2){ hdrIdx = i; break; }
+    }
+    if (hdrIdx === -1){
+      // Nothing recognizable → surface the first non-empty row's cells as "found headers".
+      const found = (matrix[0] || []).map(c => String(c||'').trim()).filter(Boolean).join(', ');
+      if (found) showToast(tt('squad.csv_no_columns', `No columns matched. Found headers: ${found}. Expected: first_name, last_name, number, position, date_of_birth, nationality, height, weight, dominant_foot (aliases like Name, DOB, Shirt, Pos, Foot, Country, cm, kg also work).`, { found }));
+      else showToast(tt('squad.csv_empty','CSV empty or no matching columns (expected: first_name, last_name, number…).'));
+      return;
+    }
+
+    const headers  = matrix[hdrIdx].map(_impHeader);
+    const dataRows = matrix.slice(hdrIdx + 1);
+    const rawRows = dataRows.map(cells => {
+      const canon = {};
+      headers.forEach((h, i) => {
+        const key = IMPORT_HEADER_ALIASES[h];
+        if (!key) return;
+        const val = cells[i];
+        if (key === 'name') canon.name = (canon.name ? canon.name + ' ' : '') + (val || '');
+        else if (canon[key] == null || canon[key] === '') canon[key] = val;
+      });
+      return canon;
+    }).filter(o => Object.values(o).some(v => String(v||'').trim()));
+
+    if (!rawRows.length) { showToast(tt('squad.csv_empty','CSV empty or no matching columns (expected: first_name, last_name, number…).')); return; }
+    _importSkippedHeaderRows = hdrIdx;   // title/metadata rows above the real header
+    openImportModal(rawRows);
+  }
+
   document.getElementById('sqImportBtn')?.addEventListener('click', () => document.getElementById('sqImportFile').click());
-  document.getElementById('sqImportFile')?.addEventListener('change', e => {
-    const file = e.target.files?.[0];
+  document.getElementById('sqImportFile')?.addEventListener('change', async e => {
+    const input = e.target;
+    const file  = input.files?.[0];
     if (!file) return;
-    if (!window.Papa) { showToast(tt('squad.papaparse_not_loaded','CSV parser not loaded — reload the page and try again.')); e.target.value=''; return; }
+    // El input se limpia SIEMPRE al terminar: sin esto, elegir el mismo archivo dos veces
+    // seguidas (típico al corregir la planilla y reintentar) no dispara `change`.
+    const ext = (file.name.split('.').pop() || '').toLowerCase();
+
+    if (ext === 'xlsx' || ext === 'xls'){
+      try {
+        _impFromMatrix(await _impReadXlsx(file));
+      } catch (err) {
+        showToast(err && err.message === 'xlsx'
+          ? tt('squad.xlsx_not_loaded','Excel support could not be loaded — check your connection and try again.')
+          : tt('squad.xlsx_parse_error','Could not read the Excel file.'));
+      }
+      input.value = '';
+      return;
+    }
+
+    if (!window.Papa) { showToast(tt('squad.papaparse_not_loaded','CSV parser not loaded — reload the page and try again.')); input.value=''; return; }
     // Parse WITHOUT header first so we can locate the real header row. Excel/Sheets exports
     // often carry a title/metadata/blank row above the actual column headers. Papa still
     // strips the BOM and auto-detects the delimiter ( , ; \t | ) reading the File directly.
     window.Papa.parse(file, {
       header: false, skipEmptyLines: 'greedy', delimiter: '',
-      complete: (res) => {
-        const matrix = (res.data || []).filter(row => Array.isArray(row) && row.some(c => String(c||'').trim()));
-        if (!matrix.length) { showToast(tt('squad.csv_empty','CSV empty or no matching columns (expected: first_name, last_name, number…).')); e.target.value=''; return; }
-
-        // Header row = first row where ≥2 cells map to a known column (or alias).
-        let hdrIdx = -1;
-        for (let i = 0; i < matrix.length; i++){
-          const mapped = new Set(matrix[i].map(c => IMPORT_HEADER_ALIASES[_impHeader(c)]).filter(Boolean));
-          if (mapped.size >= 2){ hdrIdx = i; break; }
-        }
-        if (hdrIdx === -1){
-          // Nothing recognizable → surface the first non-empty row's cells as "found headers".
-          const found = (matrix[0] || []).map(c => String(c||'').trim()).filter(Boolean).join(', ');
-          if (found) showToast(tt('squad.csv_no_columns', `No columns matched. Found headers: ${found}. Expected: first_name, last_name, number, position, date_of_birth, nationality, height, weight, dominant_foot (aliases like Name, DOB, Shirt, Pos, Foot, Country, cm, kg also work).`, { found }));
-          else showToast(tt('squad.csv_empty','CSV empty or no matching columns (expected: first_name, last_name, number…).'));
-          e.target.value=''; return;
-        }
-
-        const headers  = matrix[hdrIdx].map(_impHeader);
-        const dataRows = matrix.slice(hdrIdx + 1);
-        const rawRows = dataRows.map(cells => {
-          const canon = {};
-          headers.forEach((h, i) => {
-            const key = IMPORT_HEADER_ALIASES[h];
-            if (!key) return;
-            const val = cells[i];
-            if (key === 'name') canon.name = (canon.name ? canon.name + ' ' : '') + (val || '');
-            else if (canon[key] == null || canon[key] === '') canon[key] = val;
-          });
-          return canon;
-        }).filter(o => Object.values(o).some(v => String(v||'').trim()));
-
-        if (!rawRows.length) { showToast(tt('squad.csv_empty','CSV empty or no matching columns (expected: first_name, last_name, number…).')); e.target.value=''; return; }
-        _importSkippedHeaderRows = hdrIdx;   // title/metadata rows above the real header
-        openImportModal(rawRows);
-      },
-      error: () => showToast(tt('squad.csv_parse_error','Could not read the CSV file.')),
+      complete: (res) => { _impFromMatrix(res.data || []); input.value = ''; },
+      error: () => { showToast(tt('squad.csv_parse_error','Could not read the CSV file.')); input.value = ''; },
     });
   });
   document.getElementById('sqImportSkipExisting')?.addEventListener('change', () => { if (_importRows.length) renderImportPreview(); });

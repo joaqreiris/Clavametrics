@@ -388,6 +388,7 @@
      paquete podía romper la app sin que tocáramos nada. -->
 <script src="assets/vendor/supabase-js-2.112.4.min.js"></script>
 <script src="assets/supabase-init.js"></script>
+<script src="assets/legal.js"></script>
 </head>
 <body class="cm">
 
@@ -587,7 +588,7 @@
 
         <label class="reg-terms">
           <input type="checkbox" id="terms" required>
-          <span data-i18n-html="register.consent">I agree to the <a href="#">Terms of Service</a> and <a href="#">Privacy Policy</a>, and confirm I'm authorized to register this organization.</span>
+          <span data-i18n-html="register.consent">I agree to the <a href="Terms-en.html" target="_blank" rel="noopener">Terms of Service</a> and <a href="Privacy-en.html" target="_blank" rel="noopener">Privacy Policy</a>, and confirm I'm authorized to register this organization.</span>
         </label>
 
         <!-- Casilla aparte y sin `required` a propósito: aceptar los Términos no es
@@ -627,8 +628,8 @@
       <div class="reg-footer">
         <span data-i18n="login.copyright">© ClavaMetrics</span>
         <div style="display:flex;gap:14px">
-          <a href="#" data-i18n="login.privacy">Privacy</a>
-          <a href="#" data-i18n="login.terms">Terms</a>
+          <a href="Privacy-en.html" target="_blank" rel="noopener" data-legal-doc="privacy" data-i18n="login.privacy">Privacy</a>
+          <a href="Terms-en.html" target="_blank" rel="noopener" data-legal-doc="terms" data-i18n="login.terms">Terms</a>
           <a href="#" data-i18n="login.status">Status</a>
         </div>
       </div>
@@ -703,6 +704,19 @@
     strengthLabel.removeAttribute('data-i18n');
     strengthLabel.textContent = tt(STRENGTH_KEYS[level], STRENGTH_EN[level]);
   });
+
+  // Los documentos legales tienen una página por idioma (Terms.html / -en / -pt). El
+  // HTML trae la inglesa; acá se corrige a la del idioma que quedó activo.
+  function syncLegalLinks() {
+    if (!window.CM_LEGAL) return;
+    document.querySelectorAll('[data-legal-doc]').forEach(a => {
+      const u = window.CM_LEGAL.url(a.dataset.legalDoc);
+      if (u) a.href = u;
+    });
+  }
+  document.addEventListener('cm:langchanged', syncLegalLinks);
+  if (window.CM_I18N && window.CM_I18N.ready) window.CM_I18N.ready.then(syncLegalLinks);
+  else syncLegalLinks();
 
   async function handleSubmit() {
     const btn = document.querySelector('.reg-form button[type="submit"]');
@@ -796,6 +810,12 @@
         marketing_opt_in_at: marketing ? new Date().toISOString() : null,
       });
       if (profErr) throw profErr;
+
+      // 4. Dejar constancia de QUÉ aceptó: la casilla de arriba es obligatoria y hasta
+      // ahora no dejaba rastro, mientras que la opcional (marketing) sí se guardaba.
+      // Va después del perfil porque la RPC saca el club de ahí. No se hace `throw` si
+      // falla: perder el club entero por no poder escribir el registro sería peor.
+      if (window.CM_LEGAL) await window.CM_LEGAL.recordSignup();
 
       // El origen ya quedó guardado en el club; no tiene sentido arrastrarlo.
       if (typeof window.cmClearLeadSource === 'function') window.cmClearLeadSource();

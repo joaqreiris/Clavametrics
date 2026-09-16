@@ -42,6 +42,7 @@
 <script src="assets/gps-acwr.js" defer></script>
 <script src="assets/sidebar.js" defer></script>
 <script src="assets/global-search.js" defer></script>
+<script src="assets/first-steps.js" defer></script>
 <style>
   body.cm { background: var(--cm-bg); }
 
@@ -751,7 +752,8 @@
       </header>
 
       <!-- Action strip — lo urgente primero; lo llena _renderActionStrip() con datos reales -->
-      <div class="hub-actionstrip" id="hubActionStrip"></div>
+      <div id="hubFirstSteps"></div>
+    <div class="hub-actionstrip" id="hubActionStrip"></div>
 
       <!-- KPI strip -->
       <div class="kpi-section-header">
@@ -1895,6 +1897,9 @@ function _renderActionStrip({ notAvailableCount = 0, acwrWarningCount = 0, injur
   if (wellPending > 0)       items.push({ n: wellPending,       tone: 'is-warning', href: 'Wellness.html',     lbl: tt('hub.chip_no_checkin','no check-in'),  sub: tt('hub.chip_no_checkin_sub','wellness') });
 
   if (!items.length) {
+    // Con primeros pasos pendientes, la lista de arriba ya dice qué hacer: un "todo en
+    // orden" al lado la contradice.
+    if (window.__cmFirstStepsVisible) { el.innerHTML = ''; return; }
     el.innerHTML =
       `<span class="hub-chip is-success" style="cursor:default">` +
         `<span class="lead"><i class="ti ti-check"></i></span>` +
@@ -2222,6 +2227,20 @@ function renderTasks(tasks, view = 'my') {
   }
   if (!clubId) { window.location.replace('Onboarding.html'); return; }
   window._hubClubId = clubId;
+
+  // Primeros pasos. No se espera (`await`): es una lista de ayuda, no puede retrasar el
+  // pintado del Hub. Cuando termina, repinta la tira de alertas por si había quedado con
+  // el "All clear" de un club vacío.
+  if (window.CM_FIRST_STEPS) {
+    window.CM_FIRST_STEPS.mount(document.getElementById('hubFirstSteps'), clubId)
+      .then(visible => {
+        window.__cmFirstStepsVisible = visible;
+        if (visible) {
+          const strip = document.getElementById('hubActionStrip');
+          if (strip && strip.querySelector('.is-success')) strip.innerHTML = '';
+        }
+      });
+  }
 
   const [profile, club] = await Promise.all([window.getProfile(), window.getClub()]);
 

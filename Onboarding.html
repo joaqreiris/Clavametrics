@@ -397,6 +397,7 @@
      paquete podía romper la app sin que tocáramos nada. -->
 <script src="assets/vendor/supabase-js-2.112.4.min.js"></script>
 <script src="assets/supabase-init.js"></script>
+<script src="assets/legal.js"></script>
 <script src="assets/sport-packs.js"></script>
 <script src="assets/sport.js"></script>
 <!-- Paddle: el paso 5 deja contratar sin salir del asistente. defer porque nada del
@@ -655,6 +656,17 @@
       </div>
 
       <div class="ob-recap" id="ob-recap"></div>
+
+      <!-- Solo aparece cuando falta. El alta por Google/Apple no pasa por el formulario de
+           registro, así que esos clubes entraban al producto sin haber aceptado NADA: la
+           casilla obligatoria vive en Register.html y ellos nunca la ven. Este es el
+           último punto antes del workspace, así que es acá o nunca. -->
+      <label id="ob-legal" hidden
+             style="display:flex;gap:10px;align-items:flex-start;margin:18px 0 0;cursor:pointer;
+                    font:var(--cm-body-sm);color:var(--cm-fg-muted);line-height:1.55">
+        <input type="checkbox" id="ob-legal-check" style="margin-top:2px;flex:none">
+        <span id="ob-legal-text"></span>
+      </label>
 
       <div class="ob-error" id="ob-err-plan"></div>
 
@@ -1191,6 +1203,10 @@
     let teams = picks.map(x => ({ team_id: x.team.id, plan_slug: x.plan.slug }));
     if (JSON.stringify(teams).length > 4000) teams = paid.map(x => ({ team_id: x.team.id, plan_slug: x.plan.slug }));
 
+    // Pagar es entrar al producto igual que empezar el trial: si faltaba aceptar los
+    // Términos, se aceptan acá también. Antes de abrir el checkout, no después.
+    if (!await saveLegal()) return;
+
     const { data: { user } } = await window.sb.auth.getUser();
     // El asistente queda cerrado ANTES de abrir el pago: si no, al volver del checkout
     // el Hub lo mandaría de nuevo acá.
@@ -1329,7 +1345,47 @@
     return true;
   }
 
+  /* ── Términos y Privacidad que nunca se aceptaron ───────────────────────────
+     Quien entra por Google/Apple no pasa por Register.html, así que nunca ve la casilla
+     obligatoria: hasta ahora esos clubes llegaban al producto sin haber aceptado nada.
+     El bloque solo aparece si de verdad falta, para no volver a pedírselo a quien ya lo
+     aceptó en el formulario. */
+  let _legalMissing = [];
+
+  async function loadLegal() {
+    if (!window.CM_LEGAL) return;
+    const box = document.getElementById('ob-legal');
+    if (!box) return;
+    let st = null;
+    try { st = await window.CM_LEGAL.status(state.clubId); } catch (_e) { st = null; }
+    // Si no se pudo consultar, NO se pide de nuevo: molestar a quien ya aceptó es peor
+    // que un registro duplicado, y la RPC es idempotente por (usuario, documento, versión).
+    if (!st) { _legalMissing = []; box.hidden = true; return; }
+    _legalMissing = ['terms', 'privacy'].filter(d => !st[d]);
+    if (!_legalMissing.length) { box.hidden = true; return; }
+    document.getElementById('ob-legal-text').innerHTML = tt(
+      'onboarding.legalConsent',
+      'I agree to the <a href="{terms}" target="_blank" rel="noopener">Terms of Service</a> and the <a href="{privacy}" target="_blank" rel="noopener">Privacy Policy</a>.',
+      { terms: window.CM_LEGAL.url('terms'), privacy: window.CM_LEGAL.url('privacy') }
+    );
+    box.hidden = false;
+  }
+
+  // → true si se puede seguir. Registra lo que falte antes de entrar al workspace.
+  async function saveLegal() {
+    if (!_legalMissing.length) return true;
+    if (!document.getElementById('ob-legal-check')?.checked) {
+      showError('plan', tt('onboarding.legalRequired',
+        'Accept the Terms of Service and the Privacy Policy to continue.'));
+      return false;
+    }
+    for (const doc of _legalMissing) await window.CM_LEGAL.record(doc);
+    _legalMissing = [];
+    return true;
+  }
+
   async function finish() {
+    if (!await saveLegal()) return false;
     const { error } = await window.sb.from('clubs')
       .update({ onboarded_at: new Date().toISOString() })
       .eq('id', state.clubId);
@@ -1429,6 +1485,7 @@
 
     if (window.CMSport && window.CMSport.ready) { try { await window.CMSport.ready(); } catch (_e) {} }
     await i18nReady();
+    loadLegal();   // no bloquea el pintado: el paso donde se usa es el último
 
     // Identidad (viene del registro) — visible y editable, no repetida como formulario.
     document.getElementById('club-name').value = state.club.name || '';

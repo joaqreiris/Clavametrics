@@ -29,6 +29,7 @@
 <script src="assets/vendor/supabase-js-2.112.4.min.js"></script>
   <script src="assets/supabase-init.js"></script>
   <script src="assets/lead-source.js"></script>
+  <script src="assets/legal.js"></script>
   <script>
   (async () => {
     const msgEl   = document.getElementById('statusMsg');
@@ -94,6 +95,10 @@
             marketing_opt_in_at: pending.marketing ? new Date().toISOString() : null,
           });
           if (profErr) throw profErr;
+          // La casilla la marcó en el formulario de registro; el club recién existe ahora,
+          // así que la constancia se escribe acá. (El alta por OAuth no pasa por este
+          // camino y nunca vio esa casilla: se la pide el Onboarding.)
+          if (window.CM_LEGAL) await window.CM_LEGAL.recordSignup();
           if (typeof window.cmClearLeadSource === 'function') window.cmClearLeadSource();
         } catch (err) {
           showError('Workspace setup failed: ' + err.message);
