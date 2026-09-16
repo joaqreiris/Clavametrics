@@ -170,10 +170,27 @@ test.describe('Squad — Save new player', () => {
     // La posición pasó a ser obligatoria: sin ella el formulario responde «Position is required»
     // y no guarda nada. El test la daba por opcional, como cuando se escribió.
     await page.selectOption('#sqF_position', 'CB');
+    // La fecha de nacimiento pasó a ser obligatoria (2026-09): es lo único que permite saber
+    // si el jugador es menor, y de eso dependen las protecciones sobre sus datos médicos.
+    await page.fill('#sqF_dob', '1998-04-12');
     await page.click('#sqModalSave');
 
     await expect(page.locator('#sqModalBackdrop')).not.toHaveClass(/is-open/, { timeout: 8000 });
     await expect(page.locator('#sqToast')).toBeVisible();
+  });
+
+  test('sin fecha de nacimiento no guarda, y dice por qué', async ({ page }) => {
+    // No es completitud de datos: sin fecha el club no puede declarar a cuántos MENORES
+    // trata, y esa cifra es la primera que pide una autoridad de control. Si esto se afloja,
+    // la cláusula del contrato sobre menores deja de ser sostenible.
+    await gotoSquad(page);
+    await page.locator('button', { hasText: /add player/i }).first().click();
+    await page.fill('#sqF_first_name', 'Marco');
+    await page.selectOption('#sqF_position', 'CB');
+    await page.click('#sqModalSave');
+
+    await expect(page.locator('#sqModalBackdrop')).toHaveClass(/is-open/);
+    await expect(page.locator('#sqToast')).toContainText(/menor|minor/i, { timeout: 8000 });
   });
 
   test('shows saving indicator while request is in flight', async ({ page }) => {
@@ -193,6 +210,7 @@ test.describe('Squad — Save new player', () => {
     await page.fill('#sqF_first_name', 'Marco');
     await page.fill('#sqF_last_name',  'Silva');
     await page.selectOption('#sqF_position', 'CB');   // obligatoria: sin ella no llega a guardar
+    await page.fill('#sqF_dob', '1998-04-12');       // idem, desde 2026-09
     await page.click('#sqModalSave');
 
     await expect(page.locator('#sqModalSaving')).toBeVisible();

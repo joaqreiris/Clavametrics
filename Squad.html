@@ -521,6 +521,10 @@
 
       </div>
 
+      <!-- Falta la fecha de nacimiento en N fichas: sin ella no se puede identificar
+           a los menores, que necesitan protección reforzada. Se pinta en paintDobGap(). -->
+      <div id="sqDobGap" style="display:none"></div>
+
       <!-- Table -->
       <div class="sq-table-wrap">
         <div class="sq-table-scroll">
@@ -633,8 +637,9 @@
       </div>
       <div class="sq-modal-row">
         <div class="sq-modal-field">
-          <label for="sqF_dob" data-i18n="squad.date_of_birth">Date of birth</label>
-          <input type="date" id="sqF_dob">
+          <label for="sqF_dob"><span data-i18n="squad.date_of_birth">Date of birth</span> <span style="color:var(--cm-danger,#DC2626)" aria-hidden="true">*</span></label>
+          <input type="date" id="sqF_dob" required aria-required="true">
+          <small style="display:block;margin-top:4px;font:500 11px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted)" data-i18n="squad.dob_why">Needed to know whether the player is a minor. Don't guess — an invented date is worse than none.</small>
         </div>
         <div class="sq-modal-field">
           <label for="sqF_nationality"><span data-i18n="squad.nationality">Nationality</span> <span id="sqF_natFlag" class="sq-nat-flag" aria-hidden="true"></span></label>
@@ -1256,6 +1261,10 @@ let _teams = [];
 let _currentTeamId = null;
 let _activeFilter = 'All';
 let _searchQ = '';
+// Filtro para completar los jugadores a los que les falta la fecha de nacimiento. No es un
+// capricho de completitud: sin ella el club no puede saber a cuántos MENORES trata, y esa es
+// la primera cifra que pregunta una autoridad de control. Ver la banda sqDobGap.
+let _onlyMissingDob = false;
 let _editingId = null;
 let _currentClubId = null;
 let _pendingPhotoFile = null;  // cropped photo awaiting upload (from the crop modal)
@@ -1304,10 +1313,38 @@ function initRowMenuOnce() {
   if (sc) sc.addEventListener('scroll', closeRowMenu);
 }
 
+// Cuántas fichas no tienen fecha de nacimiento, y la forma de ir a arreglarlas.
+// Se muestra a todo el mundo, no sólo a admin: el que carga las fichas es quien la sabe.
+function paintDobGap() {
+  const host = document.getElementById('sqDobGap');
+  if (!host) return;
+  const faltan = _allPlayers.filter(p => !p.date_of_birth).length;
+  if (!faltan) { host.style.display = 'none'; host.innerHTML = ''; return; }
+  host.style.display = 'block';
+  host.innerHTML = `
+    <div style="display:flex;gap:11px;align-items:center;flex-wrap:wrap;padding:11px 14px;margin:0 0 12px;border-radius:9px;
+                background:color-mix(in srgb,var(--cm-warning) 9%,transparent);
+                border:1px solid color-mix(in srgb,var(--cm-warning) 30%,transparent)">
+      <i class="ti ti-cake-off" style="font-size:17px;color:var(--cm-warning);flex:0 0 auto"></i>
+      <div style="flex:1;min-width:200px;font:500 12.8px/1.45 var(--cm-font-sans);color:var(--cm-fg-strong)">
+        ${tt('squad.dob_gap', '{n} players have no date of birth. Without it we cannot tell which of them are minors, and minors need stricter protection for their medical data.', { n: faltan })}
+      </div>
+      <button class="cm-btn is-outline is-sm" id="sqDobGapBtn">
+        ${_onlyMissingDob ? tt('squad.dob_gap_all','Show all') : tt('squad.dob_gap_show','Show them')}
+      </button>
+    </div>`;
+  document.getElementById('sqDobGapBtn')?.addEventListener('click', () => {
+    _onlyMissingDob = !_onlyMissingDob;
+    renderTable();
+  });
+}
+
 function renderTable() {
   const tbody = document.getElementById('sqTbody');
   const foot  = document.getElementById('sqTableFoot');
   if (!tbody) return;
+
+  paintDobGap();
 
   const posUpper = _activeFilter.toUpperCase();
   const filtered = _allPlayers.filter(p => {
@@ -1317,6 +1354,7 @@ function renderTable() {
       const allPos = [p.position, ...(p.positions || [])].filter(Boolean).map(x => x.toUpperCase());
       if (!allPos.some(x => POS_CFG[x]?.pill === posUpper)) return false;
     }
+    if (_onlyMissingDob && p.date_of_birth) return false;
     if (_searchQ) {
       const q = _searchQ.toLowerCase();
       const name = ((p.first_name || '') + ' ' + (p.last_name || '')).toLowerCase();
@@ -2047,6 +2085,17 @@ async function reloadPlayers() {
       return;
     }
 
+    // Obligatoria desde 2026-09: es lo único que permite saber si el jugador es menor, y de
+    // eso dependen las protecciones reforzadas sobre sus datos médicos. Se exige también al
+    // EDITAR una ficha vieja, que es como se completan las que ya estaban sin fecha.
+    if (!payload.date_of_birth) {
+      showToast(tt('squad.dob_required','Date of birth is required: it is what tells us whether the player is a minor.'));
+      document.getElementById('sqF_dob')?.focus();
+      saving.style.display = 'none';
+      saveBtn.disabled = false;
+      return;
+    }
+
     // ── Pre-chequeo de límite de jugadores por categoría (upsell antes de crear) ──
     if (!_editingId && selectedTeamIds.length) {
       for (const tid of selectedTeamIds) {
@@ -2446,6 +2495,10 @@ async function reloadPlayers() {
     const dr = _impParseDate(src.date_of_birth, fmt);
     if (dr.error) add('warn','bad_date');
     else dob = dr.value;
+    // Sin fecha se avisa, pero no se bloquea la importación: un CSV de federación suele venir
+    // incompleto y cortar la carga entera empuja a inventar fechas, que para saber quién es
+    // menor es PEOR que no tener ninguna. Se importa en blanco y la banda de Squad lo reclama.
+    if (!dob && !dr.error) add('warn','dob_missing');
 
     // Height: cm; metres (<3) → ×100; plausible 120–230.
     let height = null;
@@ -2531,6 +2584,7 @@ async function reloadPlayers() {
       no_name:            tt('squad.imp_no_name','Missing name'),
       bad_number:         tt('squad.imp_bad_number','Invalid number (must be 1–99)'),
       bad_date:           tt('squad.imp_bad_date','Date not in the selected format — left blank'),
+      dob_missing:        tt('squad.imp_dob_missing','No date of birth — imported blank; complete it to know if they are a minor'),
       height_range:       tt('squad.imp_height_range','Height out of plausible range'),
       weight_range:       tt('squad.imp_weight_range','Weight out of plausible range'),
       unknown_foot:       tt('squad.imp_unknown_foot','Unrecognized foot — left blank'),
