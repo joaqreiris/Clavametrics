@@ -97,7 +97,7 @@
       WINGER:'WG', WING:'WG', EXTREMO:'WG', PONTA:'WG', ALA:'WG', PUNTERO:'WG',
       'LEFT WINGER':'LW', 'LEFT WING':'LW', 'EXTREMO IZQUIERDO':'LW', 'EXTREMO IZQ':'LW', EI:'LW',
       'RIGHT WINGER':'RW', 'RIGHT WING':'RW', 'EXTREMO DERECHO':'RW', 'EXTREMO DER':'RW', ED:'RW',
-      STRIKER:'ST', DELANTERO:'ST', ATACANTE:'ST', DEL:'ST', DELANTEROS:'ST', ATACANTES:'ST',
+      STRIKER:'ST', DELANTERO:'ST', ATACANTE:'ST', DEL:'ST', DELANTEROS:'ST', ATACANTES:'ST', ATTACKER:'ST', ATTACKERS:'ST',
       // Portugués: los términos simples ya estaban (GOLEIRO, ZAGUEIRO, VOLANTE, MEIA,
       // PONTA, ATACANTE), pero no los compuestos, que son justo como los escribe un club
       // brasileño en su planilla. "Lateral direito" caía como posición desconocida

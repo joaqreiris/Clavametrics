@@ -68,6 +68,51 @@
   // ── Fuzzy string similarity (normalised Levenshtein) ───────
   // String helpers delegate to the shared matcher core (assets/gps-matcher.js)
   // so CSV and Catapult mapping score names identically. Behavior unchanged.
+  /* ── Filas que no son jugadores ────────────────────────────────────────────
+     Catapult cierra el export con varias filas "Average" —una por posición— y otros
+     proveedores dejan "Total" o "Team". Si entran al import, el club termina con un
+     atleta llamado Average y con los promedios del equipo contaminados por filas que
+     ya eran promedios. Se descartan solas; el paso 1 avisa cuántas y deja incluirlas
+     si alguien las quiere. */
+  // La celda tiene que ser SOLO la etiqueta, o una combinación de etiquetas ("Team
+  // Average"), con un paréntesis suelto como mucho. Con un simple "empieza por total"
+  // un jugador apellidado Silva que se llamara "Total Silva" desaparecía del import
+  // sin decir nada — y perder un atleta de verdad es mucho peor que colar una fila de
+  // promedios, que se ve a simple vista.
+  const _PAL_RESUMEN = '(?:averages?|avg|mean|median|totals?|sum|overall|team|squad|media|promedios?|m[ée]dias?|totales|geral|todos|all)';
+  const _RE_SUMMARY  = new RegExp('^(?:' + _PAL_RESUMEN + '[\\s:·.-]*)+(?:\\(.*\\))?$', 'i');
+
+  function _isSummaryRow(row) {
+    const first = (row || []).map(c => String(c ?? '').trim()).find(c => c !== '') || '';
+    return _RE_SUMMARY.test(first);
+  }
+
+  // Las filas con datos reales. Único sitio que decide qué se importa y qué no.
+  function _wizDataRows(rows, headerRow) {
+    const out = (rows || []).slice(headerRow + 1).filter(r => r.some(c => c !== ''));
+    return (_wizState && _wizState.includeSummary) ? out : out.filter(r => !_isSummaryRow(r));
+  }
+
+  function _wizSummaryCount(rows, headerRow) {
+    return (rows || []).slice(headerRow + 1)
+      .filter(r => r.some(c => c !== '')).filter(_isSummaryRow).length;
+  }
+
+  /* ── "Posición - Nombre" en una sola celda ────────────────────────────────
+     Catapult exporta el nombre como "Attacker - Sitha Mathew". Tal cual, el matcher
+     busca un jugador que se llame así y no encuentra a nadie.
+     Solo se parte si el prefijo ES una posición reconocida: así "Jean - Pierre
+     Dupont" o "Smith - Jones" quedan intactos, que es el riesgo real de partir por el
+     primer guión sin mirar. */
+  function _splitPosName(raw) {
+    const txt = String(raw ?? '').trim();
+    const m = txt.match(/^(.+?)\s*[-–—]\s*(.+)$/);
+    if (!m) return { name: txt, position: '' };
+    const posCode = window.cmNormalizePosition ? window.cmNormalizePosition(m[1].trim()) : null;
+    if (!posCode) return { name: txt, position: '' };
+    return { name: m[2].trim(), position: m[1].trim(), positionCode: posCode };
+  }
+
   function _norm(s)    { return window.CMGpsMatch.normName(s); }
   function _sim(a, b)  { return window.CMGpsMatch.sim(a, b); }
 
@@ -307,7 +352,7 @@
     const { file, rows, headerRow, sessionType, sourceLabel } = _wizState;
     const hRow  = rows[headerRow] || [];
     const nCols = hRow.length;
-    const nRows = rows.length - headerRow - 1;
+    const nRows = _wizDataRows(rows, headerRow).length;   // lo que se va a importar de verdad
 
     body.innerHTML = `
       <div class="gp-imp-info">
@@ -342,12 +387,14 @@
           placeholder="e.g. Catapult Vector, StatSports CSV…"
           style="width:100%;padding:6px 10px;border:1px solid var(--cm-border);border-radius:var(--cm-r-3);background:var(--cm-bg-soft);color:var(--cm-fg);font:500 12px/1 var(--cm-font-sans);box-sizing:border-box">
       </div>
+      <div id="wizSummaryNote"></div>
       <div style="display:flex;gap:6px;margin-bottom:6px">
         <button id="wizExclAll" class="cm-btn is-outline is-sm" style="font:500 10.5px/1.4 var(--cm-font-sans)">Exclude all</button>
         <button id="wizInclAll" class="cm-btn is-outline is-sm" style="font:500 10.5px/1.4 var(--cm-font-sans)">Include all</button>
       </div>
       <div class="gp-imp-preview" id="wizPreviewTable"></div>`;
 
+    renderSummaryNote();
     renderPreviewTable(rows, headerRow);
 
     body.querySelector('#wizHeaderRow').addEventListener('input', e => {
@@ -385,6 +432,34 @@
       _wizState.sourceLabel  = body.querySelector('#wizSourceLabel').value.trim() || 'Custom export';
       buildColumnMap();
       setWizStep(2);
+    });
+  }
+
+  /* Aviso de las filas de resumen. No se descartan en silencio: el club tiene que ver
+     que su archivo traía cinco "Average" y poder decidir. */
+  function renderSummaryNote() {
+    const host = document.getElementById('wizSummaryNote');
+    if (!host) return;
+    const n = _wizSummaryCount(_wizState.rows, _wizState.headerRow);
+    if (!n) { host.innerHTML = ''; return; }
+    const incl = !!_wizState.includeSummary;
+    host.innerHTML = `
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;padding:8px 11px;
+                  border:1px solid var(--cm-border);border-radius:var(--cm-r-3);
+                  background:var(--cm-bg-soft);font:500 11.5px/1.45 var(--cm-font-sans);color:var(--cm-fg-muted)">
+        <i class="ti ti-filter-off" style="font-size:15px;flex:none"></i>
+        <span style="flex:1">${incl
+          ? `<b style="color:var(--cm-fg-strong)">${n}</b> summary row${n!==1?'s':''} (Average, Total…) will be imported as if they were players.`
+          : `<b style="color:var(--cm-fg-strong)">${n}</b> summary row${n!==1?'s':''} (Average, Total…) skipped — they are not players.`}</span>
+        <button id="wizToggleSummary" class="cm-btn is-outline is-sm"
+          style="font:500 10.5px/1.4 var(--cm-font-sans);flex:none">${incl ? 'Skip them' : 'Include them'}</button>
+      </div>`;
+    host.querySelector('#wizToggleSummary').addEventListener('click', () => {
+      _wizState.includeSummary = !_wizState.includeSummary;
+      renderSummaryNote();
+      renderPreviewTable(_wizState.rows, _wizState.headerRow);
+      const nr = document.getElementById('nRows');
+      if (nr) nr.textContent = _wizDataRows(_wizState.rows, _wizState.headerRow).length;
     });
   }
 
@@ -453,13 +528,17 @@
         <i class="ti ${excluded ? 'ti-eye' : 'ti-eye-off'}"></i>
       </button>`;
 
-      const labelRow = `<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:4px">
-        <div style="font:600 11.5px/1.2 var(--cm-font-sans);color:${excluded ? 'var(--cm-fg-muted)' : 'var(--cm-fg-strong)'}">${esc(label)}</div>
+      // `min-width:0` + ellipsis: sin eso, un título como "High Metabolic Load Distance
+      // (m)" se salía de su celda y se montaba encima de la de al lado, tapando el ojo
+      // que sirve justamente para ocultar la columna. El nombre completo queda en el
+      // title y en dos líneas como mucho.
+      const labelRow = `<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:4px;min-width:0">
+        <div title="${esc(label)}" style="min-width:0;flex:1;font:600 11.5px/1.25 var(--cm-font-sans);color:${excluded ? 'var(--cm-fg-muted)' : 'var(--cm-fg-strong)'};display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere">${esc(label)}</div>
         ${EXCL_BTN}
       </div>`;
 
       if (excluded) {
-        return `<th style="min-width:100px;max-width:180px;vertical-align:top;padding:6px 8px;font-weight:normal;opacity:0.45;background:var(--cm-bg-soft)">
+        return `<th style="width:170px;min-width:150px;max-width:190px;vertical-align:top;padding:6px 8px;font-weight:normal;opacity:0.45;background:var(--cm-bg-soft);box-sizing:border-box">
           ${labelRow}
           <span style="display:inline-block;margin-top:3px;padding:1px 5px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:3px;font:600 9.5px/1.4 var(--cm-font-mono);color:var(--cm-fg-muted)">excluded</span>
         </th>`;
@@ -500,7 +579,7 @@
           title="Click to view unparseable values">${invalid} invalid</span>`;
       }
 
-      return `<th style="min-width:100px;max-width:180px;vertical-align:top;padding:6px 8px;font-weight:normal">
+      return `<th style="width:170px;min-width:150px;max-width:190px;vertical-align:top;padding:6px 8px;font-weight:normal;box-sizing:border-box">
         ${labelRow}
         ${typeSel}
         ${hint}${ambigNote}${dropdown}${badge}
@@ -593,7 +672,7 @@
       badge.addEventListener('click', () => {
         const ci       = +badge.dataset.ci;
         const ct       = (_wizState.colTypes || [])[ci] || { type: 'text', format: null };
-        const allData  = rows.slice(headerRow + 1).filter(r => r.some(c => c !== ''));
+        const allData  = _wizDataRows(rows, headerRow);
         const badRows  = [];
         allData.forEach((row, ri) => {
           const v = row[ci];
@@ -674,7 +753,7 @@
   function _wizColStat(colIdx, kind) {
     const { rows, headerRow, decimalSep } = _wizState;
     const vals = [];
-    for (const r of rows.slice(headerRow + 1)) {
+    for (const r of _wizDataRows(rows, headerRow)) {
       const raw = r[colIdx];
       if (raw === '' || raw == null) continue;
       const np = window.gpParseNumber
@@ -792,7 +871,7 @@
       return false;
     }).map(([i]) => +i);
     if (!numericCols.length) return 'dot';
-    const dataRows = rows.slice(headerRow + 1).filter(r => r.some(c => c !== ''));
+    const dataRows = _wizDataRows(rows, headerRow);
     const COMMA_DEC = /,\d{1,2}(\D|$)/;
     for (const row of dataRows.slice(0, 100)) {
       for (const ci of numericCols) {
@@ -1170,7 +1249,7 @@
     const positionIdx    = _colOf('position');
     const extGpsIdIdx    = _colOf('player_external_gps_id');
 
-    const dataRows = rows.slice(headerRow + 1).filter(r => r.some(c => c !== ''));
+    const dataRows = _wizDataRows(rows, headerRow);
     const seen = new Set();
     const matches = {};
 
@@ -1181,7 +1260,15 @@
       if (!rawName && (rawFirst || rawLast)) rawName = (rawFirst + ' ' + rawLast).trim();
 
       const rawJersey   = jerseyIdx    != null ? String(row[+jerseyIdx]    ?? '').trim() : '';
-      const rawPosition = positionIdx  != null ? String(row[+positionIdx]  ?? '').trim() : '';
+      let   rawPosition = positionIdx  != null ? String(row[+positionIdx]  ?? '').trim() : '';
+
+      // "Attacker - Sitha Mathew" en una sola celda: se queda el nombre, y la posición
+      // se aprovecha si el archivo no traía columna propia.
+      const partido = _splitPosName(rawName);
+      if (partido.position) {
+        rawName = partido.name;
+        if (!rawPosition) rawPosition = partido.position;
+      }
       const rawExtGpsId = extGpsIdIdx  != null ? String(row[+extGpsIdIdx]  ?? '').trim() : '';
 
       // Jersey is the primary key when mapped; fall back to name
@@ -1734,7 +1821,7 @@
     if (dateColIdx == null) return { uniqueDates: [], dateMap: {}, doubleDates: [] };
 
     const fmt      = columnMap[dateColIdx]?.parseFormat || null;
-    const dataRows = rows.slice(headerRow + 1).filter(r => r.some(c => c !== ''));
+    const dataRows = _wizDataRows(rows, headerRow);
     const dateMap  = {};
     const playerDateSeen = {};
 
@@ -1943,7 +2030,7 @@
     // ── Type vocabulary mapping (shown when a session_type column is mapped) ──
     if (hasDateCol && _typeColEntry) {
       const _typeColIdx = +_typeColEntry[0];
-      const _dataRows   = _wizState.rows.slice(_wizState.headerRow + 1).filter(r => r.some(c => c !== ''));
+      const _dataRows   = _wizDataRows(_wizState.rows, _wizState.headerRow);
       const _rawTypes   = [...new Set(_dataRows.map(r => String(r[_typeColIdx] ?? '').trim()).filter(Boolean))];
       if (_rawTypes.length) {
         // Build heuristic map on first render; preserve on re-render
@@ -2052,7 +2139,7 @@
     const periodColIdx  = _colOf('period_name');
     const typeColIdx    = Object.entries(columnMap).find(([, c]) => c.field === 'session_type')?.[0] ?? null;
     const dateFmt       = dateColIdx != null ? (columnMap[dateColIdx]?.parseFormat || null) : null;
-    const dataRows      = rows.slice(headerRow + 1).filter(r => r.some(c => c !== ''));
+    const dataRows      = _wizDataRows(rows, headerRow);
     const hasPlayerMapping = playerNameIdx != null || jerseyIdx != null;
 
     // Custom metric keys: in catalog but not in gps_reports columns
@@ -2408,7 +2495,7 @@
           const _dcIdx   = Object.entries(_wizState.columnMap).find(([, c]) => c.metric === 'session_date')?.[0];
           const _dateFmt = _dcIdx != null ? (_wizState.columnMap[+_dcIdx]?.parseFormat || null) : null;
           const _typeMap = _wizState.typeMap || {};
-          const _drows   = _wizState.rows.slice(_wizState.headerRow + 1).filter(r => r.some(c => c !== ''));
+          const _drows   = _wizDataRows(_wizState.rows, _wizState.headerRow);
           const _sessSet = {};
           for (const row of _drows) {
             if (!_dcIdx) continue;
