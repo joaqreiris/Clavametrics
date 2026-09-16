@@ -104,6 +104,9 @@
   .ad-search .ti { font-size:16px; color:var(--cm-fg-muted); }
   /* Mismo motivo que .ad-role: los filtros en español son más largos ("Preparadores
      físicos" contra "S&C") y con altura fija el texto se salía de la píldora. */
+  #adSoloBanner:not([hidden]) { display:flex; align-items:center; gap:15px; margin-bottom:16px;
+    padding:15px 17px; border:1px dashed var(--cm-border); border-radius:12px; background:var(--cm-bg-soft); }
+
   .ad-pill { display:inline-flex; align-items:center; gap:5px; min-height:28px; padding:5px 10px; border-radius:999px; border:1px solid var(--cm-border); background:var(--cm-surface); color:var(--cm-fg-muted); font:500 12px/1.3 var(--cm-font-sans); cursor:pointer; white-space:nowrap; }
   .ad-pill:hover { color:var(--cm-fg); border-color:var(--cm-border-strong); }
   .ad-pill.is-on { background:var(--cm-accent-soft); color:var(--cm-fg-strong); border-color:var(--cm-border-strong); }
@@ -553,9 +556,7 @@
       <!-- Un club con una sola persona no tiene un dato que mostrar, tiene un paso sin
            dar: es el que se saltó el 100% de los clubes que se registraron. "1 staff"
            en gris no le dice nada a nadie. -->
-      <div id="adSoloBanner" hidden
-           style="display:flex;align-items:center;gap:15px;margin-bottom:16px;padding:15px 17px;
-                  border:1px dashed var(--cm-border);border-radius:12px;background:var(--cm-bg-soft)">
+      <div id="adSoloBanner" hidden>
         <i class="ti ti-users-plus" style="font-size:21px;color:var(--cm-fg-faint);flex:none"></i>
         <div style="flex:1;min-width:0">
           <div style="font:600 13.5px/1.3 var(--cm-font-sans);color:var(--cm-fg-strong)"
@@ -929,7 +930,14 @@ const _esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&a
     return;
   }
 
-  if (club) window.applyClubTheme();
+  // Pintar los colores del club es COSMÉTICO, y acá estaba sin red: si applyClubTheme
+  // no existe todavía (boot-brand aún no cargó, o falló), la excepción mataba el IIFE
+  // entero — y con él las definiciones de loadSupportPanel, loadRolesPanel y
+  // loadFullAudit, que vienen 500 líneas más abajo. Resultado: tres pestañas en blanco
+  // y ni un mensaje, porque el conmutador solo llama a la función "si existe".
+  // club-overview.js y load-monitor.js ya la llamaban con guard; Admin era la única
+  // página que no lo hacía, y la única que se rompía.
+  if (club) { try { window.applyClubTheme?.(); } catch (e) { console.warn('[Admin] applyClubTheme:', e); } }
 
   // ── Club switcher (solo super-admin) ──
   (async () => {
@@ -2937,10 +2945,39 @@ const _esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&a
     b.classList.add('is-on');
     const target = b.dataset.panel;
     document.querySelectorAll('.ad-panel').forEach(p => p.classList.toggle('is-active', p.dataset.panel === target));
-    if (target === 'audit' && typeof window.loadFullAudit === 'function') window.loadFullAudit();
-    if (target === 'roles' && typeof window.loadRolesPanel === 'function') window.loadRolesPanel();
-    if (target === 'notifications' && typeof window.loadNotifSettings === 'function') window.loadNotifSettings();
-    if (target === 'security' && typeof window.loadSupportPanel === 'function') window.loadSupportPanel();
+    /* Estos cuatro paneles se rellenan al abrirlos, y sus funciones se definen DENTRO
+       del IIFE grande de esta página. Si ese IIFE muere a mitad —una consulta que
+       revienta, un id que no existe—, las funciones de después nunca llegan a existir:
+       el `typeof === 'function'` da false, no se llama a nadie, y la pestaña se queda
+       en blanco sin una sola pista. Así es como "Seguridad" acabó pareciendo una
+       sección sin configurar.
+       Ahora, si la función falta, el panel lo dice. Un panel vacío y un panel roto se
+       ven igual, y no son lo mismo. */
+    const _cargadores = {
+      audit:         'loadFullAudit',
+      roles:         'loadRolesPanel',
+      notifications: 'loadNotifSettings',
+      security:      'loadSupportPanel',
+    };
+    const _fn = _cargadores[target];
+    if (_fn) {
+      if (typeof window[_fn] === 'function') window[_fn]();
+      else {
+        const _p = document.querySelector('.ad-panel[data-panel="' + target + '"]');
+        if (_p && !_p.querySelector('.ad-panel-broken')) {
+          const _av = document.createElement('div');
+          _av.className = 'ad-panel-broken';
+          _av.style.cssText = 'margin:16px 0;padding:14px 16px;border:1px solid var(--cm-border);' +
+            'border-radius:11px;background:var(--cm-bg-soft);font:var(--cm-body-sm);' +
+            'color:var(--cm-fg-muted);line-height:1.55';
+          _av.textContent = tt('admin.panel_broken',
+            'This section could not start up. Reload the page; if it keeps happening, the console shows why.') +
+            ' (' + _fn + ')';
+          _p.prepend(_av);
+        }
+        console.error('[Admin] ' + _fn + ' no está definida: el IIFE de la página no llegó a definirla.');
+      }
+    }
   }));
   document.querySelectorAll('.ad-cb').forEach(c => c.addEventListener('click', e => { e.stopPropagation(); c.classList.toggle('is-on'); }));
 
