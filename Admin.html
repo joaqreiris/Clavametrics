@@ -102,7 +102,9 @@
   .ad-search { display:flex; align-items:center; gap:8px; height:34px; padding:0 10px; background:var(--cm-bg-soft); border:1px solid var(--cm-border); border-radius:var(--cm-r-3); min-width:240px; flex:1; max-width:340px; }
   .ad-search input { flex:1; min-width:0; border:0; outline:none; background:transparent; font:var(--cm-body-sm); color:var(--cm-fg); }
   .ad-search .ti { font-size:16px; color:var(--cm-fg-muted); }
-  .ad-pill { display:inline-flex; align-items:center; gap:5px; height:28px; padding:0 10px; border-radius:999px; border:1px solid var(--cm-border); background:var(--cm-surface); color:var(--cm-fg-muted); font:500 12px/1 var(--cm-font-sans); cursor:pointer; }
+  /* Mismo motivo que .ad-role: los filtros en español son más largos ("Preparadores
+     físicos" contra "S&C") y con altura fija el texto se salía de la píldora. */
+  .ad-pill { display:inline-flex; align-items:center; gap:5px; min-height:28px; padding:5px 10px; border-radius:999px; border:1px solid var(--cm-border); background:var(--cm-surface); color:var(--cm-fg-muted); font:500 12px/1.3 var(--cm-font-sans); cursor:pointer; white-space:nowrap; }
   .ad-pill:hover { color:var(--cm-fg); border-color:var(--cm-border-strong); }
   .ad-pill.is-on { background:var(--cm-accent-soft); color:var(--cm-fg-strong); border-color:var(--cm-border-strong); }
   .ad-pill .dot { width:6px; height:6px; border-radius:50%; }
@@ -156,8 +158,12 @@
   .ad-teamsel { height:30px; padding:0 8px; background:var(--cm-surface); color:var(--cm-fg); border:1px solid var(--cm-border); border-radius:8px; font:500 12px/1 var(--cm-font-sans); cursor:pointer; }
   .ad-teamsel:hover { border-color:var(--cm-border-strong); }
 
-  .ad-role { display:inline-flex; align-items:center; gap:5px; height:22px; padding:0 9px; border-radius:5px; font:600 11px/1 var(--cm-font-mono); letter-spacing:0.04em; }
-  .ad-role .dot { width:6px; height:6px; border-radius:50%; }
+  /* Altura MÍNIMA, no fija. Con `height:22px` y `line-height:1`, un rol que no entra en
+     una línea —"Goalkeeper coach" ya en inglés, y en español casi todos: "Entrenador de
+     porteros", "Preparador físico"— escribía el texto FUERA del fondo de color. El
+     recuadro tiene que crecer con lo que lleva dentro, no al revés. */
+  .ad-role { display:inline-flex; align-items:center; gap:5px; min-height:22px; padding:3px 9px; border-radius:5px; font:600 11px/1.3 var(--cm-font-mono); letter-spacing:0.04em; max-width:100%; text-align:left; }
+  .ad-role .dot { width:6px; height:6px; border-radius:50%; flex:none; }
   .ad-role.owner   { background:rgba(245,158,11,0.12); color:#B45309; }
   .ad-role.owner .dot { background:#F59E0B; }
   .ad-role.admin   { background:rgba(220,38,38,0.10); color:#B91C1C; }
@@ -432,7 +438,7 @@
                nada todavía, solo el cartel de "en construcción". Un número inventado en
                una pestaña es peor que una pestaña sin número. Lleva la marca de que no
                está lista para que nadie la abra esperando encontrarla. -->
-          <button class="ad-tab" data-panel="sections"><i class="ti ti-layout-grid"></i><span data-i18n="admin.tab_sections">Sections</span><span class="ct" style="background:transparent;border:1px solid var(--cm-border);color:var(--cm-fg-faint)" data-i18n="admin.soon_badge">soon</span></button>
+          <button class="ad-tab" data-panel="sections"><i class="ti ti-layout-grid"></i><span data-i18n="admin.tab_sections">Sections</span></button>
           <button class="ad-tab" data-panel="integrations"><i class="ti ti-plug"></i><span data-i18n="admin.tab_integrations">Integrations</span></button>
         </div>
       </div>
@@ -726,18 +732,6 @@
 
         <!-- Right: module gates + recent audit -->
         <div>
-          <div class="ad-card is-collapsed" id="adModulesCard">
-            <div class="ad-card-h">
-              <button class="ad-collapse" onclick="this.closest('.ad-card').classList.toggle('is-collapsed')" data-i18n-attr="title:admin.collapse_expand" title="Collapse/expand"><i class="ti ti-chevron-down" style="font-size:16px"></i></button>
-              <h3 data-i18n="admin.module_toggles_title">Module toggles</h3>
-              <span class="sub" data-i18n="admin.module_toggles_sub">enable per workspace</span>
-              <div class="right"><button class="cm-icon-btn"><i class="ti ti-dots"></i></button></div>
-            </div>
-            <div class="ad-modules" id="adModules">
-              <!-- Populated by renderModules() — counts derived from real member data -->
-            </div>
-          </div>
-
           <!-- Competition rules: how many sanctions cost a player a match. This is a LEAGUE
                rule, not a sport one — Cambodia suspends at 3 yellows where most leagues use
                5 — so it lives here and not in the sport pack. -->
@@ -802,12 +796,21 @@
       </div>
 
       <div class="ad-panel" data-panel="sections">
-        <div class="ad-card" style="margin-top:16px">
-          <div class="ad-card-h"><h3 data-i18n="admin.tab_sections">Sections</h3><span class="sub" data-i18n="admin.coming_soon">coming soon</span></div>
-          <div style="padding:40px 24px;text-align:center;color:var(--cm-fg-muted)">
-            <i class="ti ti-layout-grid" style="font-size:28px;opacity:.5"></i>
-            <div style="font:600 14px/1.4 var(--cm-font-sans);color:var(--cm-fg);margin-top:10px" data-i18n="admin.sections_soon_title">Sections matrix under construction</div>
-            <div style="font:500 12.5px/1.5 var(--cm-font-sans);margin-top:4px" data-i18n="admin.sections_soon_body">This will show which module each member sees (member_modules) and the club toggles.</div>
+        <!-- Esta tarjeta vivía dentro de "Miembros", que es donde nadie iba a buscarla,
+             mientras ESTA pestaña enseñaba un cartel de "matriz en construcción". El
+             contenido ya existía: estaba en el cajón equivocado. Lo que sigue faltando
+             es el detalle por miembro (member_modules), no los toggles del club. -->
+        <div style="margin-top:16px">
+          <div class="ad-card" id="adModulesCard">
+            <div class="ad-card-h">
+              <button class="ad-collapse" onclick="this.closest('.ad-card').classList.toggle('is-collapsed')" data-i18n-attr="title:admin.collapse_expand" title="Collapse/expand"><i class="ti ti-chevron-down" style="font-size:16px"></i></button>
+              <h3 data-i18n="admin.module_toggles_title">Module toggles</h3>
+              <span class="sub" data-i18n="admin.module_toggles_sub">enable per workspace</span>
+              <div class="right"><button class="cm-icon-btn"><i class="ti ti-dots"></i></button></div>
+            </div>
+            <div class="ad-modules" id="adModules">
+              <!-- Populated by renderModules() — counts derived from real member data -->
+            </div>
           </div>
         </div>
       </div>
@@ -1648,9 +1651,17 @@ const _esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&a
     } catch (err) {
       console.error('[Admin] panel de soporte:', err);
       _supLoaded = false;   // que un fallo puntual no deje el panel muerto para siempre
+      // Con el detalle técnico a la vista: esto es un panel de administración, no una
+      // pantalla de jugador. Sin el mensaje real, reportar el fallo es un juego de
+      // adivinanzas entre quien lo ve y quien lo tiene que arreglar.
       elState.innerHTML =
         '<div style="padding:16px 0;color:var(--cm-fg-muted);font:var(--cm-body-sm);line-height:1.5">' +
-        _esc(tt('admin.sup_error', 'Could not load support access. Reopen this tab to try again.')) +
+          _esc(tt('admin.sup_error', 'Could not load support access. Reopen this tab to try again.')) +
+          '<div style="margin-top:8px;padding:8px 10px;border-radius:7px;background:var(--cm-bg-soft);' +
+               'border:1px solid var(--cm-border);font:500 11px/1.5 var(--cm-font-mono);' +
+               'color:var(--cm-fg-faint);word-break:break-word;user-select:all">' +
+            _esc(String((err && (err.message || err.error_description)) || err)) +
+          '</div>' +
         '</div>';
       if (elLog) elLog.innerHTML = '';
     }
@@ -1840,7 +1851,20 @@ const _esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&a
   if (_myRole === 'owner' || (await window.isSuperAdmin())) {
     await renderModules();
   } else {
-    const _mc = document.getElementById('adModulesCard'); if (_mc) _mc.style.display = 'none';
+    // Antes se ocultaba a secas. Ahora que esta tarjeta ES la pestaña Secciones, ocultarla
+    // deja la pestaña en blanco sin explicación — que es exactamente lo que se siente
+    // como "esto no está configurado" cuando en realidad es "esto no te toca a vos".
+    const _mc = document.getElementById('adModulesCard');
+    if (_mc) {
+      const _body = _mc.querySelector('.ad-modules');
+      if (_body) _body.innerHTML =
+        '<div style="padding:30px 22px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm);line-height:1.6">' +
+        _esc(tt('admin.modules_owner_only', 'Only the workspace owner can turn modules on or off.')) +
+        '</div>';
+      const _hdr = _mc.querySelector('.ad-collapse');
+      if (_hdr) _hdr.style.display = 'none';
+      _mc.classList.remove('is-collapsed');
+    }
   }
 
   // Competition rules — every admin, not just the owner: it is a sporting setting, not a
