@@ -41,6 +41,7 @@
 <script src="assets/cm-save.js"></script>
 <script src="assets/sport-packs.js"></script>
 <script src="assets/sport.js"></script>
+<script src="assets/thumb-peek.js"></script>
 <script src="lib/day-context.js"></script>
 <script src="assets/sidebar.js" defer></script>
 <script defer src="assets/gps-acwr.js"></script>
@@ -1205,7 +1206,7 @@ function gpBuildLibModal() {
   ov.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(8,10,12,.5);-webkit-backdrop-filter:blur(4px); backdrop-filter:blur(4px);z-index:900;align-items:flex-start;justify-content:center;padding-top:60px';
   ov.onclick = e => { if (e.target === ov) gpCloseLib(); };
   ov.innerHTML = `
-    <div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-4);width:560px;max-width:94vw;max-height:78vh;display:flex;flex-direction:column;box-shadow:0 24px 80px rgba(0,0,0,.2)">
+    <div data-peek-anchor style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-4);width:560px;max-width:94vw;max-height:78vh;display:flex;flex-direction:column;box-shadow:0 24px 80px rgba(0,0,0,.2)">
       <div style="display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--cm-border)">
         <i class="ti ti-list-tree" style="font-size:16px;color:var(--cm-accent)"></i>
         <div style="font:600 14px/1 var(--cm-font-sans);color:var(--cm-fg-strong);margin-right:auto">${tt('gym_planner.exercises_library','Exercises Library')}</div>
@@ -1550,7 +1551,7 @@ function gpLibRowHtml(e){
                 gpExPurposes(e).map(p => gpFacetLabel('purpose', p))[0],
                 e.complexity ? gpTokenLabel('complexity', e.complexity) : null].filter(Boolean).join(' · ');
   return `<button class="gp-lib-item" data-id="${e.id}" data-name="${(e.name||'').replace(/"/g,'&quot;')}" style="width:100%;text-align:left;padding:9px 10px;border:0;border-radius:7px;background:transparent;cursor:pointer">
-    <span class="gp-lib-thumb" data-ex="${e.id}">${gpLibThumbHtml(e.id)}</span>
+    <span class="gp-lib-thumb" data-ex="${e.id}" ${gpThumbPeek(e.id, e.name)}>${gpLibThumbHtml(e.id)}</span>
     <span style="min-width:0;flex:1">
       <div style="font:600 13px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)">${gpEscH(e.name||'—')}</div>
       ${meta?`<div style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:3px">${gpEscH(meta)}</div>`:''}
@@ -1590,6 +1591,13 @@ function gpLibBindEmpty(list){
   if (bySearch) bySearch.onclick = () => gpLibSetSearch('');
 }
 
+// Hovering a library thumb enlarges it (assets/thumb-peek.js): the row is 34px tall,
+// which is not enough to recognise an exercise, and clicking to find out links it
+// into the plan. Nothing to enlarge (placeholder icon) → no attributes, no panel.
+function gpThumbPeek(exId, name){
+  const src = gpExThumbSrc(exId);
+  return (src && window.CMThumbPeek) ? window.CMThumbPeek.attr(src, name || '') : '';
+}
 // Thumbnail for a library row: signed image/GIF > YouTube poster > barbell placeholder.
 function gpLibThumbHtml(exId){
   const src = gpExThumbSrc(exId);
@@ -1612,7 +1620,14 @@ async function gpResolveLibMedia(){
   _gpLibMediaDone = true;
 }
 function gpPatchLibThumbs(){
-  document.querySelectorAll('#gpLibList .gp-lib-thumb[data-ex]').forEach(el => { el.innerHTML = gpLibThumbHtml(el.dataset.ex); });
+  const byId = {}; (_gpLib||[]).forEach(e => { byId[e.id] = e; });
+  document.querySelectorAll('#gpLibList .gp-lib-thumb[data-ex]').forEach(el => {
+    el.innerHTML = gpLibThumbHtml(el.dataset.ex);
+    // media resolves after the first render, so the hover preview is wired here too
+    const src = gpExThumbSrc(el.dataset.ex);
+    if (src) { el.setAttribute('data-peek-src', src); el.setAttribute('data-peek-label', (byId[el.dataset.ex]||{}).name || ''); }
+    else el.removeAttribute('data-peek-src');
+  });
 }
 // ── Video preview from the picker (play button on rows with a video, doesn't add the exercise) ──
 let _gpVidPrevBuilt = false;

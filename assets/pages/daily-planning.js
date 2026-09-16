@@ -2441,7 +2441,7 @@ function filterLib() {
     const meta2   = [players ? tt('daily_planning.players_meta', `${players} players`, {count: players}) : null, m2 ? `${m2} ${tt('daily_planning.m2_p','m²/p')}` : null, fieldStr].filter(Boolean).join(' · ');
     const img = e._previewImg || e.preview_png || null;
     return `<div onclick="addPlannerExercise('${e.id}')" style="display:flex;align-items:center;gap:12px;padding:9px 12px;border-radius:8px;cursor:pointer;transition:background .12s" onmouseover="this.style.background='var(--cm-bg-soft)'" onmouseout="this.style.background=''">
-      <div style="flex-shrink:0;width:64px;height:64px;border-radius:8px;overflow:hidden;background:#2f7d4c;border:1px solid var(--cm-border-soft);display:flex;align-items:center;justify-content:center">
+      <div ${_dpPeek(img, e.name)} style="flex-shrink:0;width:64px;height:64px;border-radius:8px;overflow:hidden;background:#2f7d4c;border:1px solid var(--cm-border-soft);display:flex;align-items:center;justify-content:center">
         ${img ? `<img src="${img}" alt="" style="width:100%;height:100%;object-fit:cover;display:block">` : `<i class="ti ti-vector-triangle" style="font-size:22px;color:rgba(255,255,255,.55)"></i>`}
       </div>
       <div style="flex:1;min-width:0">
@@ -2473,6 +2473,13 @@ function filterLib() {
     ? fil.map(_libCard).join('')
     : groups.map(g => head(g.label, g.items.length, g.depth) + g.items.map(_libCard).join('')).join('');
 }
+// Hovering a picker thumb enlarges it (assets/thumb-peek.js) so a coach can tell
+// two drills apart without clicking the row — a click adds the exercise and would
+// throw away the filters they just typed.
+function _dpPeek(src, name) {
+  return (src && window.CMThumbPeek) ? window.CMThumbPeek.attr(src, name || '') : '';
+}
+
 async function addPlannerExercise(exerciseId) {
   if (!await dpEnsureSession()) return;
   const ex  = _libExercises.find(e => e.id === exerciseId);
@@ -2587,7 +2594,7 @@ function filterGymLib() {
     const thumb = _gymThumbSrc(e);
     const meta2 = [e.muscle_group ? esc(e.muscle_group) : null, e.complexity ? esc(e.complexity) : null].filter(Boolean).join(' · ');
     return `<div onclick="addGymExercise('${e.id}')" style="display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:8px;cursor:pointer;transition:background .12s" onmouseover="this.style.background='var(--cm-bg-soft)'" onmouseout="this.style.background=''">
-      <div style="flex-shrink:0;width:44px;height:44px;border-radius:7px;overflow:hidden;background:var(--cm-bg-soft);display:flex;align-items:center;justify-content:center;position:relative">
+      <div ${_dpPeek(thumb, e.name)} style="flex-shrink:0;width:44px;height:44px;border-radius:7px;overflow:hidden;background:var(--cm-bg-soft);display:flex;align-items:center;justify-content:center;position:relative">
         ${thumb ? `<img src="${esc(thumb)}" alt="" style="width:100%;height:100%;object-fit:cover">${e.video_id && !( e.media_type==='image' ) ? '<i class="ti ti-player-play-filled" style="position:absolute;font-size:14px;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.6)"></i>' : ''}` : `<i class="ti ti-barbell" style="font-size:18px;color:var(--cm-fg-faint)"></i>`}
       </div>
       <div style="flex:1;min-width:0">
