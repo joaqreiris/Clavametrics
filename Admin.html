@@ -55,7 +55,12 @@
   .hub-topbar .actions { margin-left:auto; display:flex; align-items:center; gap:8px; }
 
   /* Tabs */
-  .ad-tabs { display:flex; gap:0; padding:0 24px; background:var(--cm-bg); border-bottom:1px solid var(--cm-border); overflow-x:auto; }
+  .ad-tabs { display:flex; gap:26px; padding:0 24px; background:var(--cm-bg); border-bottom:1px solid var(--cm-border); overflow-x:auto; align-items:flex-end; }
+  .ad-tgrp-l { font:600 9.5px/1 var(--cm-font-sans); letter-spacing:.09em; text-transform:uppercase; color:var(--cm-fg-faint); padding:9px 0 5px; white-space:nowrap; }
+  .ad-tgrp-i { display:flex; gap:2px; }
+  /* Dentro de un grupo los botones se aprietan: el aire está ENTRE grupos, que es lo
+     que hace que se lean como tres barrios y no como siete destinos sueltos. */
+  .ad-tgrp .ad-tab { padding:0 11px; height:38px; }
   .ad-tab { padding:0 18px; height:46px; border:0; background:transparent; color:var(--cm-fg-muted); font:500 13.5px/1 var(--cm-font-sans); cursor:pointer; display:inline-flex; align-items:center; gap:7px; border-bottom:2px solid transparent; margin-bottom:-1px; white-space:nowrap; }
   .ad-tab:hover { color:var(--cm-fg); }
   .ad-tab.is-on { color:var(--cm-fg-strong); border-bottom-color:var(--cm-accent); font-weight:600; }
@@ -408,14 +413,37 @@
       <div class="actions"><button class="cm-icon-btn"><i class="ti ti-bell"></i></button><button class="cm-icon-btn" data-open-settings><i class="ti ti-settings"></i></button></div>
     </div>
 
+    <!-- Siguen siendo los mismos siete destinos y los mismos botones .ad-tab con su
+         data-panel — el conmutador de paneles no se entera de nada. Lo que cambia es
+         que dejan de pesar todos igual: en una fila plana, "Roles" y "Registro de
+         auditoría" competían por la misma mirada. -->
     <div class="ad-tabs">
-      <button class="ad-tab is-on" data-panel="members"><i class="ti ti-users"></i><span data-i18n="admin.tab_members">Members</span><span class="ct" id="adTabMembers">14</span></button>
-      <button class="ad-tab" data-panel="roles"><i class="ti ti-shield-check"></i><span data-i18n="admin.tab_roles">Roles</span><span class="ct">7</span></button>
-      <button class="ad-tab" data-panel="sections"><i class="ti ti-layout-grid"></i><span data-i18n="admin.tab_sections">Sections</span><span class="ct">14</span></button>
-      <button class="ad-tab" data-panel="notifications"><i class="ti ti-bell-cog"></i><span data-i18n="common.notifications">Notifications</span></button>
-      <button class="ad-tab" data-panel="integrations"><i class="ti ti-plug"></i><span data-i18n="admin.tab_integrations">Integrations</span></button>
-      <button class="ad-tab" data-panel="security"><i class="ti ti-key"></i><span data-i18n="admin.tab_security">Security &amp; SSO</span></button>
-      <button class="ad-tab" data-panel="audit"><i class="ti ti-history"></i><span data-i18n="admin.tab_audit">Audit log</span></button>
+      <div class="ad-tgrp">
+        <div class="ad-tgrp-l" data-i18n="admin.grp_people">People</div>
+        <div class="ad-tgrp-i">
+          <button class="ad-tab is-on" data-panel="members"><i class="ti ti-users"></i><span data-i18n="admin.tab_members">Members</span><span class="ct" id="adTabMembers">14</span></button>
+          <button class="ad-tab" data-panel="roles"><i class="ti ti-shield-check"></i><span data-i18n="admin.tab_roles">Roles</span><span class="ct">7</span></button>
+        </div>
+      </div>
+      <div class="ad-tgrp">
+        <div class="ad-tgrp-l" data-i18n="admin.grp_club">Club</div>
+        <div class="ad-tgrp-i">
+          <!-- Sin contador: ese "14" prometía catorce cosas configurables y detrás no hay
+               nada todavía, solo el cartel de "en construcción". Un número inventado en
+               una pestaña es peor que una pestaña sin número. Lleva la marca de que no
+               está lista para que nadie la abra esperando encontrarla. -->
+          <button class="ad-tab" data-panel="sections"><i class="ti ti-layout-grid"></i><span data-i18n="admin.tab_sections">Sections</span><span class="ct" style="background:transparent;border:1px solid var(--cm-border);color:var(--cm-fg-faint)" data-i18n="admin.soon_badge">soon</span></button>
+          <button class="ad-tab" data-panel="integrations"><i class="ti ti-plug"></i><span data-i18n="admin.tab_integrations">Integrations</span></button>
+        </div>
+      </div>
+      <div class="ad-tgrp">
+        <div class="ad-tgrp-l" data-i18n="admin.grp_control">Control</div>
+        <div class="ad-tgrp-i">
+          <button class="ad-tab" data-panel="notifications"><i class="ti ti-bell-cog"></i><span data-i18n="common.notifications">Notifications</span></button>
+          <button class="ad-tab" data-panel="security"><i class="ti ti-key"></i><span data-i18n="admin.tab_security">Security &amp; SSO</span></button>
+          <button class="ad-tab" data-panel="audit"><i class="ti ti-history"></i><span data-i18n="admin.tab_audit">Audit log</span></button>
+        </div>
+      </div>
     </div>
 
     <section class="ad-page">
@@ -428,16 +456,35 @@
           <div class="org-name" id="adOrgName"><span data-i18n="common.loading">Loading…</span> <span style="color:var(--cm-fg-muted);font-weight:500;font-size:13px" data-i18n="admin.workspace_suffix">· workspace</span></div>
           <div class="org-meta" id="adOrgMeta">—</div>
         </div>
-        <span class="role-pill"><span class="dot"></span><span data-i18n="admin.role_pill_admin">ADMIN</span></span>
+        <!-- La píldora ADMIN se fue: gritaba más que el nombre del club, y quien abre
+             esta pantalla ya sabe que es admin — si no, no la vería. -->
         <div id="adClubSwitcher" style="display:none;align-items:center;gap:8px;margin-left:8px">
           <i class="ti ti-arrows-exchange" style="font-size:15px;color:var(--cm-accent)"></i>
           <select id="adClubSelect" style="height:30px;padding:0 8px;background:#ffffff;color:#0f172a;border:1px solid var(--cm-border);border-radius:7px;font:600 12.5px/1 var(--cm-font-sans);outline:none;max-width:220px;cursor:pointer;-webkit-appearance:menulist;appearance:menulist"></select>
           <button id="adClubExit" class="cm-btn is-outline is-sm" style="display:none"><i class="ti ti-arrow-back-up" style="font-size:13px"></i><span data-i18n="admin.my_club">My club</span></button>
         </div>
+        <!-- Tres botones con el mismo peso no son una jerarquía. Invitar staff es lo que
+             casi siempre se viene a hacer; agregar categoría se queda a la vista porque
+             es la otra acción de estructura; la factura, que se busca una vez al mes,
+             pasa al menú. -->
         <div class="right">
-          <button class="cm-btn is-outline is-sm" onclick="openOrgInvoiceModal()"><i class="ti ti-file-invoice" style="font-size:14px"></i><span data-i18n="admin.org_invoice">Org invoice</span></button>
           <button class="cm-btn is-outline is-sm" onclick="openAddCategoryModal()"><i class="ti ti-circle-plus" style="font-size:14px"></i><span data-i18n="admin.add_club_category">Add club / category</span></button>
           <button class="cm-btn is-primary is-sm"><i class="ti ti-mail-plus" style="font-size:14px"></i><span data-i18n="admin.invite_staff">Invite staff</span></button>
+          <div style="position:relative">
+            <button class="cm-btn is-outline is-sm" id="adMoreBtn" aria-haspopup="menu" aria-expanded="false"
+                    style="padding-left:9px;padding-right:9px" title="More"><i class="ti ti-dots" style="font-size:15px"></i></button>
+            <div id="adMoreMenu" hidden role="menu"
+                 style="position:absolute;right:0;top:calc(100% + 5px);z-index:60;min-width:216px;padding:5px;
+                        background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:11px;
+                        box-shadow:0 14px 40px rgba(0,0,0,.16)">
+              <button class="cm-btn is-ghost is-sm" role="menuitem" onclick="openOrgInvoiceModal()"
+                      style="width:100%;justify-content:flex-start">
+                <i class="ti ti-file-invoice" style="font-size:15px"></i><span data-i18n="admin.org_invoice">Org invoice</span></button>
+              <a class="cm-btn is-ghost is-sm" role="menuitem" href="Billing.html"
+                 style="width:100%;justify-content:flex-start;text-decoration:none">
+                <i class="ti ti-credit-card" style="font-size:15px"></i><span data-i18n="shell.nav.billing">Billing</span></a>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -495,6 +542,23 @@
         <select id="adTeamFilter" class="ad-teamsel"><option value="all" data-i18n="admin.filter_all_teams">All teams</option></select>
         <button class="cm-btn is-outline is-sm"><i class="ti ti-filter" style="font-size:14px"></i><span data-i18n="admin.filter">Filter</span></button>
         <button id="adSortBtn" class="cm-btn is-outline is-sm"><i class="ti ti-arrows-sort" style="font-size:14px"></i><span data-i18n="admin.sort">Sort</span></button>
+      </div>
+
+      <!-- Un club con una sola persona no tiene un dato que mostrar, tiene un paso sin
+           dar: es el que se saltó el 100% de los clubes que se registraron. "1 staff"
+           en gris no le dice nada a nadie. -->
+      <div id="adSoloBanner" hidden
+           style="display:flex;align-items:center;gap:15px;margin-bottom:16px;padding:15px 17px;
+                  border:1px dashed var(--cm-border);border-radius:12px;background:var(--cm-bg-soft)">
+        <i class="ti ti-users-plus" style="font-size:21px;color:var(--cm-fg-faint);flex:none"></i>
+        <div style="flex:1;min-width:0">
+          <div style="font:600 13.5px/1.3 var(--cm-font-sans);color:var(--cm-fg-strong)"
+               data-i18n="admin.solo_title">You are the only person in this workspace</div>
+          <div style="font:var(--cm-body-sm);color:var(--cm-fg-muted);margin-top:2px"
+               data-i18n="admin.solo_body">Coaches, physios and S&amp;C staff need their own access to record and see their work.</div>
+        </div>
+        <button class="cm-btn is-primary is-sm" id="adSoloInvite" style="flex:none">
+          <i class="ti ti-mail-plus" style="font-size:14px"></i><span data-i18n="admin.invite_staff">Invite staff</span></button>
       </div>
 
       <!-- Members table -->
@@ -1083,6 +1147,9 @@ const _esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&a
   document.getElementById('adKpiMembers').innerHTML = `${count} <sub>${tt('admin.active','active')}</sub>`;
   document.getElementById('adTabMembers').textContent = count;
   document.getElementById('adMembersSub').textContent = tt('admin.members_sub_active','{count} active',{ count });
+  // Solo con UNA persona: con dos ya hay equipo y el aviso estorbaría.
+  const _solo = document.getElementById('adSoloBanner');
+  if (_solo) _solo.hidden = count !== 1;
   document.getElementById('adHeadCtx').innerHTML =
     tt('admin.head_ctx','{count} members · created {year}',{ count, year:yearCreated });
   document.getElementById('adMemberFoot').innerHTML =
@@ -1385,6 +1452,10 @@ const _esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&a
     const elVetos = document.getElementById('supVetos');
     if (!elState) return;
 
+    // Si algo de esto revienta, el panel se quedaba en "Loading…" o en blanco para
+    // siempre, sin una línea que dijera qué pasó. Un panel mudo es indistinguible de
+    // un panel vacío, y el club no puede saber si su acceso de soporte está abierto.
+    try {
     const [grantRes, logRes, vetoRes, sessRes, conflRes] = await Promise.all([
       window.sb.from('support_grants')
         .select('id, reason, created_at, expires_at, granted_by, conflict_waived, waiver_reason')
@@ -1574,6 +1645,15 @@ const _esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&a
     // applyTo, no apply: el placeholder del motivo entra por data-i18n-ph y el panel se
     // pinta después de la pasada de i18n del arranque, así que hay que traducirlo a mano.
     if (window.CM_I18N?.applyTo) window.CM_I18N.applyTo(elState);
+    } catch (err) {
+      console.error('[Admin] panel de soporte:', err);
+      _supLoaded = false;   // que un fallo puntual no deje el panel muerto para siempre
+      elState.innerHTML =
+        '<div style="padding:16px 0;color:var(--cm-fg-muted);font:var(--cm-body-sm);line-height:1.5">' +
+        _esc(tt('admin.sup_error', 'Could not load support access. Reopen this tab to try again.')) +
+        '</div>';
+      if (elLog) elLog.innerHTML = '';
+    }
   };
 
   // ── Roles panel (tab "Roles") ──
@@ -2333,7 +2413,22 @@ const _esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&a
     try {
       // Org bar meta (staff · players · created)
       const _om = document.getElementById('adOrgMeta');
-      if (_om) _om.innerHTML = tt('admin.org_meta','<strong>{staff}</strong> staff · <strong>{players}</strong> players · created {year}',{ staff:count, players:playerCount, year:yearCreated });
+      if (_om) {
+        _om.innerHTML = tt('admin.org_meta','<strong>{staff}</strong> staff · <strong>{players}</strong> players · created {year}',{ staff:count, players:playerCount, year:yearCreated });
+        // Los días de prueba, donde se miran: junto al nombre del club, no enterrados
+        // en un KPI. Se añade aparte para no retrasar el pintado de la cabecera.
+        if (window.CM_SUBSCRIBE && window.CM_SUBSCRIBE.trialInfo) {
+          window.CM_SUBSCRIBE.trialInfo().then(info => {
+            if (!info || !info.enPrueba) return;
+            const sep = document.createElement('span');
+            sep.textContent = ' · ';
+            const av = document.createElement('strong');
+            av.style.color = 'var(--cm-warning, #d97706)';
+            av.textContent = tt('admin.trial_badge', 'Trial · {n} days left', { n: info.dias });
+            _om.append(sep, av);
+          }).catch(() => {});
+        }
+      }
       // Members KPI / header / foot
       const _km = document.getElementById('adKpiMembers'); if (_km) _km.innerHTML = `${count} <sub>${tt('admin.active','active')}</sub>`;
       const _hc = document.getElementById('adHeadCtx'); if (_hc) _hc.innerHTML = tt('admin.head_ctx','{count} members · created {year}',{ count, year:yearCreated });
@@ -2632,7 +2727,29 @@ const _esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&a
 
   // ── ADD CLUB / CATEGORY MODAL ──
   let _catClubId = null;
-  function openAddCategoryModal() {
+  /* Cada categoría es una unidad de cobro: el precio del producto es por categoría, no
+     por club. Mientras dura la prueba se puede abrir las que haga falta — de eso va la
+     prueba. Cuando se acaba y el club no contrató, abrir una categoría nueva es
+     exactamente lo que hay que pagar, así que el botón lleva al checkout en vez de
+     crear una estructura que después no se va a poder usar.
+
+     Un club que YA paga no se bloquea: la categoría se crea y arranca en el plan
+     gratuito, y se le dice con todas las letras en qué plan quedó. Y si el estado no
+     se pudo averiguar, se deja pasar: ante la duda no se le cierra la puerta a nadie. */
+  async function _gateCategoriaDePago() {
+    if (!window.CM_SUBSCRIBE || !window.CM_SUBSCRIBE.estado) return true;
+    let st;
+    try { st = await window.CM_SUBSCRIBE.estado(); } catch (_e) { return true; }
+    if (st !== 'vencido') return true;
+    if (confirm(tt('admin.category_needs_plan',
+        'Your trial has ended. Each category needs its own plan — subscribe to add a new one.'))) {
+      window.CM_SUBSCRIBE.open();
+    }
+    return false;
+  }
+
+  async function openAddCategoryModal() {
+    if (!await _gateCategoriaDePago()) return;
     const nameEl    = document.getElementById('catClubName');
     const countryEl = document.getElementById('catClubCountry');
     const shortEl   = document.getElementById('catClubShort');
@@ -2698,6 +2815,9 @@ const _esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&a
     const inp = document.getElementById('catNewName');
     const name = inp.value.trim();
     if (!name) { inp.focus(); return; }
+    // Mismo corte que el modal: acá se entra por otro camino (la lista de categorías),
+    // y un gate que solo cubre una puerta no es un gate.
+    if (!await _gateCategoriaDePago()) return;
     const cid = await window.getClubId();
     const { error } = await window.sb.from('teams').insert({ club_id: cid, name });
     if (error) { alert(/duplicate|unique/i.test(error.message) ? tt('admin.category_exists','That category already exists.') : error.message); return; }
@@ -2972,6 +3092,27 @@ const _esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&a
     } catch (e) { btn.innerHTML = tt('common.error', 'Error'); console.warn(e.message); }
     setTimeout(() => { btn.innerHTML = old; btn.disabled = false; }, 2000);
   }
+
+  // Menú de la cabecera. Se cierra al pulsar fuera o con Escape, como cualquier menú.
+  (function () {
+    const btn = document.getElementById('adMoreBtn');
+    const menu = document.getElementById('adMoreMenu');
+    if (!btn || !menu) return;
+    const cerrar = () => { menu.hidden = true; btn.setAttribute('aria-expanded', 'false'); };
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      menu.hidden = !menu.hidden;
+      btn.setAttribute('aria-expanded', String(!menu.hidden));
+    });
+    document.addEventListener('click', e => { if (!menu.hidden && !menu.contains(e.target)) cerrar(); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') cerrar(); });
+    menu.addEventListener('click', cerrar);
+  })();
+
+  // El botón del aviso reutiliza el de la cabecera: un solo camino de invitación.
+  document.getElementById('adSoloInvite')?.addEventListener('click', () => {
+    document.querySelector('.org-bar .right .cm-btn.is-primary')?.click();
+  });
 
   window.loadNotifSettings = loadNotifSettings;
   window.saveNotifSettings = saveNotifSettings;

@@ -299,5 +299,29 @@
     pintar();
   }
 
-  window.CM_SUBSCRIBE = { open, trialInfo };
+  /* Estado de pago del club, explícito. trialInfo() devuelve null tanto cuando el club
+     paga como cuando no hay datos, y esa ambigüedad no sirve para decidir si algo se
+     cobra: hay que poder distinguir "ya paga" de "se le acabó la prueba".
+
+       'suscrito'     → tiene al menos una suscripción viva
+       'prueba'       → dentro del período de gracia
+       'vencido'      → se le acabó la prueba y no contrató
+       'desconocido'  → no se pudo averiguar; ante la duda NO se cobra ni se bloquea */
+  async function estado() {
+    if (!window.sb || !window.getClub) return 'desconocido';
+    try {
+      const club = await window.getClub();
+      if (!club) return 'desconocido';
+      const { count } = await window.sb.from('subscriptions')
+        .select('id', { count: 'exact', head: true })
+        .eq('club_id', club.id).in('status', ['active', 'trialing', 'past_due']);
+      if (count) return 'suscrito';
+      if (!club.trial_ends_at) return 'desconocido';
+      const fin = new Date(club.trial_ends_at);
+      if (isNaN(fin.getTime())) return 'desconocido';
+      return fin > new Date() ? 'prueba' : 'vencido';
+    } catch (_e) { return 'desconocido'; }
+  }
+
+  window.CM_SUBSCRIBE = { open, trialInfo, estado };
 })();
