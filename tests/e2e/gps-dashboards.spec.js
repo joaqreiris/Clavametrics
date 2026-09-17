@@ -93,6 +93,41 @@ test.describe('GPS · dashboards y catálogo de cards', () => {
     expect(await page.locator('.ac-tpl .ac-owned').count()).toBeGreaterThan(0);
   });
 
+  // El panel de «Add card» se cortaba por los dos lados y las plantillas de abajo eran
+  // inalcanzables: el grid pedía tres columnas de 1fr, pero un item de grid no encoge por debajo
+  // de su contenido y los chips van con nowrap, así que las columnas se estiraban a 420px dentro
+  // de un grid de 718 (seis de diez plantillas fuera). Y el panel medía 1309px de alto en una
+  // ventana de 720, en overflow:hidden, así que la mitad de abajo no se podía ni ver ni scrollear.
+  test('la galería entra en el panel y se llega hasta la última plantilla', async ({ page }) => {
+    await mount(page);
+    await page.locator('button.pill', { hasText: 'Add card' }).first().click();
+    await expect(page.locator('.ac-panel')).toBeVisible();
+
+    const m = await page.evaluate(() => {
+      const panel = document.querySelector('.ac-panel');
+      const grid  = document.querySelector('.ac-grid');
+      const gr = grid.getBoundingClientRect();
+      const fuera = [...document.querySelectorAll('.ac-tpl')].filter(t => {
+        const r = t.getBoundingClientRect();
+        return r.right > gr.right + 1 || r.left < gr.left - 1;
+      }).length;
+      return { fuera, desborde: grid.scrollWidth - Math.round(gr.width),
+               panelAlto: Math.round(panel.getBoundingClientRect().height), ventana: window.innerHeight };
+    });
+    expect(m.fuera).toBe(0);                      // ninguna plantilla cortada a los costados
+    expect(m.desborde).toBeLessThanOrEqual(1);
+    expect(m.panelAlto).toBeLessThanOrEqual(m.ventana);   // el panel entra en la pantalla
+
+    // Y la última se alcanza scrolleando DENTRO de la galería, sin que quede fuera de la ventana.
+    const ok = await page.evaluate(() => {
+      const g = document.querySelector('.ac-gallery');
+      g.scrollTop = g.scrollHeight;
+      const t = [...document.querySelectorAll('.ac-tpl')].pop().getBoundingClientRect();
+      return t.top >= -1 && t.bottom <= window.innerHeight + 1;
+    });
+    expect(ok).toBe(true);
+  });
+
   test('agregar una plantilla de otro dashboard la trae a este', async ({ page }) => {
     await mount(page);
     // Vista activa = la primera (Player Week Report). Se busca una plantilla marcada como

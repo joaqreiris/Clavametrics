@@ -15,7 +15,11 @@
 .ac-stage-inner { position:relative; display:flex; align-items:flex-start; justify-content:center; padding:30px 20px; min-height:660px; }
 
 /* ---------- the panel ---------- */
-.ac-panel { width:760px; max-width:100%; background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-5); box-shadow:var(--cm-shadow-pop); overflow:hidden; display:flex; flex-direction:column; }
+/* El panel no puede pasar del alto de la ventana. Con diez plantillas medía 1309px dentro de una
+   ventana de 720 y, como está en overflow:hidden, la mitad de abajo quedaba inalcanzable: no se
+   podía llegar a ellas ni scrolleando. La galería es la parte que scrollea; la cabecera con las
+   dos opciones y el pie se quedan fijos. */
+.ac-panel { width:760px; max-width:100%; max-height:calc(100vh - 48px); background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-5); box-shadow:var(--cm-shadow-pop); overflow:hidden; display:flex; flex-direction:column; }
 
 /* header */
 .ac-head { display:flex; align-items:flex-start; gap:12px; padding:18px 20px 16px; border-bottom:1px solid var(--cm-border-soft); }
@@ -48,17 +52,22 @@
 .ac-path .badge { display:inline-flex; align-items:center; height:17px; padding:0 6px; border-radius:5px; background:var(--cm-success-bg); color:var(--cm-success); border:1px solid var(--cm-success-bd); font:600 9px/1 var(--cm-font-mono); letter-spacing:0.02em; text-transform:uppercase; }
 
 /* ---------- gallery ---------- */
-.ac-gallery { border-top:1px solid var(--cm-border-soft); background:var(--cm-bg-soft); padding:16px 20px 20px; }
+.ac-gallery { border-top:1px solid var(--cm-border-soft); background:var(--cm-bg-soft); padding:16px 20px 20px; flex:1 1 auto; min-height:0; overflow-y:auto; }
 .ac-gallery-h { display:flex; align-items:center; gap:9px; margin-bottom:13px; }
 .ac-gallery-h .t { font:600 12.5px/1 var(--cm-font-sans); color:var(--cm-fg-strong); }
 .ac-gallery-h .n { display:inline-flex; align-items:center; justify-content:center; min-width:18px; height:18px; padding:0 5px; border-radius:5px; background:var(--cm-bg-sunk); color:var(--cm-fg-muted); font:600 10px/1 var(--cm-font-mono); }
 .ac-gallery-h .all { margin-left:auto; display:inline-flex; align-items:center; gap:5px; font:500 11px/1.3 var(--cm-font-sans); color:var(--cm-fg-muted); }
 .ac-gallery-h .all .ti { font-size:13px; color:var(--cm-success); }
 
-.ac-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
+/* minmax(0,1fr) y no 1fr: un item de grid no encoge por debajo de su contenido mínimo, y los
+   chips de abajo van con white-space:nowrap — «Suggested on Microcycle Compare» no parte. Con
+   1fr las columnas se estiraban a 420px dentro de un grid de 718 y seis de las diez plantillas
+   quedaban fuera del panel (medido). Dos columnas porque a tres quedan ~230px por card, donde
+   esos chips no entran de ninguna manera. */
+.ac-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
 
 /* template card */
-.ac-tpl { position:relative; display:flex; flex-direction:column; background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-4); padding:13px 13px 12px; transition:border-color var(--cm-dur-1) var(--cm-ease), box-shadow var(--cm-dur-1) var(--cm-ease); }
+.ac-tpl { position:relative; min-width:0; display:flex; flex-direction:column; background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-4); padding:13px 13px 12px; transition:border-color var(--cm-dur-1) var(--cm-ease), box-shadow var(--cm-dur-1) var(--cm-ease); }
 .ac-tpl:hover { border-color:var(--cm-border-strong); box-shadow:var(--cm-shadow-2); }
 .ac-tpl-top { display:flex; align-items:flex-start; gap:9px; }
 .ac-tpl .spark { width:34px; height:34px; border-radius:var(--cm-r-2); flex-shrink:0; display:flex; align-items:center; justify-content:center; }
@@ -73,7 +82,7 @@
 .ac-tpl-tags { display:flex; align-items:center; gap:6px; margin-top:10px; flex-wrap:wrap; }
 .ac-cite { display:inline-flex; align-items:center; gap:5px; height:21px; padding:0 8px; border-radius:999px; background:var(--cm-violet-bg); color:var(--cm-violet); border:1px solid var(--cm-violet-bd); font:600 10px/1 var(--cm-font-mono); white-space:nowrap; }
 .ac-cite .ti { font-size:11px; }
-.ac-info { display:inline-flex; align-items:center; gap:4px; height:21px; padding:0 8px; border-radius:999px; background:var(--cm-neutral-bg); color:var(--cm-neutral); border:1px solid var(--cm-neutral-bd); font:500 10px/1 var(--cm-font-sans); white-space:nowrap; }
+.ac-info { min-width:0; overflow:hidden; text-overflow:ellipsis; display:inline-flex; align-items:center; gap:4px; height:21px; padding:0 8px; border-radius:999px; background:var(--cm-neutral-bg); color:var(--cm-neutral); border:1px solid var(--cm-neutral-bd); font:500 10px/1 var(--cm-font-sans); white-space:nowrap; }
 .ac-info .ti { font-size:11px; opacity:0.8; }
 
 .ac-tpl-foot { display:flex; align-items:center; gap:8px; margin-top:13px; padding-top:11px; border-top:1px solid var(--cm-border-soft); }
@@ -85,7 +94,7 @@
 /* Plantilla cuya card vive HOY en otro dashboard: se ofrece igual —no hay bloqueo— con una
    píldora que sugiere dónde encaja mejor. Al agregarla, la card se mueve hasta acá. */
 .ac-tpl-foot .ac-owned + .ac-add { margin-left:8px; }
-.ac-owned { margin-left:auto; display:inline-flex; align-items:center; gap:5px; height:30px; padding:0 11px; border-radius:var(--cm-r-2); border:1px dashed var(--cm-border); background:transparent; color:var(--cm-fg-muted); font:600 11.5px/1 var(--cm-font-sans); cursor:help; white-space:nowrap; }
+.ac-owned { min-width:0; overflow:hidden; text-overflow:ellipsis; margin-left:auto; display:inline-flex; align-items:center; gap:5px; height:30px; padding:0 11px; border-radius:var(--cm-r-2); border:1px dashed var(--cm-border); background:transparent; color:var(--cm-fg-muted); font:600 11.5px/1 var(--cm-font-sans); cursor:help; white-space:nowrap; }
 .ac-owned .ti { font-size:13px; }
 
 /* ---------- reference popover (open state demo) ---------- */
