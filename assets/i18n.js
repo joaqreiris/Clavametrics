@@ -171,12 +171,12 @@
     return null;
   }
 
-  function pluralPick(value, count) {
+  function pluralPick(value, count, lang) {
     // "one form|other form" (or "zero|one|other"). Uses Intl.PluralRules.
     if (typeof value !== "string" || value.indexOf("|") === -1) return value;
     var parts = value.split("|");
     var cat;
-    try { cat = new Intl.PluralRules(current).select(count); } catch (e) { cat = count === 1 ? "one" : "other"; }
+    try { cat = new Intl.PluralRules(lang || current).select(count); } catch (e) { cat = count === 1 ? "one" : "other"; }
     if (parts.length === 2) return cat === "one" ? parts[0] : parts[1];       // one|other
     if (parts.length >= 3) {                                                    // zero|one|other
       if (count === 0) return parts[0];
@@ -197,6 +197,34 @@
     if (v == null) return key;                 // show the key when missing (easy to spot)
     if (vars && vars.count != null) v = pluralPick(v, vars.count);
     return interpolate(v, vars);
+  }
+
+  // ── Traducir a un idioma que NO es el de la app ─────────────────────────────
+  // Un cuerpo técnico con la app en español puede tener que escribirle al plantel en
+  // inglés (o al revés). translator("en") devuelve una t() atada a ese idioma sin
+  // tocar el idioma de la interfaz. Los diccionarios extra se cachean en memoria.
+  var altDicts = {};
+  function makeT(map, lang) {
+    return function (key, vars) {
+      var v = map[key] != null ? map[key] : (enDict[key] != null ? enDict[key] : null);
+      if (v == null) return key;
+      if (vars && vars.count != null) v = pluralPick(v, vars.count, lang);
+      return interpolate(v, vars);
+    };
+  }
+  function translator(lang) {
+    lang = normalize(lang) || FALLBACK;
+    if (lang === current) return Promise.resolve(t);
+    if (altDicts[lang]) return Promise.resolve(makeT(altDicts[lang], lang));
+    var jobs = [
+      (enDict && Object.keys(enDict).length) ? Promise.resolve(enDict) : fetchLocale(FALLBACK),
+      lang === FALLBACK ? Promise.resolve(null) : fetchLocale(lang)
+    ];
+    return Promise.all(jobs).then(function (res) {
+      enDict = res[0] || enDict || {};
+      altDicts[lang] = Object.assign({}, enDict, res[1] || (lang === FALLBACK ? enDict : {}));
+      return makeT(altDicts[lang], lang);
+    }).catch(function () { return t; });
   }
 
   // ── Apply to the DOM ────────────────────────────────────────────────────────
@@ -362,6 +390,7 @@
   // ── API ─────────────────────────────────────────────────────────────────────
   var api = {
     t: t,
+    translator: translator,
     setLang: setLang,
     applyTo: applyTo,
     setUserPref: setUserPref,

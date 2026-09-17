@@ -375,7 +375,13 @@
         </div>
       </div>
       <div id="shareMsgWrap" style="display:none;">
-        <div class="tr-field-lab" data-i18n="rpe.shareMsgLabel">Message</div>
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;">
+          <div class="tr-field-lab" data-i18n="rpe.shareMsgLabel">Message</div>
+          <label class="tr-field-lab" style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+            <span data-i18n="rpe.shareMsgLang">Message language</span>
+            <select class="cm-select" id="shareLang" style="height:26px;padding:0 6px;font:500 11px/1 var(--cm-font-sans);letter-spacing:0;text-transform:none;cursor:pointer;width:auto;"></select>
+          </label>
+        </div>
         <textarea class="cm-textarea" id="shareMsg" rows="4" data-i18n-ph="rpe.shareMsgPh" placeholder="Write a message to send with the link…"></textarea>
       </div>
     </div>
@@ -2096,15 +2102,78 @@
     const shareSession = document.getElementById('shareSession');
     const shareMsg = document.getElementById('shareMsg');
     const shareMsgWrap = document.getElementById('shareMsgWrap');
+    const shareLang = document.getElementById('shareLang');
+    let currentToken = '';
     let currentUrl = '';
+
+    // El idioma del mensaje no tiene por qué ser el de la app: se puede trabajar con
+    // ClavaMetrics en español y un plantel que solo lee inglés. Arranca en el idioma de
+    // la app y el staff lo cambia en el desplegable de al lado del mensaje.
+    let msgLang = (window.CM_I18N && window.CM_I18N.current) || 'en';
+    let msgTt = tt;   // tt() atado a msgLang: (clave, fallback, vars)
+    function bindLang(lang) {
+      msgLang = lang;
+      if (!window.CM_I18N || !window.CM_I18N.translator) return Promise.resolve();
+      return window.CM_I18N.translator(lang).then(t => {
+        msgTt = (k, fb, vars) => { const v = t(k, vars); return (v && v !== k) ? v : fb; };
+      }).catch(() => {});
+    }
+
+    // El saludo lo decide la hora local del que comparte: a las 19:00 no se manda
+    // "buenos días". El corte de la noche es a las 20 y no a las 18 como el saludo del
+    // Hub: el Hub le habla al entrenador que abre la app, esto le habla al plantel por
+    // WhatsApp, y a las 19 —hora de sesión de tarde— "buenas noches" suena raro.
+    function greeting() {
+      const h = new Date().getHours();
+      const key = h < 12 ? 'hub.good_morning' : h < 20 ? 'hub.good_afternoon' : 'hub.good_evening';
+      const fb  = h < 12 ? 'Good morning'     : h < 20 ? 'Good afternoon'     : 'Good evening';
+      return msgTt(key, fb);
+    }
+
+    // El link lleva el idioma elegido: el jugador abre el cuestionario en el mismo
+    // idioma en el que le llegó el mensaje, sin depender de su navegador.
+    function buildUrl() {
+      currentUrl = currentToken
+        ? location.origin + '/survey.html?token=' + currentToken + '&lang=' + msgLang
+        : '';
+      return currentUrl;
+    }
 
     // Pre-fill the editable message with the generated link (staff can tweak before sharing)
     function composeMsg() {
       if (!shareMsg) return '';
-      return tt('rpe.shareMsgBody',
-        'Good morning, here is the link to rate the session effort (RPE), from 1 to 10. If there is anything important to note, please describe it. Thanks.\n{url}',
-        { url: currentUrl });
+      return msgTt('rpe.shareMsgBody',
+        greeting() + ', here is the link to rate the session effort (RPE), from 1 to 10. If there is anything important to note, please describe it. Thanks.\n' + currentUrl,
+        { greeting: greeting(), url: currentUrl });
     }
+
+    function repaintShare() {
+      if (!currentToken) return;
+      buildUrl();
+      linkUrl.textContent = currentUrl;
+      if (shareMsg) shareMsg.value = composeMsg();
+    }
+
+    if (shareLang) {
+      const langs = (window.CM_I18N && window.CM_I18N.langs) || ['en'];
+      const names = (window.CM_I18N && window.CM_I18N.name) || {};
+      shareLang.innerHTML = langs.map(l => `<option value="${l}">${T.escape(names[l] || l.toUpperCase())}</option>`).join('');
+      shareLang.value = msgLang;
+      shareLang.addEventListener('change', () => {
+        shareLang.dataset.picked = '1';
+        bindLang(shareLang.value).then(repaintShare);
+      });
+    }
+    // Mientras el staff no elija a mano, el mensaje sigue al idioma de la app (que llega
+    // tarde: el diccionario se carga async y el perfil aún más tarde).
+    document.addEventListener('cm:langchanged', () => {
+      if (!shareLang || shareLang.dataset.picked === '1') return;
+      const next = (window.CM_I18N && window.CM_I18N.current) || msgLang;
+      if (next === msgLang) return;
+      shareLang.value = next;
+      bindLang(next).then(repaintShare);
+    });
+    bindLang(msgLang);
 
     shareTeam.innerHTML = state.teams.map(t => `<option value="${t.id}">${T.escape(t.name)}</option>`).join('');
     const curTeam = activeTeamId();
@@ -2124,7 +2193,8 @@
         const token = crypto.randomUUID();
         const { error } = await window.sb.from('share_links').insert({ club_id: state.cid, scope: 'rpe', token, team_id: teamId, session_id: sessionId });
         if (error) throw error;
-        currentUrl = location.origin + '/survey.html?token=' + token;
+        currentToken = token;
+        buildUrl();
         linkUrl.textContent = currentUrl;
         linkRow.classList.remove('is-empty');
         btnGen.innerHTML = '<i class="ti ti-refresh"></i>' + T.escape(tt('rpe.newLink','New'));
@@ -2207,6 +2277,10 @@
 })();
 </script>
 
+<!-- settings-drawer/tweaks-panel son React: sin estos dos, el script revienta al montar
+     y nunca llega a registrar el click de [data-open-settings] → el engranaje no abre nada. -->
+<script defer src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin="anonymous"></script>
+<script defer src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin="anonymous"></script>
 <script>window.__CM_TWEAK_DEFAULTS = { theme: "hybrid", accent: "green" };</script>
 <script defer src="settings-drawer.js"></script>
 <script defer src="tweaks-panel.js"></script>

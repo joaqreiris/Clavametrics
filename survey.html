@@ -201,9 +201,12 @@ const T={
     parts:{hamstring:'Isquiotibiais',quads:'Quadríceps',calves:'Panturrilhas',groin:'Adutores',knee:'Joelho',ankle:'Tornozelo',shoulder:'Ombro',back:'Lombar'}}
 };
 const _n=(navigator.language||'en').toLowerCase();
-// Idioma del survey. Hoy la app está en inglés → forzamos 'en'.
-// Futuro: null = auto-detectar por dispositivo · 'es'/'pt' = forzar ese idioma.
-const SURVEY_LANG='en';
+// Idioma del survey. Lo decide el staff al compartir: el link lleva ?lang= con el mismo
+// idioma en el que redactó el mensaje, así el jugador abre el cuestionario en el idioma
+// en el que le hablaron y no en el de su teléfono. Sin ?lang= (links viejos) se queda en
+// inglés, que es lo que hacía antes.
+const _q=(new URLSearchParams(location.search).get('lang')||'').toLowerCase();
+const SURVEY_LANG=['en','es','pt'].indexOf(_q)>=0?_q:'en';
 const L=T[SURVEY_LANG || (_n.startsWith('es')?'es':_n.startsWith('pt')?'pt':'en')];
 const SB_URL='https://xesrumijvdmqjrufgeka.supabase.co';
 const SB_KEY='sb_publishable_p4DBCWsAm9u-Wf5-_CP-Yw_MYh_3cR6';
@@ -217,7 +220,7 @@ let players=[],picked=null,scope='wellness',sessions=[],sessPick=null;
 // vive en memoria: para el staff siguen figurando como pendientes en el board de RPE.
 const skipped=new Set();
 const state={sleepQ:4,mood:4,fatigue:4,stress:4,soreness:4,rpe:6,body:new Set(),note:''};
-const today=new Date().toLocaleDateString(L===T.en?'en-GB':'es-ES',{weekday:'long',day:'numeric',month:'short'});
+const today=new Date().toLocaleDateString(SURVEY_LANG==='en'?'en-GB':SURVEY_LANG==='pt'?'pt-BR':'es-ES',{weekday:'long',day:'numeric',month:'short'});
 
 function show404(msg){app.innerHTML=`<div class="center"><i class="ti ti-link-off big"></i><div class="t">${L.invalid}</div><div>${esc(msg||L.expired)}</div></div>`;}
 function header(){return `<div class="ph-header"><span class="date">${today}</span>${picked?`<span class="avatar">${esc((picked.name[0]||'?').toUpperCase())}</span>`:''}</div>`;}
