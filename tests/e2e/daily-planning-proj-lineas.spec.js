@@ -185,10 +185,41 @@ test.describe('Daily Planning · carga proyectada por línea', () => {
     expect(await page.locator('#dpProjBreak').textContent()).toBe(antes);
   });
 
-  test('el desglose viaja a la hoja del dia', async ({ page }) => {
+  test('a la hoja del dia va la carga por linea, no el aporte por tarea', async ({ page }) => {
+    // El aporte por tarea es una herramienta de EDICION: se usa en pantalla mientras se
+    // arma la sesion, para saber que bloque mover. Lo que se lleva al campo impreso es
+    // cuanto va a correr cada linea. Las dos cosas juntas no entran en una hoja.
     await abrirCard(page);
     await page.evaluate(() => window.dpRenderPrintSheet && window.dpRenderPrintSheet());
-    await expect(page.locator('#dpPrintSheet')).toContainText(/Contribution by task|Aporte por tarea/i, { timeout: 15_000 });
-    await expect(page.locator('#dpPrintSheet')).toContainText('2,408');
+    const hoja = page.locator('#dpPrintSheet');
+    await expect(hoja).toContainText(/Projected load by line|Carga proyectada por línea/i, { timeout: 15_000 });
+    await expect(hoja).not.toContainText(/Contribution by task|Aporte por tarea/i);
+  });
+
+  test('la hoja lleva las cuatro lineas aunque la pantalla este en modo equipo', async ({ page }) => {
+    // El papel no depende de lo que este mirando quien imprime.
+    await abrirCard(page);
+    await expect(page.locator('#dpProjMode [data-mode="team"]')).toHaveClass(/is-on/);
+    await page.evaluate(() => window.dpRenderPrintSheet && window.dpRenderPrintSheet());
+    const hoja = page.locator('#dpPrintSheet');
+    for (const linea of ['DEF', 'MID', 'WNG', 'FWD']) await expect(hoja).toContainText(linea, { timeout: 15_000 });
+  });
+
+  test('la marca de «media del equipo» tambien viaja al papel', async ({ page }) => {
+    // En pantalla lo explica el tooltip; en papel no hay donde pasar el raton, y sin la
+    // marca la hoja muestra cuatro columnas como si las cuatro fueran igual de solidas.
+    await abrirCard(page);
+    await page.evaluate(() => window.dpRenderPrintSheet && window.dpRenderPrintSheet());
+    await expect(page.locator('#dpPrintSheet')).toContainText(/fewer than 3 GPS readings|menos de 3 mediciones/i, { timeout: 15_000 });
+  });
+
+  test('el boton de impresion arranca encendido y apaga el bloque', async ({ page }) => {
+    await abrirCard(page);
+    const btn = page.locator('#dpProjPrintBtn');
+    await expect(btn).toHaveClass(/is-on/);            // por defecto si
+    await btn.click();
+    await expect(btn).not.toHaveClass(/is-on/);
+    await page.evaluate(() => window.dpRenderPrintSheet && window.dpRenderPrintSheet());
+    await expect(page.locator('#dpPrintSheet')).not.toContainText(/Projected load by line|Carga proyectada por línea/i);
   });
 });

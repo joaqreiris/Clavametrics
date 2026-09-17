@@ -1818,6 +1818,31 @@ let _dpProfPosIn  = {};             // exercise_id → promesa en vuelo
 let _dpMatchDem   = null;           // pos_group → fila de v_match_demand_pos
 let _dpMatchDemIn = null;
 
+// ¿La carga por línea va a la hoja del día? Por defecto sí. El aporte por tarea NO se
+// imprime: es una herramienta de edición (con qué bloque mover una métrica), se usa en
+// pantalla mientras se arma la sesión. Lo que se lleva al campo es cuánto va a correr
+// cada línea hoy.
+const _DP_PROJ_PRINT_LS = 'cm_dp_proj_print';
+function dpProjPrints(){
+  try { return localStorage.getItem(_DP_PROJ_PRINT_LS) !== '0'; } catch (_) { return true; }
+}
+function dpPaintProjPrintBtn(){
+  const b = document.getElementById('dpProjPrintBtn'); if (!b) return;
+  const on = dpProjPrints();
+  b.classList.toggle('is-on', on);
+  b.setAttribute('aria-pressed', on ? 'true' : 'false');
+  b.title = on ? tt('daily_planning.proj_print_on', 'Printed on the day sheet')
+               : tt('daily_planning.proj_print_off', 'Not printed on the day sheet');
+}
+function dpToggleProjPrint(){
+  try { localStorage.setItem(_DP_PROJ_PRINT_LS, dpProjPrints() ? '0' : '1'); } catch (_) {}
+  dpPaintProjPrintBtn();
+}
+document.getElementById('dpProjPrintBtn')?.addEventListener('click', (e) => {
+  e.stopPropagation();          // la cabecera colapsa la card al hacer clic
+  dpToggleProjPrint();
+});
+
 function dpProjMode(){
   try { const v = localStorage.getItem(_DP_PROJ_MODE_LS); if (v === 'lines' || v === 'team') return v; } catch (_) {}
   return 'team';
@@ -2032,8 +2057,14 @@ async function renderGpsProjection(){
   const contribs = dpProjWeights(covered);   // paralelo → promedio ponderado por jugadores
   // La columna de equipo se calcula siempre: es la que alimenta la hoja de impresión.
   const teamCol = dpProjectLine(contribs, keys, null);
-  const cols = mode === 'lines' ? _DP_POS_LINES.map(l => dpProjectLine(contribs, keys, l)) : [teamCol];
+  // Las columnas por línea se calculan siempre, aunque la pantalla esté en modo equipo:
+  // la hoja del día las imprime igual, y los perfiles ya están en memoria (no cuesta).
+  const posCols = _DP_POS_LINES.map(l => dpProjectLine(contribs, keys, l));
+  window._dpProjPosCols = posCols;
+  window._dpProjKeys = keys.slice();
+  const cols = mode === 'lines' ? posCols : [teamCol];
   dpPaintProjModeBtns(mode);
+  dpPaintProjPrintBtn();
 
   // La barra mide contra el objetivo si el club puso uno (zonas de siempre: <90% por
   // debajo, ±10% en zona, >110% pasado). Sin objetivo mide contra el partido y va en
@@ -2361,42 +2392,9 @@ async function dpRenderPrintSheet() {
         <div style="font:700 12px ${MONO};color:#15181D;margin-top:2px">${(proj||0).toLocaleString()}${tgt!=null?` <span style="color:#9CA3AF;font-weight:500">/ ${tgt.toLocaleString()}</span>`:''}${unit?` <span style="font-size:8.5px;color:#8A93A0;font-weight:500">${esc(unit)}</span>`:''}</div>
       </div>`;
     }).filter(Boolean);
-    // Aporte de cada tarea al total del dia. Es la mitad util de la carga proyectada en
-    // papel: el bloque de arriba dice cuanto, este dice de donde sale. Una linea por
-    // metrica —no una matriz de tareas x metricas, que con ocho metricas era un chorizo
-    // de sesenta numeros—. Sin color: la hoja se imprime en blanco y negro.
-    const _brk = window._dpProjBreak;
-    let gpsBreak = '';
-    if (_brk && (_brk.hayDatos || (_brk.sinPerfil && _brk.sinPerfil.length))) {
-      const _filas = (_brk.porMetrica || []).map(r => {
-        const m = (window.CM_GPS_METRICS||[]).find(x => x.key === r.k);
-        const unit = m && m.avgUnit ? ` <span style="font-weight:500;color:#9CA3AF">${esc(m.avgUnit)}</span>` : '';
-        const lista = r.aportes.length
-          ? r.aportes.slice(0, _DP_BRK_TOP).map((a, i) =>
-              `<span style="white-space:nowrap"><span style="font-weight:${i === 0 ? '700' : '500'};color:#15181D">${esc(_dpBrkCorto(a.nombre))}</span> <span style="font:500 8px ${MONO};color:#9CA3AF">${a.pct}%</span></span>`
-            ).join('<span style="color:#8A93A0"> · </span>')
-            + (r.aportes.length > _DP_BRK_TOP ? `<span style="color:#C7CBD1;font:500 8px ${MONO}"> +${r.aportes.length - _DP_BRK_TOP}</span>` : '')
-          : '<span style="color:#C7CBD1">—</span>';
-        return `<div style="display:grid;grid-template-columns:78px 74px minmax(0,1fr);gap:8px;align-items:baseline;padding:3px 2px;border-top:1px solid #EFEFEC">
-            <div style="font:600 9px ${FONT};color:#15181D">${esc(m ? m.label : r.k)}</div>
-            <div style="text-align:right;font:600 9.5px ${MONO};color:#15181D">${r.total.toLocaleString()}${unit}</div>
-            <div style="font:500 9px ${FONT};color:#15181D;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${lista}</div>
-          </div>`;
-      }).join('');
-      const _falta = (_brk.sinPerfil && _brk.sinPerfil.length)
-        ? `<div style="font:500 8px ${FONT};color:#8A93A0;padding:5px 2px 0;border-top:1px solid #EFEFEC">
-             ${esc(tt('daily_planning.tasks_without_profile', 'No GPS profile yet:'))}
-             ${esc(_brk.sinPerfil.join(' · '))}
-           </div>` : '';
-      gpsBreak = `<div style="margin-top:10px;border:1px solid #E7E7E4;border-radius:8px;padding:8px 9px">
-          <div style="font:600 7.5px ${MONO};letter-spacing:.06em;text-transform:uppercase;color:#8A93A0;margin-bottom:4px">${esc(tt('daily_planning.breakdown_title','Contribution by task'))}</div>
-          ${_filas}${_falta}
-        </div>`;
-    }
     const gpsStrip = _gpsCells.length ? `<div class="dsp-brk" style="margin-bottom:16px">
       ${sectionTitle(tt('daily_planning.sheet_gps_load','Conditional load · GPS'))}
       <div style="display:grid;grid-template-columns:repeat(${Math.min(_gpsCells.length,6)},1fr);gap:8px">${_gpsCells.join('')}</div>
-      ${gpsBreak}
     </div>` : '';
 
     // 4) Squad — recompute status like dpRenderSquad (same status chain: other_team/day_off/rehab included)
@@ -2610,6 +2608,46 @@ async function dpRenderPrintSheet() {
       ${exGrid(gks, 3)}
     </div>` : '';
 
+    // 6c) Carga proyectada POR LINEA — al final de la hoja, detras de porteros.
+    // Arriba, junto a los minutos, va el titular del equipo (kpiStrip + gpsStrip); esto es
+    // el detalle: cuanto le toca a cada linea hoy y que porcentaje de un partido suyo es.
+    // El punto de la cabecera VIAJA AL PAPEL a proposito: en pantalla lo explica el tooltip,
+    // aca no hay donde pasar el raton, y sin el la hoja muestra cuatro columnas como si las
+    // cuatro fueran igual de solidas cuando una sale de la media del equipo.
+    const _posCols = window._dpProjPosCols || [];
+    const _posKeys = (window._dpProjKeys || []).filter(k => _posCols.some(c => (c.vals[k] || 0) > 0));
+    let gpsPosBlock = '';
+    if (dpProjPrints() && _posCols.length && _posKeys.length) {
+      const _pc = `78px repeat(${_posCols.length}, minmax(0,1fr))`;
+      const _cab = `<div style="display:grid;grid-template-columns:${_pc};gap:8px;padding:0 2px 5px">
+          <div></div>
+          ${_posCols.map(c => `<div style="font:600 8px ${MONO};letter-spacing:.06em;text-transform:uppercase;color:#8A93A0">${esc(_dpLineLabel(c.line))}${c.fb ? ' <span style="color:#C2410C">\u25CF</span>' : ''}</div>`).join('')}
+        </div>`;
+      const _filas = _posKeys.map(k => {
+        const m = (window.CM_GPS_METRICS||[]).find(x => x.key === k);
+        const unit = m && m.avgUnit ? m.avgUnit : '';
+        const celdas = _posCols.map(c => {
+          const v = c.vals[k] || 0;
+          const pct = (typeof dpMatchPct === 'function') ? dpMatchPct(k, c.line, v) : null;
+          return `<div>
+              <div style="font:700 11px ${MONO};color:#15181D">${v.toLocaleString()}${unit ? ` <span style="font-weight:500;font-size:8px;color:#8A93A0">${esc(unit)}</span>` : ''}</div>
+              ${pct != null ? `<div style="font:500 8px ${MONO};color:#9CA3AF">${pct}% ${esc(tt('daily_planning.of_match_short','match'))}</div>` : ''}
+            </div>`;
+        }).join('');
+        return `<div style="display:grid;grid-template-columns:${_pc};gap:8px;align-items:baseline;padding:4px 2px;border-top:1px solid #EFEFEC">
+            <div style="font:600 9.5px ${FONT};color:#15181D">${esc(m ? m.label : k)}</div>${celdas}
+          </div>`;
+      }).join('');
+      const _aviso = _posCols.some(c => c.fb)
+        ? `<div style="font:500 8px ${FONT};color:#8A93A0;padding:6px 2px 0">
+             <span style="color:#C2410C">\u25CF</span> ${esc(tt('daily_planning.print_fallback_note','fewer than 3 GPS readings for that line — team average used'))}
+           </div>` : '';
+      gpsPosBlock = `<div class="dsp-brk" style="margin-bottom:16px">
+          ${sectionTitle(tt('daily_planning.sheet_gps_by_line','Projected load by line'))}
+          ${_cab}${_filas}${_aviso}
+        </div>`;
+    }
+
     // 7) Footer
     const midParts = [];
     if (mc?.name) midParts.push(mc.name);
@@ -2633,7 +2671,7 @@ async function dpRenderPrintSheet() {
       <thead><tr><td style="padding:0"><div style="height:11mm"></div></td></tr></thead>
       <tbody><tr><td style="padding:0; vertical-align:top">
         <div class="dsp-sheet" style="--club-accent:${accent}; width:794px; min-height:1035px; background:#fff; padding:0 42px; box-sizing:border-box; font:400 13px/1.5 ${FONT}; color:#15181D; display:flex; flex-direction:column; margin:0 auto">
-          ${head}${sessionLine}${metaGrid}${notesBand}${kpiStrip}${gpsStrip}${squadBand}${actBlock}${fieldBlock}${gkBlock}${footer}
+          ${head}${sessionLine}${metaGrid}${notesBand}${kpiStrip}${gpsStrip}${squadBand}${actBlock}${fieldBlock}${gkBlock}${gpsPosBlock}${footer}
         </div>
       </td></tr></tbody>
       <tfoot><tr><td style="padding:0"><div style="height:11mm"></div></td></tr></tfoot>
