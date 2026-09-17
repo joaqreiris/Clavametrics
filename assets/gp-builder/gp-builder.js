@@ -84,6 +84,11 @@
     // lados de un eje central. El desbalance se ve como una barra más larga que su par, sin
     // dividir nada mentalmente: con dos columnas de números esa relación hay que calcularla.
     diverging: { name: 'Side by side', icon: 'ti-arrow-bar-both', min: 2, max: 2, dimMax: 1, squadOnly: true },
+    // Carga aguda (7d) contra crónica (28d). El eje X ES el tiempo, así que no lleva dimensión: lo
+    // que se elige es la métrica base (player_load por defecto). El cálculo no se reescribe acá —
+    // lo hace window.gpsACWR, el mismo motor que usaba la card fija, así que los números son los
+    // de siempre. sessionOnly: un ejercicio suelto no tiene ventana de 28 días.
+    acwr: { name: 'ACWR', icon: 'ti-activity-heartbeat', min: 1, max: 1, dimMax: 0, sessionOnly: true },
   };
 
   // DIMENSIONS — fields you group / label / filter by (no aggregation).
@@ -3251,6 +3256,7 @@
       case 'demand':  mountDemandCard(container, config, series, { demand: opts.demand || null, mixedTypes: opts.demandMixed || 0, example: opts.example }); break;
       case 'dumbbell': mountDumbbellCard(container, config, series, { dumbbell: opts.dumbbell || null, dumbbellInfo: opts.dumbbellInfo || null, example: opts.example }); break;
       case 'diverging': mountDivergingCard(container, config, series, { example: opts.example }); break;
+      case 'acwr':    mountAcwrCard(container, config, { acwr: opts.acwr || null, example: opts.example }); break;
       default:        destroyBodyChart(container); container.innerHTML = renderTypeFromDataset(config, series, opts);
     }
   }
@@ -3496,6 +3502,21 @@
       // Step 1: session IDs — a date filter, if active, wins over the card range (but NOT
       // for a pinned card: FBcard is null, so it keeps its own config.range).
       const _effRange = _fbEffectiveRange(FBcard, config.range);
+      // El ACWR no se dibuja con las filas del período elegido: necesita su propia ventana larga
+      // (los 28 días de crónica) y se la pide por su lado, trayendo sólo la columna de la métrica
+      // base y sin joins. Sin este atajo la card pagaba ADEMÁS el fetch del período, que después
+      // no miraba nadie. Sale por acá, con el mismo cierre que el flujo normal.
+      if (config.viz === 'acwr') {
+        let _acwrDatos = null;
+        try { _acwrDatos = await _buildAcwrData(config, ctx); }
+        catch (e) { console.warn('gpb acwr:', e); }
+        if (stale()) return;
+        _renderCardInto(body, config, [], { acwr: _acwrDatos });
+        cardEl.classList.remove('is-draft');
+        clearTimeout(cardEl.__loadWatchdog);
+        return;
+      }
+
       let sessionIds = await getSessionIds(_effRange, ctx, sb);
       if (stale()) return;
       if ((FBcard?.mdCodes?.length || FBcard?.rivals?.length || FBcard?.sessionTypes?.length) && sessionIds.length) {
@@ -7785,6 +7806,43 @@
    * Sin referencia suficiente (menos de 3 partidos) la fila queda igual, marcada: la métrica se
    * pidió y hay que ver que no se pudo comparar, no hacerla desaparecer.
    */
+  // ── ACWR ────────────────────────────────────────────────────────────────────────────────
+  // No se recalcula nada: window.gpsACWR es el mismo motor que usaba la card fija, y su núcleo
+  // (fetchByPlayer + squadTimeline) está separado del fetch, así que se le puede pasar el
+  // alcance de ESTA card. squadTimeline saca el ACWR de cada jugador y recién después promedia
+  // —con su guard de sesiones mínimas—, por eso hace falta el grano por jugador y no alcanza con
+  // una carga diaria de equipo.
+  function _acwrDiasAtras(hasta, dias) {
+    const d = new Date(hasta + 'T00:00:00');
+    d.setDate(d.getDate() - dias);
+    return d.toISOString().slice(0, 10);
+  }
+  /** Jugadores que entran, según el alcance de la card. null = sin restricción. */
+  function _acwrIds(config, ctx) {
+    if (config?.scope?.level === 'player' && ctx?.playerId) return new Set([String(ctx.playerId)]);
+    if (Array.isArray(ctx?.teamPlayerIds) && ctx.teamPlayerIds.length)
+      return new Set(ctx.teamPlayerIds.map(String));
+    return null;
+  }
+  async function _buildAcwrData(config, ctx) {
+    const A = window.gpsACWR;
+    const club = ctx?.clubId || _clubId;
+    if (!A || !club) return null;
+    const metricKey = config?.metrics?.[0]?.id || 'player_load';
+    // Ventana: lo que se dibuja + los 28 días de crónica que necesita el primer día del gráfico.
+    const dias = Math.max(28, Number(config?.style?.acwrDays) || 84);
+    const hasta = cmToday();
+    const desde = _acwrDiasAtras(hasta, dias);
+    try { await A.loadClubModel?.(club); } catch (_) { /* queda el modelo por defecto */ }
+    const byPlayer = await A.fetchByPlayer({ clubId: club, metricKey, from: desde, to: hasta });
+    const permitidos = _acwrIds(config, ctx);
+    const usados = permitidos
+      ? Object.fromEntries(Object.entries(byPlayer || {}).filter(([pid]) => permitidos.has(String(pid))))
+      : (byPlayer || {});
+    const t = A.squadTimeline(usados, desde, hasta, {}, desde);
+    return { ...t, metricKey, jugadores: Object.keys(usados).length };
+  }
+
   async function _buildDemandData(config, series) {
     const opts = _demandOpts(config);
     const out = [];
@@ -8127,6 +8185,81 @@
    * columnas separadas. El umbral es la razón entre el lado grande y el chico (1,5 por defecto:
    * uno hace la mitad más que el otro).
    */
+  function mountAcwrCard(body, config, opts = {}) {
+    destroyBodyChart(body);
+    const d = opts.acwr;
+    if (!d || !d.dates?.length || !d.squadAcwr?.some(v => v != null)) {
+      body.innerHTML = '';
+      showEmptyBody(body, _tt('gps_analysis.acwr_sin_datos',
+        'Not enough history yet: the chronic window needs about four weeks of sessions.'), config);
+      return;
+    }
+    if (typeof Chart === 'undefined') { body.innerHTML = renderTypeFromDataset(config, []); return; }
+
+    // La franja verde es la «sweet spot» del modelo (0,8–1,3 por defecto), leída del propio motor
+    // para que la card y la card fija digan lo mismo si alguna vez se cambia.
+    const zonas = (window.gpsACWR?.ZONES) || [];
+    const sweet = zonas.find(z => z.cls === 'sweet') || { from: 0.8, to: 1.3 };
+    const col   = config.style?.color || _cssVar('--cm-accent', '#2563EB');
+    // Verde translúcido literal: el resto del archivo también usa rgba fijos para los rellenos,
+    // y con este alfa tan bajo la franja se lee igual sobre fondo claro y oscuro.
+    const verdeSuave = 'rgba(21,128,61,0.12)';
+    const canvas = _lienzoAlto(body, 220);
+
+    body.__chart = _newChart(body, canvas, {
+      type: 'line',
+      data: {
+        labels: d.dates,
+        datasets: [
+          // Los dos bordes de la franja: el de arriba rellena HASTA el de abajo ('+1').
+          { label: '', data: d.dates.map(() => sweet.to), borderWidth: 0, pointRadius: 0,
+            fill: '+1', backgroundColor: verdeSuave, order: 3 },
+          { label: '', data: d.dates.map(() => sweet.from), borderWidth: 0, pointRadius: 0,
+            fill: false, order: 2 },
+          { label: 'ACWR', data: d.squadAcwr, borderColor: col, backgroundColor: col,
+            borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, tension: 0.25,
+            spanGaps: false, order: 1 },
+        ],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        scales: {
+          x: { grid: { display: false }, ticks: { maxTicksLimit: 7, autoSkip: true } },
+          y: { beginAtZero: false, suggestedMin: 0.5, suggestedMax: 1.8,
+               grid: { color: _cssVar('--cm-border-soft', 'rgba(0,0,0,.06)') } },
+        },
+        plugins: {
+          legend: { display: false },
+          tooltip: { filter: (i) => i.datasetIndex === 2,
+            callbacks: { label: (i) => {
+              const v = i.parsed.y;
+              if (v == null) return '';
+              const z = window.gpsACWR?.getZone?.(v);
+              return 'ACWR ' + v.toFixed(2) + (z?.label ? ' · ' + z.label : '');
+            } } },
+        },
+      },
+    });
+    _acwrNota(body, d, sweet);
+  }
+
+  /** Pie de la card: el valor de hoy, su zona, y con cuántos jugadores se calculó. */
+  function _acwrNota(body, d, sweet) {
+    const ultimos = d.squadAcwr.filter(v => v != null);
+    const hoy = ultimos.length ? ultimos[ultimos.length - 1] : null;
+    if (hoy == null) return;
+    const z = window.gpsACWR?.getZone?.(hoy);
+    const nota = document.createElement('div');
+    nota.style.cssText = 'position:absolute;left:0;right:0;bottom:2px;text-align:center;'
+      + 'font:500 10.5px/1.3 var(--cm-font-sans);color:var(--cm-fg-muted);pointer-events:none';
+    nota.textContent = `${hoy.toFixed(2)}${z?.label ? ' · ' + z.label : ''}`
+      + ` · ${_tt('gps_analysis.acwr_sweet', 'sweet spot')} ${sweet.from}–${sweet.to}`
+      + ` · ${d.jugadores} ${_tt('gps_analysis.players_lc', 'players')}`;
+    if (!body.style.position) body.style.position = 'relative';
+    body.appendChild(nota);
+  }
+
   function mountDivergingCard(body, config, series, opts = {}) {
     destroyBodyChart(body);
     const [sIzq, sDer] = series || [];
@@ -9687,6 +9820,7 @@
     demand:  { name:'Match demand', icon:'ti-percentage', dimAx:'(no dimension)',        metAx:'metrics to compare vs the match' },
     dumbbell: { name:'Before → after', icon:'ti-arrows-horizontal', dimAx:'one row per (dim)', metAx:'metric to compare between the two dates' },
     diverging: { name:'Side by side', icon:'ti-arrow-bar-both', dimAx:'one row per (dim)', metAx:'the two metrics to face off' },
+    acwr:    { name:'ACWR', icon:'ti-activity-heartbeat', dimAx:'(el eje es el tiempo)', metAx:'métrica base (1)' },
   };
   let _bMode   = 'dd';       // el builder es SOLO Drag & drop (el Clásico fue eliminado); constante 'dd'
   let _ddQuery = '';         // texto del buscador del panel de campos
