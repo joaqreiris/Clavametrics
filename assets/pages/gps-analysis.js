@@ -5175,12 +5175,47 @@ function _showCardEmpty(cardId, msg) {
   if (body) body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;min-height:80px;padding:14px;color:var(--cm-fg-muted);font:500 11.5px/1.4 var(--cm-font-sans)">' + (msg || tt('gps_analysis.no_data','No data')) + '</div>';
 }
 
+// Espera a que alguna de estas cards esté —o esté por estar— a la vista. Las cards del builder ya
+// se difieren así (gps-analysis-cards.js), pero las clásicas no: pedían su bloque de datos
+// históricos en CADA carga aunque estuvieran fuera de pantalla, y ese bloque es lo más caro del
+// arranque (en datos reales, ~12 s de los ~42 s acumulados, para una card que suele nacer abajo).
+// Resuelve de inmediato si no hay ninguna de esas cards, si el navegador no trae
+// IntersectionObserver, o si está puesto el mismo kill switch que usan las del builder
+// (window.__gpLazyRender === false): en el peor caso se comporta igual que antes.
+// El observer anterior se desconecta al crear uno nuevo — gpRenderScienceCards se vuelve a llamar
+// en cada refresco, y sin esto un solo scroll dispararía todos los bloques pendientes a la vez.
+let _ioHist = null;
+function _cuandoSeVean(ids) {
+  const els = ids.map(i => document.getElementById(i)).filter(Boolean);
+  if (!els.length || typeof IntersectionObserver === 'undefined' || window.__gpLazyRender === false) {
+    return Promise.resolve();
+  }
+  try { _ioHist && _ioHist.disconnect(); } catch (_) {}
+  return new Promise(res => {
+    let listo = false;
+    const io = new IntersectionObserver(entries => {
+      if (!listo && entries.some(e => e.isIntersecting)) {
+        listo = true;
+        try { io.disconnect(); } catch (_) {}
+        if (_ioHist === io) _ioHist = null;
+        res();
+      }
+    }, { root: null, rootMargin: '0px 0px 800px 0px', threshold: 0 });
+    _ioHist = io;
+    els.forEach(el => io.observe(el));
+  });
+}
+
 window.gpRenderScienceCards = async function (reports, clubId) {
   // Synchronous cards first — each isolated so one failure never cascades
   try { _renderVzones(reports);   } catch(e) { _showCardError('card-vzones', e); }
   try { _renderOutliers(reports); } catch(e) { _showCardError('card-outliers', e); }
   try { _renderPosRadar(reports); } catch(e) { _showCardError('card-pos-radar', e); }
 
+  // El bloque histórico NO bloquea el retorno de esta función: quien la llama sigue con las cards
+  // que no dependen de él (ver gps-analysis-2.js, que la espera antes de pintar las suyas).
+  (async () => {
+  await _cuandoSeVean(['card-acwr', 'card-tsb', 'card-mc-heat', 'card-match-vs-train']);
   // ── Historical data for ACWR / TSB / MC heatmap / Match vs Training
   // Always use a 84-day window (or full range if allTime) for these time-series charts.
   // Baselines always include historical matches regardless of the toggle — more data = more accurate.
@@ -5592,6 +5627,7 @@ window.gpRenderScienceCards = async function (reports, clubId) {
     });
   }
   } catch(e) { _showCardError('card-match-vs-train', e); }
+  })().catch(e => console.warn('gpRenderScienceCards (bloque histórico):', e));
 
   // init size toggles for all new cards
   document.querySelectorAll('#card-acwr, #card-tsb, #card-vzones, #card-mc-heat, #card-pos-radar, #card-outliers, #card-half-drop, #card-vel-profile, #card-match-vs-train, #card-mc-diff-metric, #card-mc-table, #card-mc-scatter').forEach(c => initSizeToggles(c));
