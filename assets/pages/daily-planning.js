@@ -17,6 +17,11 @@
        que dpChangeStatus lo llama dentro del callback del clic, no al
        cargarse.
    ──────────────────────────────────────────────────────────────────────── */
+// _dpRoster = el plantel del equipo (membresías en player_teams). _dpPlayers = ese plantel MÁS
+// los llamados de ESE día (player_call_ups, migración 182): jugadores de otra categoría que suben
+// solo hoy y que, por eso mismo, no tienen membresía. Se recompone en cada loadDay porque la
+// llamada es por día — mañana el plantel vuelve a ser el de siempre.
+let _dpRoster = [], _dpCalledUp = new Set();
 let _dpClubId = null, _dpProfile = null, _dpPlayers = [], _dpInjMap = {}, _dpRehabMap = {}, _dpAdaptMap = {}, _dpDayAdaptMap = {}, _dpCurrentDate = null, _dpCurrentSessionId = null;
 // A day can hold more than one training session (double session). We load them ALL and let the
 // user switch; _dpPreferredSessionId is the one to open (from ?session= or the switcher).
@@ -120,7 +125,7 @@ function dpRenderSquad(avMap) {
     const amber = (cls === 'partial' || !!adaptEntry);
     const note  = adaptEntry ? (adaptEntry.adaptation_notes || '') : '';
     const tooltip = note || reason;
-    return `<span class="dp-player${amber && isTrainee ? ' is-adapt' : ''}${cls ? ' '+cls : ''}" data-status="${cls||'available'}" data-pid="${p.id}" ${tooltip ? `title="${tooltip.replace(/"/g,"'")}"` : ''}><span class="num">${num}</span>${_dpEsc(lastName)}${amber && isTrainee ? '<span class="adapt-dot">●</span>' : ''}</span>` +
+    return `<span class="dp-player${amber && isTrainee ? ' is-adapt' : ''}${cls ? ' '+cls : ''}${_dpCalledUp.has(String(p.id)) ? ' is-calledup' : ''}" data-status="${cls||'available'}" data-pid="${p.id}" ${tooltip ? `title="${tooltip.replace(/"/g,"'")}"` : ''}><span class="num">${num}</span>${_dpEsc(lastName)}${amber && isTrainee ? '<span class="adapt-dot">●</span>' : ''}</span>` +
       (note && isTrainee ? `<span class="dp-c-note">${_dpEsc(note)}</span>` : '');
   }
   function outChip(p) {
@@ -706,7 +711,11 @@ function _dpRenderSessGroupMenu(){
     if (!buckets[g.l]) buckets[g.l] = { o:g.o, list:[] };
     buckets[g.l].list.push(p);
   });
-  const guestTag = p => _dpIsGuest(p) ? `<span style="font:600 8px/1 var(--cm-font-mono);letter-spacing:.04em;text-transform:uppercase;color:var(--cm-fg-faint);border:1px solid var(--cm-border);border-radius:4px;padding:2px 4px;margin-left:auto">${tt('daily_planning.guest_tag','guest')}</span>` : '';
+  // El llamado de otra categoría lleva su propia marca (naranja): no es un invitado permanente
+  // del plantel, está solo hoy. Sin esto, en el popover se leería como uno más.
+  const guestTag = p => _dpCalledUp.has(String(p.id))
+    ? `<span style="font:600 8px/1 var(--cm-font-mono);letter-spacing:.04em;text-transform:uppercase;color:#C2410C;border:1px solid rgba(234,88,12,.5);border-radius:4px;padding:2px 4px;margin-left:auto">${tt('daily_planning.called_up_tag','called')}</span>`
+    : (_dpIsGuest(p) ? `<span style="font:600 8px/1 var(--cm-font-mono);letter-spacing:.04em;text-transform:uppercase;color:var(--cm-fg-faint);border:1px solid var(--cm-border);border-radius:4px;padding:2px 4px;margin-left:auto">${tt('daily_planning.guest_tag','guest')}</span>` : '');
   // El lesionado se puede tildar: si hizo diferenciado, entra a la convocatoria (y al RPE,
   // aparte). Va marcado para que nadie lo confunda con uno más del grupo.
   const injTag = p => _dpIsDiffWork(p) ? `<span style="font:600 8px/1 var(--cm-font-mono);letter-spacing:.04em;text-transform:uppercase;color:var(--cm-danger,#dc2626);border:1px solid var(--cm-danger,#dc2626);border-radius:4px;padding:2px 4px;margin-left:auto">${tt('daily_planning.injured_tag','inj')}</span>` : '';
@@ -879,10 +888,13 @@ async function loadDay(dateStr) {
   document.getElementById('dpCrumbDate').textContent = fmt + (mcMdLabel || '');
   document.getElementById('dpPagerLabel').innerHTML = `<i class="ti ti-calendar-event"></i>${_dpEsc(fmt)}${mcLabel ? `<span class="sub">${_dpEsc(mcLabel)}</span>` : subLabel ? `<span class="sub">${_dpEsc(subLabel)}</span>` : ''}`;
 
-  const [avResult, adaptResult, sessResult] = await Promise.all([
+  const [avResult, adaptResult, sessResult, callUps] = await Promise.all([
     window.sb.from('availability').select('player_id,status,notes,team_id').eq('club_id', _dpClubId).eq('date', dateStr),
     window.sb.from('treatments').select('id,player_id,team_id,date,adaptation_date,type,treatment_type,modalities,notes,adaptation_notes,adaptation_sent_at,adaptation_applied_at,adaptation_applied_by,notify_coaches,players(first_name,last_name,number,position)').eq('club_id', _dpClubId).or(`adaptation_date.eq.${dateStr},and(adaptation_date.is.null,date.eq.${dateStr})`),
-    window.sb.from('training_sessions').select('id,title,session_time,end_time,duration,session_type,notes,published,estimated_rpe,orientation,focus,match_day_offset,microcycle_id,gps_targets,gym_content,updated_at,coach_id,club_id,session_date').eq('club_id', _dpClubId).eq('team_id', _dpTeamId).eq('session_date', dateStr).eq('is_historical', false).order('session_time', { ascending: true, nullsFirst: true }).order('created_at', { ascending: true })
+    window.sb.from('training_sessions').select('id,title,session_time,end_time,duration,session_type,notes,published,estimated_rpe,orientation,focus,match_day_offset,microcycle_id,gps_targets,gym_content,updated_at,coach_id,club_id,session_date').eq('club_id', _dpClubId).eq('team_id', _dpTeamId).eq('session_date', dateStr).eq('is_historical', false).order('session_time', { ascending: true, nullsFirst: true }).order('created_at', { ascending: true }),
+    // Llamados de OTRA categoría para ESTE día (migración 182). Sin membresía: entran al día y
+    // se van con él.
+    window.cmCallUps(_dpClubId, _dpTeamId, dateStr, dateStr)
   ]);
   if (sessResult.error) console.warn('Session query error:', sessResult.error.message);
   _dpDaySessions = sessResult.data || [];
@@ -984,6 +996,20 @@ async function loadDay(dateStr) {
     avMap[pid] = { ...(avMap[pid] || { player_id: pid, date: dateStr, club_id: _dpClubId }), status: 'day_off', team_id: _dpTeamId || null };
   });
   _dpAvMap = avMap;
+
+  // ── Roster del día = plantel + llamados ─────────────────────────────────────
+  // El llamado entra con todo: cuenta en la convocatoria, en el grupo que entrena y en el RPE
+  // de la sesión. Lo que NO hace es quedarse: mañana, sin llamada, el plantel es el de siempre.
+  _dpCalledUp = new Set();
+  try {
+    const extra = await window.cmCalledUpPlayers(
+      callUps, 'id,first_name,last_name,number,position', new Set(_dpRoster.map(p => String(p.id))));
+    extra.forEach(p => _dpCalledUp.add(String(p.id)));
+    _dpPlayers = _dpRoster.concat(extra).sort((a, b) => (a.number ?? 999) - (b.number ?? 999));
+  } catch (e) {
+    console.warn('[DP] call-ups:', e && e.message);
+    _dpPlayers = _dpRoster.slice();
+  }
 
   // Tratamientos del día (fisio): un lesionado con tratamiento registrado hoy cuenta como
   // «en rehab» aunque no tenga plan creado en el Rehab Planner.
@@ -1882,35 +1908,41 @@ function dpProjectLine(contribs, keys, line){
 
 // ── Aporte de cada tarea ───────────────────────────────────────────────────
 // La proyección decía «5060 m» y «cubre 5 de 7», pero no CUÁL bloque aporta qué: para
-// subir el HSR había que adivinar qué tarea tocar. Esto lo responde donde se está
-// editando la sesión, y sale en la hoja del día.
+// subir el HSR había que adivinar qué tarea tocar.
+//
+// Se lee POR MÉTRICA, no como una matriz de tareas × métricas: con ocho métricas esa
+// matriz era un chorizo de sesenta números que nadie mira, y menos en papel. Una línea
+// por métrica responde la pregunta que se hace de verdad —«¿qué tarea me da el HSR?»—
+// en el ancho de un renglón.
 //
 // Va siempre con los números del EQUIPO, también en modo línea: es el desglose de la
-// sesión, y cuatro tablas —una por línea— no se leen ni en pantalla ni en papel.
-//
-// Las tareas sin perfil GPS también aparecen, con un guion. Saber cuáles no están
-// mapeadas es justamente lo que hace falta para que la proyección mejore: la nota
-// «cubre 5 de 7» decía que faltaban dos, nunca cuáles.
+// sesión, y cuatro versiones —una por línea— no se leen ni en pantalla ni en papel.
+const _DP_BRK_TOP = 4;          // cuántas tareas se nombran por métrica antes del «+N»
+const _DP_BRK_NOMBRE = 22;      // recorte del nombre en la línea de aportes
+function _dpBrkCorto(n){
+  const t = String(n || '').trim();
+  return t.length > _DP_BRK_NOMBRE ? t.slice(0, _DP_BRK_NOMBRE - 1).trimEnd() + '…' : t;
+}
 function dpBreakdownData(keys, teamCol, bloques){
   const porId = new Map((teamCol.porTarea || []).map(t => [String(t.e.id), t]));
-  const filas = (bloques || []).map(e => {
+  const conDatos = [], sinPerfil = [];
+  (bloques || []).forEach(e => {
     const t = porId.get(String(e.id));
-    return {
-      id: e.id,
-      nombre: e.name || tt('daily_planning.untitled_task', 'Untitled'),
-      mins: dpBlockMins(e).work_min,
-      par: !!_dpParGroup(e),
-      vals: t ? t.vals : null,
-    };
+    const nombre = e.name || tt('daily_planning.untitled_task', 'Untitled');
+    if (t) conDatos.push({ id: e.id, nombre, vals: t.vals });
+    else sinPerfil.push(nombre);
   });
-  // El que más aporta de cada métrica: es lo que se busca de un vistazo.
-  const top = {};
-  keys.forEach(k => {
-    let mejor = null;
-    filas.forEach(f => { if (f.vals && (mejor == null || f.vals[k] > mejor.v)) mejor = { id: f.id, v: f.vals[k] }; });
-    if (mejor && mejor.v > 0) top[k] = mejor.id;
+  // Una entrada por métrica: el total del día y quién lo pone, de mayor a menor.
+  // Las tareas que aportan cero no se nombran — ocupan renglón y no dicen nada.
+  const porMetrica = keys.map(k => {
+    const total = teamCol.vals[k] || 0;
+    const aportes = conDatos
+      .map(t => ({ nombre: t.nombre, v: t.vals[k] || 0, pct: total > 0 ? Math.round(100 * (t.vals[k] || 0) / total) : 0 }))
+      .filter(x => x.v > 0)
+      .sort((x, y) => y.v - x.v);
+    return { k, total, aportes };
   });
-  return { filas, top };
+  return { porMetrica, sinPerfil, hayDatos: conDatos.length > 0 };
 }
 
 // Qué porcentaje de un partido de esa línea es este valor. null = sin referencia
@@ -2096,48 +2128,44 @@ async function renderGpsProjection(){
   const brk = dpBreakdownData(keys, teamCol, withId);
   window._dpProjBreak = brk;                       // lo lee la hoja del día
   if (brkEl) {
-    if (!brk.filas.length) { brkEl.innerHTML = ''; }
+    if (!brk.hayDatos && !brk.sinPerfil.length) { brkEl.innerHTML = ''; }
     else {
-      const gc = `minmax(0,2.2fr) 40px repeat(${keys.length}, minmax(0,1fr))`;
-      const th = 'font:600 9px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted)';
-      const cab = `<div style="display:grid;grid-template-columns:${gc};gap:8px;padding:0 2px 6px">
-          <div style="${th}">${_dpEsc(tt('daily_planning.task','Task'))}</div>
-          <div style="${th};text-align:right">${_dpEsc(tt('daily_planning.min_suffix','min'))}</div>
-          ${keys.map(k => { const m = (window.CM_GPS_METRICS||[]).find(x => x.key === k);
-            return `<div style="${th};text-align:right">${_dpEsc(m ? m.label : k)}</div>`; }).join('')}
-        </div>`;
-      const filas = brk.filas.map(f => {
-        const celdas = keys.map(k => {
-          if (!f.vals) return `<div style="text-align:right;font:500 11px var(--cm-font-mono);color:var(--cm-fg-faint)">—</div>`;
-          const v = f.vals[k] || 0;
-          const tot = teamCol.vals[k] || 0;
-          const pct = tot > 0 ? Math.round(100 * v / tot) : 0;
-          // El que más aporta va en negrita y sobre un fondo suave: se busca en papel
-          // igual que en pantalla, sin depender del color.
-          const esTop = brk.top[k] === f.id;
-          return `<div style="text-align:right;padding:1px 4px;border-radius:5px;${esTop ? 'background:var(--cm-accent-soft)' : ''}">
-              <div style="font:${esTop ? '700' : '500'} 11px var(--cm-font-mono);color:var(--cm-fg-strong)">${v.toLocaleString()}</div>
-              <div style="font:500 9px var(--cm-font-mono);color:var(--cm-fg-muted)">${pct}%</div>
-            </div>`;
-        }).join('');
-        const marca = f.par ? `<span title="${_dpEsc(tt('daily_planning.in_parallel','In parallel'))}" style="color:var(--cm-fg-faint)"> ⇄</span>` : '';
-        const sinPerfil = !f.vals ? `<span style="font:500 9px var(--cm-font-mono);color:var(--cm-fg-faint)"> · ${_dpEsc(tt('daily_planning.no_gps_yet','no GPS yet'))}</span>` : '';
-        return `<div style="display:grid;grid-template-columns:${gc};gap:8px;align-items:center;padding:5px 2px;border-top:1px solid var(--cm-border)">
-            <div style="font:500 11.5px var(--cm-font-sans);color:var(--cm-fg);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_dpEsc(f.nombre)}${marca}${sinPerfil}</div>
-            <div style="text-align:right;font:500 11px var(--cm-font-mono);color:var(--cm-fg-muted)">${f.mins}</div>
-            ${celdas}
+      const gc = '96px 92px minmax(0,1fr)';
+      const filas = brk.porMetrica.map(r => {
+        const m = (window.CM_GPS_METRICS||[]).find(x => x.key === r.k);
+        const unit = m && m.avgUnit ? ` <span style="font-weight:500;color:var(--cm-fg-muted)">${_dpEsc(m.avgUnit)}</span>` : '';
+        // El primero va en negrita: es el que se busca. Del quinto en adelante, un «+N»
+        // — nombrarlos a todos alarga el renglón sin agregar nada que se use.
+        const lista = r.aportes.length ? r.aportes.slice(0, _DP_BRK_TOP).map((a, i) =>
+              `<span title="${_dpEsc(a.nombre)}" style="white-space:nowrap"><span style="font-weight:${i === 0 ? '650' : '500'};color:var(--cm-fg${i === 0 ? '-strong' : ''})">${_dpEsc(_dpBrkCorto(a.nombre))}</span> <span style="font:500 10.5px var(--cm-font-mono);color:var(--cm-fg-muted)">${a.pct}%</span></span>`
+            ).join('<span style="color:var(--cm-fg-faint)"> · </span>')
+            + (r.aportes.length > _DP_BRK_TOP ? `<span style="color:var(--cm-fg-faint);font:500 10.5px var(--cm-font-mono)"> +${r.aportes.length - _DP_BRK_TOP}</span>` : '')
+          : `<span style="color:var(--cm-fg-faint)">—</span>`;
+        return `<div style="display:grid;grid-template-columns:${gc};gap:10px;align-items:baseline;padding:5px 2px;border-top:1px solid var(--cm-border)">
+            <div style="font:600 11.5px var(--cm-font-sans);color:var(--cm-fg)">${_dpEsc(m ? m.label : r.k)}</div>
+            <div style="text-align:right;font:600 11.5px var(--cm-font-mono);color:var(--cm-fg-strong)">${r.total.toLocaleString()}${unit}</div>
+            <div style="font:500 11.5px var(--cm-font-sans);color:var(--cm-fg);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${lista}</div>
           </div>`;
       }).join('');
+      // Las que no tienen perfil van juntas al pie, nombradas: saber CUÁLES faltan es
+      // lo que hace que la proyección mejore, pero una fila de guiones por cada una
+      // ocupaba media tabla para no decir nada.
+      const falta = brk.sinPerfil.length
+        ? `<div style="font:500 10.5px var(--cm-font-sans);color:var(--cm-fg-muted);padding:7px 2px 0;border-top:1px solid var(--cm-border)">
+             ${_dpEsc(tt('daily_planning.tasks_without_profile', 'No GPS profile yet:'))}
+             <span style="color:var(--cm-fg)">${brk.sinPerfil.map(n => _dpEsc(n)).join(' · ')}</span>
+           </div>` : '';
       brkEl.innerHTML = `<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--cm-border)">
-          <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:8px">
+          <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:6px">
             <h4 style="margin:0;font:600 11px var(--cm-font-sans);color:var(--cm-fg-strong);text-transform:uppercase;letter-spacing:.04em">${_dpEsc(tt('daily_planning.breakdown_title','Contribution by task'))}</h4>
             <span style="font:500 10px var(--cm-font-sans);color:var(--cm-fg-muted)">${_dpEsc(tt('daily_planning.breakdown_team_note','whole squad, whichever view is selected'))}</span>
-          </div>${cab}${filas}
+          </div>${filas}${falta}
         </div>`;
     }
   }
 
   const Y = withId.length, X = covered.length, Z = Y - X;
+  const _brkNombra = !!(brkEl && brk.sinPerfil.length);   // el desglose ya los lista abajo
   // Cuántos bloques en paralelo entraron: se promediaron por jugadores en vez de sumarse,
   // y eso baja la proyección respecto de lo que daría la lista leída en fila.
   const P = new Set(contribs.filter(c => c.factor < 1).map(c => _dpParGroup(c.e))).size;
@@ -2145,7 +2173,8 @@ async function renderGpsProjection(){
   if (!note) return;
   if (!Y) { note.textContent = tt('daily_planning.no_mapped_drills','No mapped drills with a GPS profile yet.'); return; }
   const parts = [
-    tt('daily_planning.projection_covers', `Projection covers ${X} of ${Y} drill${Y!==1?'s':''}${Z ? ` (${Z} have no GPS profile yet)` : ''}.`, {covered: X, total: Y, extra: Z ? ' ' + tt('daily_planning.projection_no_profile', `(${Z} with no GPS profile yet)`, {count: Z}) : ''})
+    // El «(N sin perfil GPS)» sólo si el desglose NO los está nombrando ahí abajo.
+    tt('daily_planning.projection_covers', `Projection covers ${X} of ${Y} drill${Y!==1?'s':''}${Z && !_brkNombra ? ` (${Z} have no GPS profile yet)` : ''}.`, {covered: X, total: Y, extra: (Z && !_brkNombra) ? ' ' + tt('daily_planning.projection_no_profile', `(${Z} with no GPS profile yet)`, {count: Z}) : ''})
       + (P ? ' ' + tt('daily_planning.projection_parallel', `${P} parallel block${P!==1?'s':''} averaged by players.`, {count: P}) : ''),
   ];
   // Sólo se nombra la referencia de partido si de verdad se está usando en pantalla.
@@ -2333,44 +2362,36 @@ async function dpRenderPrintSheet() {
       </div>`;
     }).filter(Boolean);
     // Aporte de cada tarea al total del dia. Es la mitad util de la carga proyectada en
-    // papel: el bloque de arriba dice cuanto, este dice de donde sale. Sin color —la hoja
-    // se imprime en blanco y negro—: el que mas aporta va en negrita sobre gris claro.
+    // papel: el bloque de arriba dice cuanto, este dice de donde sale. Una linea por
+    // metrica —no una matriz de tareas x metricas, que con ocho metricas era un chorizo
+    // de sesenta numeros—. Sin color: la hoja se imprime en blanco y negro.
     const _brk = window._dpProjBreak;
     let gpsBreak = '';
-    if (_brk && _brk.filas && _brk.filas.length && _gpsKeys.length) {
-      const _bkKeys = _gpsKeys.filter(k => (_gpsVals[k] || 0) > 0);
-      if (_bkKeys.length) {
-        const _gc = `minmax(0,2.2fr) 30px repeat(${_bkKeys.length}, minmax(0,1fr))`;
-        const _th = `font:600 7.5px ${MONO};letter-spacing:.06em;text-transform:uppercase;color:#9CA3AF`;
-        const _cab = `<div style="display:grid;grid-template-columns:${_gc};gap:6px;padding:0 2px 4px">
-            <div style="${_th}">${esc(tt('daily_planning.task','Task'))}</div>
-            <div style="${_th};text-align:right">${esc(tt('daily_planning.min_suffix','min'))}</div>
-            ${_bkKeys.map(k => { const m = (window.CM_GPS_METRICS||[]).find(x => x.key === k);
-              return `<div style="${_th};text-align:right">${esc(m ? m.label : k)}</div>`; }).join('')}
+    if (_brk && (_brk.hayDatos || (_brk.sinPerfil && _brk.sinPerfil.length))) {
+      const _filas = (_brk.porMetrica || []).map(r => {
+        const m = (window.CM_GPS_METRICS||[]).find(x => x.key === r.k);
+        const unit = m && m.avgUnit ? ` <span style="font-weight:500;color:#9CA3AF">${esc(m.avgUnit)}</span>` : '';
+        const lista = r.aportes.length
+          ? r.aportes.slice(0, _DP_BRK_TOP).map((a, i) =>
+              `<span style="white-space:nowrap"><span style="font-weight:${i === 0 ? '700' : '500'};color:#15181D">${esc(_dpBrkCorto(a.nombre))}</span> <span style="font:500 8px ${MONO};color:#9CA3AF">${a.pct}%</span></span>`
+            ).join('<span style="color:#8A93A0"> · </span>')
+            + (r.aportes.length > _DP_BRK_TOP ? `<span style="color:#C7CBD1;font:500 8px ${MONO}"> +${r.aportes.length - _DP_BRK_TOP}</span>` : '')
+          : '<span style="color:#C7CBD1">—</span>';
+        return `<div style="display:grid;grid-template-columns:78px 74px minmax(0,1fr);gap:8px;align-items:baseline;padding:3px 2px;border-top:1px solid #EFEFEC">
+            <div style="font:600 9px ${FONT};color:#15181D">${esc(m ? m.label : r.k)}</div>
+            <div style="text-align:right;font:600 9.5px ${MONO};color:#15181D">${r.total.toLocaleString()}${unit}</div>
+            <div style="font:500 9px ${FONT};color:#15181D;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${lista}</div>
           </div>`;
-        const _filas = _brk.filas.map(f => {
-          const celdas = _bkKeys.map(k => {
-            if (!f.vals) return `<div style="text-align:right;font:500 9px ${MONO};color:#C7CBD1">—</div>`;
-            const v = f.vals[k] || 0, tot = _gpsVals[k] || 0;
-            const pct = tot > 0 ? Math.round(100 * v / tot) : 0;
-            const top = _brk.top[k] === f.id;
-            return `<div style="text-align:right;padding:1px 3px;border-radius:4px;${top ? 'background:#F0F1F3' : ''}">
-                <div style="font:${top ? '700' : '500'} 9.5px ${MONO};color:#15181D">${v.toLocaleString()}</div>
-                <div style="font:500 7.5px ${MONO};color:#9CA3AF">${pct}%</div>
-              </div>`;
-          }).join('');
-          const sinPerfil = !f.vals ? ` <span style="font:500 7.5px ${MONO};color:#C7CBD1">· ${esc(tt('daily_planning.no_gps_yet','no GPS yet'))}</span>` : '';
-          return `<div style="display:grid;grid-template-columns:${_gc};gap:6px;align-items:center;padding:3px 2px;border-top:1px solid #EFEFEC">
-              <div style="font:500 9.5px ${FONT};color:#15181D;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(f.nombre)}${f.par ? ' ⇄' : ''}${sinPerfil}</div>
-              <div style="text-align:right;font:500 9px ${MONO};color:#8A93A0">${f.mins}</div>
-              ${celdas}
-            </div>`;
-        }).join('');
-        gpsBreak = `<div style="margin-top:10px;border:1px solid #E7E7E4;border-radius:8px;padding:8px 9px">
-            <div style="font:600 7.5px ${MONO};letter-spacing:.06em;text-transform:uppercase;color:#8A93A0;margin-bottom:6px">${esc(tt('daily_planning.breakdown_title','Contribution by task'))}</div>
-            ${_cab}${_filas}
-          </div>`;
-      }
+      }).join('');
+      const _falta = (_brk.sinPerfil && _brk.sinPerfil.length)
+        ? `<div style="font:500 8px ${FONT};color:#8A93A0;padding:5px 2px 0;border-top:1px solid #EFEFEC">
+             ${esc(tt('daily_planning.tasks_without_profile', 'No GPS profile yet:'))}
+             ${esc(_brk.sinPerfil.join(' · '))}
+           </div>` : '';
+      gpsBreak = `<div style="margin-top:10px;border:1px solid #E7E7E4;border-radius:8px;padding:8px 9px">
+          <div style="font:600 7.5px ${MONO};letter-spacing:.06em;text-transform:uppercase;color:#8A93A0;margin-bottom:4px">${esc(tt('daily_planning.breakdown_title','Contribution by task'))}</div>
+          ${_filas}${_falta}
+        </div>`;
     }
     const gpsStrip = _gpsCells.length ? `<div class="dsp-brk" style="margin-bottom:16px">
       ${sectionTitle(tt('daily_planning.sheet_gps_load','Conditional load · GPS'))}
@@ -3929,7 +3950,8 @@ let _dpRoByRole = false, _dpLock = null;
   ]);
 
   const _seenDp = new Set();
-  _dpPlayers = (playersRes.data || []).filter(p => _seenDp.has(p.id) ? false : (_seenDp.add(p.id), true));
+  _dpRoster  = (playersRes.data || []).filter(p => _seenDp.has(p.id) ? false : (_seenDp.add(p.id), true));
+  _dpPlayers = _dpRoster.slice();   // loadDay le suma los llamados del día
   _dpMicrocycles = mcRes.data || [];
   (injuriesRes.data || []).forEach(i => { _dpInjMap[i.player_id] = i; });
   (rehabRes.data || []).forEach(r => { if (!_dpRehabMap[r.player_id]) _dpRehabMap[r.player_id] = r; });
@@ -3980,6 +4002,7 @@ let _dpRoByRole = false, _dpLock = null;
         { table: 'session_exercises',    filter: `club_id=eq.${_dpClubId}` },
         { table: 'session_participants', filter: `club_id=eq.${_dpClubId}` },
         { table: 'availability',         filter: `club_id=eq.${_dpClubId}` },
+        { table: 'player_call_ups',      filter: `club_id=eq.${_dpClubId}` },
         { table: 'treatments',           filter: `club_id=eq.${_dpClubId}` },
       ],
       relevant: (row, p) => {
@@ -3988,6 +4011,9 @@ let _dpRoByRole = false, _dpLock = null;
         if (p.table === 'session_exercises' || p.table === 'session_participants')
           return (_dpDaySessions || []).some(s => s.id === row.session_id);
         if (p.table === 'availability') return row.date === _dpCurrentDate;
+        // Alguien llamó (o soltó) a un jugador de otra categoría para el día abierto: el grupo
+        // de hoy cambió aunque nadie haya tocado la sesión.
+        if (p.table === 'player_call_ups') return String(row.date).slice(0,10) === _dpCurrentDate && row.team_id === _dpTeamId;
         if (p.table === 'treatments')   return (row.adaptation_date || row.date) === _dpCurrentDate;
         return true;
       },

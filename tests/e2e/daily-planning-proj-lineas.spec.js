@@ -145,23 +145,35 @@ test.describe('Daily Planning · carga proyectada por línea', () => {
     expect(pedidas.some(u => u.includes('/v_exercise_gps_profile_pos'))).toBe(true);
   });
 
-  test('el desglose dice que tarea aporta cuanto', async ({ page }) => {
+  test('cada metrica dice de que tarea sale', async ({ page }) => {
     await abrirCard(page);
     const brk = page.locator('#dpProjBreak');
-    // Son los numeros del EQUIPO (fila ALL), no los de una linea: PFB 70×22 = 1540 y
-    // Rondo 62×14 = 868 sobre un total de 2408 → 64% y 36%.
-    await expect(brk).toContainText('1,540');
-    await expect(brk).toContainText('868');
+    // Se lee POR METRICA, no como una matriz: con ocho metricas eran sesenta numeros
+    // que nadie mira, y menos en papel. Son los del EQUIPO (fila ALL), no los de una
+    // linea: PFB 70×22 = 1540 y Rondo 62×14 = 868 sobre 2408 → 64% y 36%.
+    await expect(brk).toContainText('2,408');
     await expect(brk).toContainText('64%');
     await expect(brk).toContainText('36%');
   });
 
-  test('la tarea sin perfil aparece igual, con guion', async ({ page }) => {
+  test('la tarea que mas aporta va primera', async ({ page }) => {
     await abrirCard(page);
-    // Saber CUALES faltan es lo que hace falta para que la proyeccion mejore: la nota
-    // «cubre 2 de 3» decia que faltaba una, nunca cual.
-    await expect(page.locator('#dpProjBreak')).toContainText('Circuito de fuerza');
-    await expect(page.locator('#dpProjBreak')).toContainText(/no GPS yet|sin GPS/i);
+    // Es lo que se busca de un vistazo, asi que encabeza la linea de su metrica.
+    const fila = page.locator('#dpProjBreak > div > div').filter({ hasText: 'Total dist' }).first();
+    const txt = (await fila.textContent()) || '';
+    expect(txt.indexOf('PFB'), txt).toBeLessThan(txt.indexOf('Rondo'));
+  });
+
+  test('las tareas sin perfil se nombran juntas al pie', async ({ page }) => {
+    await abrirCard(page);
+    // Saber CUALES faltan es lo que hace que la proyeccion mejore —la nota «cubre 2 de 3»
+    // decia que faltaba una, nunca cual—, pero una fila de guiones por cada una ocupaba
+    // media tabla para no decir nada.
+    const brk = page.locator('#dpProjBreak');
+    await expect(brk).toContainText(/No GPS profile yet|Sin perfil GPS/i);
+    await expect(brk).toContainText('Circuito de fuerza');
+    // Y entonces la nota al pie no lo repite dos renglones mas abajo.
+    await expect(page.locator('#dpProjNote')).not.toContainText(/no GPS profile yet\)/i);
   });
 
   test('el desglose no cambia al pasar a por linea', async ({ page }) => {
@@ -177,6 +189,6 @@ test.describe('Daily Planning · carga proyectada por línea', () => {
     await abrirCard(page);
     await page.evaluate(() => window.dpRenderPrintSheet && window.dpRenderPrintSheet());
     await expect(page.locator('#dpPrintSheet')).toContainText(/Contribution by task|Aporte por tarea/i, { timeout: 15_000 });
-    await expect(page.locator('#dpPrintSheet')).toContainText('1,540');
+    await expect(page.locator('#dpPrintSheet')).toContainText('2,408');
   });
 });
