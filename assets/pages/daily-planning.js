@@ -1319,10 +1319,11 @@ function dpPaintGkStrip(){
   strip.innerHTML = dpParListHTML(gks) + addBtn;
   dpPaintGpsBadges();
 }
-// Load the FULL profile row for these exercises into the shared cache. Always select('*'):
-// badges only need n_instances, but the projection reads the *_per_min columns off the same
-// cached object — a partial row would poison it and project zeros. In-flight promises are
-// deduped so badges + projection racing on boot fire one query, not two.
+// Perfil de equipo de estos ejercicios, para el tick verde de las tarjetas. La proyección
+// ya NO lee de aquí: desde la migración 180 usa v_exercise_gps_profile_pos (dpEnsureProfPos),
+// que trae la fila del equipo y la de cada línea y filtra rehab, filas marcadas y tramos de
+// menos de 30 s. Este cache se queda porque el badge sólo necesita saber si hay datos y
+// cuántas sesiones, y la vista vieja ya lo resuelve en una consulta deduplicada.
 async function dpEnsureGpsProfiles(ids){
   const need = [...new Set(ids.filter(id => id && !(id in _dpGpsProfiles) && !_dpGpsProfIn[id]))];
   if (need.length) {
@@ -1786,10 +1787,122 @@ function recalcTotals() {
   renderGpsProjection();   // live: re-project whenever blocks/durations change
 }
 
+// ── Proyección por línea + referencia de partido (migración 180) ───────────
+// La media de un drill sobre TODO el plantel no le pasa a ningún jugador: en
+// «PFB 7v5 + 3v2» una línea corre 82 m/min y otra 39 — más del doble. La card
+// se puede leer por línea, y cada columna trae el perfil de esa línea.
+// Porteros fuera a propósito: en toda la base hay 2 registros suyos mapeados a
+// tareas, y su demanda no se compara con la de un jugador de campo.
+const _DP_POS_LINES = ['DEF', 'MID', 'WNG', 'FWD'];
+// Por debajo de 3 registros de esa línea en ese ejercicio el promedio es ruido:
+// la celda cae al promedio de equipo y la columna se marca. Mismo criterio que
+// BASELINE_MIN_MATCHES (assets/gps-baseline.js). Hace falta: la muestra media
+// por ejercicio es DEF 11.3, MID 9.0, WNG 5.5 y FWD 2.3.
+const _DP_POS_MIN_N   = 3;
+const _DP_MATCH_MIN_N = 3;          // con menos partidos, el % no se muestra
+const _DP_PROJ_MODE_LS = 'cm_dp_proj_mode';
+let _dpProfPos    = {};             // exercise_id → { pos_group → fila }; null = pedido y sin datos
+let _dpProfPosIn  = {};             // exercise_id → promesa en vuelo
+let _dpMatchDem   = null;           // pos_group → fila de v_match_demand_pos
+let _dpMatchDemIn = null;
+
+function dpProjMode(){
+  try { const v = localStorage.getItem(_DP_PROJ_MODE_LS); if (v === 'lines' || v === 'team') return v; } catch (_) {}
+  return 'team';
+}
+function dpSetProjMode(m){
+  try { localStorage.setItem(_DP_PROJ_MODE_LS, m); } catch (_) {}
+  renderGpsProjection();
+}
+// Nombre visible de cada columna. GK no está: ver arriba.
+function _dpLineLabel(line){
+  if (!line) return tt('daily_planning.line_team', 'Team');
+  return tt('daily_planning.line_' + line.toLowerCase(), line);
+}
+
+// Perfil por línea de estos ejercicios. Misma mecánica de deduplicado que
+// dpEnsureGpsProfiles: una sola consulta aunque varios repintados la pidan a la vez.
+async function dpEnsureProfPos(ids){
+  const need = [...new Set(ids.filter(id => id && !(id in _dpProfPos) && !_dpProfPosIn[id]))];
+  if (need.length) {
+    const p = window.sb.from('v_exercise_gps_profile_pos').select('*').in('exercise_id', need)
+      .then(({ data, error }) => {
+        // Un fallo NO se cachea como "sin perfil": se olvida y se vuelve a pedir.
+        if (error) { console.warn('[dp-gps-profile-pos] fetch failed:', error.message); need.forEach(id => { delete _dpProfPosIn[id]; }); return; }
+        const found = {};
+        (data || []).forEach(r => { (found[r.exercise_id] = found[r.exercise_id] || {})[r.pos_group] = r; });
+        need.forEach(id => { _dpProfPos[id] = found[id] || null; delete _dpProfPosIn[id]; });
+      });
+    need.forEach(id => { _dpProfPosIn[id] = p; });
+  }
+  const waits = [...new Set(ids.map(id => _dpProfPosIn[id]).filter(Boolean))];
+  if (waits.length) await Promise.all(waits);
+}
+
+// Lo que corre cada línea en un partido: la referencia que hace legible el número.
+// «5060 m» no dice nada; «el 51% de lo que corre un mediocampista» sí. Una consulta
+// por club — no cambia mientras dura la jornada de trabajo.
+async function dpEnsureMatchDemand(){
+  if (_dpMatchDem) return _dpMatchDem;
+  if (!_dpClubId) return null;
+  if (!_dpMatchDemIn) {
+    _dpMatchDemIn = window.sb.from('v_match_demand_pos').select('*').eq('club_id', _dpClubId)
+      .then(({ data, error }) => {
+        if (error) { console.warn('[dp-match-demand] fetch failed:', error.message); _dpMatchDemIn = null; return null; }
+        const by = {}; (data || []).forEach(r => { by[r.pos_group] = r; });
+        _dpMatchDem = by;
+        return by;
+      });
+  }
+  return _dpMatchDemIn;
+}
+
+// El perfil que le toca a esta línea en este ejercicio: el suyo si tiene muestra,
+// el del equipo si no. `fb` marca que se cayó al del equipo.
+function dpProfFor(exId, line){
+  const byPos = _dpProfPos[exId]; if (!byPos) return null;
+  const own = line ? byPos[line] : null;
+  if (own && Number(own.n_instances) >= _DP_POS_MIN_N) return { row: own, fb: false };
+  const all = byPos.ALL;
+  return all ? { row: all, fb: !!line } : null;
+}
+
+// Σ (perfil por minuto × minutos de trabajo × factor de paralelo) para una columna.
+// El factor de paralelo se reparte por jugadores igual que en modo equipo: un bloque
+// simultáneo puede tener líneas distintas en cada grupo, pero eso ya se refleja en el
+// perfil de cada línea, no en el peso del bloque.
+function dpProjectLine(contribs, keys, line){
+  const num = x => (x == null || x === '') ? 0 : Number(x);
+  const vals = {}; let fb = 0;
+  keys.forEach(k => { vals[k] = 0; });
+  contribs.forEach(({ e, factor }) => {
+    const pf = dpProfFor(e.planner_exercise_id, line);
+    if (!pf) return;
+    if (pf.fb) fb++;
+    const mins = dpBlockMins(e).work_min;
+    keys.forEach(k => { vals[k] += num(pf.row[k]) * mins * factor; });
+  });
+  keys.forEach(k => {
+    const m = (window.CM_GPS_METRICS || []).find(x => x.key === k);
+    vals[k] = Math.round(vals[k] * (m ? m.mult : 1));
+  });
+  return { line, vals, fb };
+}
+
+// Qué porcentaje de un partido de esa línea es este valor. null = sin referencia
+// suficiente (el club no tiene 3 partidos con GPS válido para esa línea todavía).
+function dpMatchPct(k, line, proj){
+  const dem = _dpMatchDem && _dpMatchDem[line || 'ALL'];
+  if (!dem || Number(dem.n_matches) < _DP_MATCH_MIN_N) return null;
+  const ref = Number(dem[k.replace(/_per_min$/, '')]);
+  if (!(ref > 0)) return null;
+  return Math.round(100 * proj / ref);
+}
+
 // ── Projected GPS load (2d) ────────────────────────────────────────────────
-// projected(metric) = Σ over field blocks with a GPS profile:
-//   profile[ex].<metric>_per_min × block.duration(min)  × display mult.
-// Blocks without exercise_id or without a profile row are excluded (honest).
+// projected(metric) = Σ sobre los bloques con perfil GPS:
+//   profile[ex].<metric>_per_min × block.duration(min) × display mult.
+// Los bloques sin exercise_id o sin perfil quedan fuera (honesto).
 const _DP_PROJ_DEFAULT = ['total_distance_per_min','high_speed_distance_per_min','sprint_distance_per_min','player_load_per_min','accelerations_per_min','decelerations_per_min'];
 const _DP_PROJ_LS = 'cm_dp_proj_metrics';
 function dpProjMetricKeys(){
@@ -1847,49 +1960,96 @@ async function renderGpsProjection(){
   const card = document.getElementById('dpGpsProj'); if (!card) return;
   const blocks = [ ...(_dpFieldExercises||[]), ...((window._dpActItems)||[]) ];  // field + activation; phase no longer gates the projection
   const withId = blocks.filter(e => e.planner_exercise_id && dpBlockMins(e).work_min > 0);
-  // Fetch any profiles we don't have cached yet. planner_exercise_id IS exercises.id (= the view key).
-  await dpEnsureGpsProfiles(withId.map(e => e.planner_exercise_id));
-  const covered = withId.filter(e => _dpGpsProfiles[e.planner_exercise_id]);
+  // El perfil por línea y la referencia de partido se piden a la vez: una espera, no dos.
+  await Promise.all([
+    dpEnsureProfPos(withId.map(e => e.planner_exercise_id)),
+    dpEnsureMatchDemand(),
+  ]);
+  const covered = withId.filter(e => _dpProfPos[e.planner_exercise_id]);
   // Visible whenever a day session is loaded (same criterion as the totals strip).
   // No static display:none — only hide on an empty day with no session at all.
   if (!_dpCurrentSessionId && !blocks.length) { card.style.display = 'none'; return; }
   card.style.display = '';
 
-  const keys = dpProjMetricKeys();
-  const num = x => (x == null || x === '') ? 0 : Number(x);
-  const projVals = {};   // metric_key → projected value (display units)
-  // Bar zone: <90% under (neutral), ±10% on (green), >110% over (amber).
-  const barFor = (proj, tgt) => {
-    if (!tgt || tgt <= 0) return { w: 0, c: 'var(--cm-fg-faint)' };
-    const ratio = proj / tgt;
-    return { w: ratio > 1.1 ? 100 : Math.min(ratio, 1) * 100,
-             c: ratio < 0.9 ? 'var(--cm-fg-muted)' : ratio <= 1.1 ? 'var(--cm-success,#16a34a)' : 'var(--cm-warning,#d97706)' };
-  };
+  const keys  = dpProjMetricKeys();
+  const mode  = dpProjMode();
   const contribs = dpProjWeights(covered);   // paralelo → promedio ponderado por jugadores
+  // La columna de equipo se calcula siempre: es la que alimenta la hoja de impresión.
+  const teamCol = dpProjectLine(contribs, keys, null);
+  const cols = mode === 'lines' ? _DP_POS_LINES.map(l => dpProjectLine(contribs, keys, l)) : [teamCol];
+  dpPaintProjModeBtns(mode);
+
+  // La barra mide contra el objetivo si el club puso uno (zonas de siempre: <90% por
+  // debajo, ±10% en zona, >110% pasado). Sin objetivo mide contra el partido y va en
+  // neutro: nadie busca el 100% de un partido en un entrenamiento, así que ahí un
+  // verde o un ámbar no significarían nada.
+  const barFor = (proj, tgt, pct) => {
+    if (tgt && tgt > 0) {
+      const ratio = proj / tgt;
+      return { w: ratio > 1.1 ? 100 : Math.min(ratio, 1) * 100,
+               c: ratio < 0.9 ? 'var(--cm-fg-muted)' : ratio <= 1.1 ? 'var(--cm-success,#16a34a)' : 'var(--cm-warning,#d97706)' };
+    }
+    if (pct != null) return { w: Math.min(pct, 100), c: 'var(--cm-fg-faint)' };
+    return { w: 0, c: 'var(--cm-fg-faint)' };
+  };
+  // Qué se lee debajo del número: el objetivo si lo hay, si no el % del partido de esa
+  // línea, y si el club todavía no tiene partidos suficientes, el «sin objetivo» de antes.
+  // Con cuatro columnas la frase entera («74% de un partido») toca el borde de la celda en
+  // tablet y en español desborda antes: ahí va la versión corta, que la nota al pie explica.
+  const refLabel = (k, line, proj, tgt, unit, wide) => {
+    if (tgt) return tt('daily_planning.target_value', `target ${tgt.toLocaleString()} ${unit}`, {value: tgt.toLocaleString(), unit});
+    const pct = dpMatchPct(k, line, proj);
+    // Sin objetivo y sin referencia de partido no hay nada que decir: en modo equipo se
+    // mantiene el «sin objetivo» de siempre, pero repetido en cada celda de cuatro columnas
+    // es ruido —y el recuadro «Objetivo» de la derecha ya lo está diciendo.
+    if (pct == null) return wide ? tt('daily_planning.no_target', 'no target') : '';
+    return wide ? tt('daily_planning.pct_of_match', `${pct}% of a match`, {pct})
+                : tt('daily_planning.pct_of_match_short', `${pct}% match`, {pct});
+  };
+
+  const gridCols = `112px repeat(${cols.length}, minmax(0,1fr)) 92px`;
+  // Celda ancha (modo equipo): número y referencia en la misma línea, como siempre.
+  // Celda estrecha (una por línea): número, barra y referencia apilados.
+  const cellHTML = (k, col, tgt, unit, wide) => {
+    const proj = col.vals[k] || 0;
+    const pct  = dpMatchPct(k, col.line, proj);
+    const bar  = barFor(proj, tgt, pct);
+    const id   = `${k}:${col.line || 'ALL'}`;
+    const ref  = `<span data-tgtlabel="${id}">${_dpEsc(refLabel(k, col.line, proj, tgt, unit, wide))}</span>`;
+    const barEl = `<div style="height:6px;border-radius:999px;background:var(--cm-bg-soft);overflow:hidden"><div data-bar="${id}" style="height:100%;width:${bar.w}%;background:${bar.c};border-radius:999px"></div></div>`;
+    if (wide) return `<div style="min-width:0">
+        <div style="display:flex;justify-content:space-between;gap:8px;font:500 11px var(--cm-font-mono);color:var(--cm-fg-muted);margin-bottom:3px">
+          <span style="color:var(--cm-fg-strong);font-weight:600">${proj.toLocaleString()} ${_dpEsc(unit)}</span>${ref}
+        </div>${barEl}
+      </div>`;
+    return `<div style="min-width:0">
+        <div style="font:600 11px var(--cm-font-mono);color:var(--cm-fg-strong);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:3px">${proj.toLocaleString()} <span style="font-weight:500;color:var(--cm-fg-muted)">${_dpEsc(unit)}</span></div>
+        ${barEl}
+        <div style="font:500 10px var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${ref}</div>
+      </div>`;
+  };
+
+  // Cabecera de columnas: sólo cuando hay más de una. El punto ámbar avisa de que
+  // alguna tarea de esa línea no tenía muestra propia y se usó la media del equipo.
+  const headHTML = mode !== 'lines' ? '' :
+    `<div style="display:grid;grid-template-columns:${gridCols};gap:10px;align-items:end;padding:0 2px 6px">
+      <div></div>
+      ${cols.map(c => `<div style="font:600 9px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted);min-width:0">${_dpEsc(_dpLineLabel(c.line))}${c.fb ? `<span title="${_dpEsc(tt('daily_planning.line_fallback_title', `${c.fb} drill(s) without data for this line — team average used`, {count: c.fb}))}" style="color:var(--cm-warning,#d97706)"> ●</span>` : ''}</div>`).join('')}
+      <div style="font:600 9px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted)">${_dpEsc(tt('daily_planning.target', 'Target'))}</div>
+    </div>`;
+
   const body = document.getElementById('dpProjBody');
-  body.innerHTML = keys.map(k => {
+  body.innerHTML = headHTML + keys.map(k => {
     const m = (window.CM_GPS_METRICS||[]).find(x => x.key === k); if (!m) return '';
-    // Σ per_min × minutes, then to display unit (TD km→m ×1000); totals shown as integers.
-    let proj = 0;
-    contribs.forEach(({ e, factor }) => { proj += num(_dpGpsProfiles[e.planner_exercise_id][k]) * dpBlockMins(e).work_min * factor; });
-    proj = Math.round(proj * m.mult);
-    projVals[k] = proj;
     const unit = m.avgUnit || '';
-    const tgt = _dpGpsTargets[k] != null && _dpGpsTargets[k] !== '' ? Number(_dpGpsTargets[k]) : null;
-    const bar = barFor(proj, tgt);
-    return `<div style="display:grid;grid-template-columns:108px 1fr 92px;gap:10px;align-items:center;padding:6px 2px">
+    const tgt  = _dpGpsTargets[k] != null && _dpGpsTargets[k] !== '' ? Number(_dpGpsTargets[k]) : null;
+    return `<div style="display:grid;grid-template-columns:${gridCols};gap:10px;align-items:center;padding:6px 2px">
       <div style="font:600 12px var(--cm-font-sans);color:var(--cm-fg)">${_dpEsc(m.label)}</div>
-      <div>
-        <div style="display:flex;justify-content:space-between;font:500 11px var(--cm-font-mono);color:var(--cm-fg-muted);margin-bottom:3px">
-          <span style="color:var(--cm-fg-strong);font-weight:600">${proj.toLocaleString()} ${unit}</span>
-          <span data-tgtlabel="${k}">${tgt ? tt('daily_planning.target_value', `target ${tgt.toLocaleString()} ${unit}`, {value: tgt.toLocaleString(), unit}) : tt('daily_planning.no_target','no target')}</span>
-        </div>
-        <div style="height:6px;border-radius:999px;background:var(--cm-bg-soft);overflow:hidden"><div data-bar="${k}" style="height:100%;width:${bar.w}%;background:${bar.c};border-radius:999px"></div></div>
-      </div>
-      <input type="number" step="any" min="0" data-proj-target="${k}" value="${tgt != null ? tgt : ''}" placeholder="${tt('daily_planning.target','Target')}" style="padding:6px 8px;border:1px solid var(--cm-border);border-radius:7px;background:var(--cm-bg);color:var(--cm-fg-strong);font:inherit;width:100%">
+      ${cols.map(c => cellHTML(k, c, tgt, unit, mode !== 'lines')).join('')}
+      <input type="number" step="any" min="0" data-proj-target="${k}" value="${tgt != null ? tgt : ''}" placeholder="${_dpEsc(tt('daily_planning.target','Target'))}" style="padding:6px 8px;border:1px solid var(--cm-border);border-radius:7px;background:var(--cm-bg);color:var(--cm-fg-strong);font:inherit;width:100%">
     </div>`;
   }).join('');
-  window._dpProjVals = { ...projVals };   // expose for the print sheet's GPS strip
+  window._dpProjVals = { ...teamCol.vals };   // expose for the print sheet's GPS strip
   // Update only the bar/label on target edits (no full re-render → input keeps focus).
   body.querySelectorAll('[data-proj-target]').forEach(inp => inp.addEventListener('input', () => {
     const k = inp.dataset.projTarget;
@@ -1897,9 +2057,12 @@ async function renderGpsProjection(){
     dpSaveTargets();
     const m = (window.CM_GPS_METRICS||[]).find(x => x.key === k); const unit = m?.avgUnit || '';
     const tgt = inp.value === '' ? null : Number(inp.value);
-    const bar = barFor(projVals[k] || 0, tgt);
-    const barEl = body.querySelector(`[data-bar="${k}"]`); if (barEl) { barEl.style.width = bar.w + '%'; barEl.style.background = bar.c; }
-    const lblEl = body.querySelector(`[data-tgtlabel="${k}"]`); if (lblEl) lblEl.textContent = tgt ? tt('daily_planning.target_value', `target ${tgt.toLocaleString()} ${unit}`, {value: tgt.toLocaleString(), unit}) : tt('daily_planning.no_target','no target');
+    cols.forEach(c => {
+      const id = `${k}:${c.line || 'ALL'}`, proj = c.vals[k] || 0;
+      const bar = barFor(proj, tgt, dpMatchPct(k, c.line, proj));
+      const barEl = body.querySelector(`[data-bar="${id}"]`); if (barEl) { barEl.style.width = bar.w + '%'; barEl.style.background = bar.c; }
+      const lblEl = body.querySelector(`[data-tgtlabel="${id}"]`); if (lblEl) lblEl.textContent = refLabel(k, c.line, proj, tgt, unit, mode !== 'lines');
+    });
   }));
   // Save on blur too (not only on the debounce).
   body.querySelectorAll('[data-proj-target]').forEach(inp => inp.addEventListener('change', async () => { await dpSaveTargets(); dpFlushTargets(); }));
@@ -1909,11 +2072,32 @@ async function renderGpsProjection(){
   // y eso baja la proyección respecto de lo que daría la lista leída en fila.
   const P = new Set(contribs.filter(c => c.factor < 1).map(c => _dpParGroup(c.e))).size;
   const note = document.getElementById('dpProjNote');
-  if (note) note.textContent = Y
-    ? tt('daily_planning.projection_covers', `Projection covers ${X} of ${Y} drill${Y!==1?'s':''}${Z ? ` (${Z} have no GPS profile yet)` : ''}.`, {covered: X, total: Y, extra: Z ? ' ' + tt('daily_planning.projection_no_profile', `(${Z} have no GPS profile yet)`, {count: Z}) : ''})
-      + (P ? ' ' + tt('daily_planning.projection_parallel', `${P} parallel block${P!==1?'s':''} averaged by players.`, {count: P}) : '')
-    : tt('daily_planning.no_mapped_drills','No mapped drills with a GPS profile yet.');
+  if (!note) return;
+  if (!Y) { note.textContent = tt('daily_planning.no_mapped_drills','No mapped drills with a GPS profile yet.'); return; }
+  const parts = [
+    tt('daily_planning.projection_covers', `Projection covers ${X} of ${Y} drill${Y!==1?'s':''}${Z ? ` (${Z} have no GPS profile yet)` : ''}.`, {covered: X, total: Y, extra: Z ? ' ' + tt('daily_planning.projection_no_profile', `(${Z} have no GPS profile yet)`, {count: Z}) : ''})
+      + (P ? ' ' + tt('daily_planning.projection_parallel', `${P} parallel block${P!==1?'s':''} averaged by players.`, {count: P}) : ''),
+  ];
+  // Sólo se nombra la referencia de partido si de verdad se está usando en pantalla.
+  const usaPartido = keys.some(k => (_dpGpsTargets[k] == null || _dpGpsTargets[k] === '') && cols.some(c => dpMatchPct(k, c.line, c.vals[k] || 0) != null));
+  if (usaPartido) parts.push(tt('daily_planning.match_ref_note', 'Match reference: players with 60+ minutes.'));
+  note.textContent = parts.join(' ');
 }
+
+// Botones Equipo / Por línea de la cabecera de la card.
+function dpPaintProjModeBtns(mode){
+  document.querySelectorAll('#dpProjMode [data-mode]').forEach(b => {
+    const on = b.dataset.mode === mode;
+    b.classList.toggle('is-on', on);
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
+}
+document.getElementById('dpProjMode')?.addEventListener('click', (e) => {
+  // La cabecera colapsa la card al hacer clic: el toggle no puede propagar.
+  e.stopPropagation();
+  const b = e.target.closest('[data-mode]'); if (!b) return;
+  dpSetProjMode(b.dataset.mode);
+});
 
 // Collapse/expand the panel (Evaluations dropdown pattern). Gear stops
 // propagation so opening the metric picker never toggles the panel.

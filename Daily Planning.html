@@ -136,6 +136,12 @@
   .dp-squad-pill.is-on{background:var(--cm-accent-soft);color:var(--cm-fg-strong);border-color:var(--cm-border-strong)}
   .dp-squad-pill .ct{font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-faint)}
   .dp-squad-pill .dot{width:6px;height:6px;border-radius:50%}
+  /* Equipo / Por línea en la card de carga proyectada. Segmentado chico para que
+     quepa en la cabecera junto al engranaje sin empujar el chevron. */
+  .dp-proj-mode{display:inline-flex;border:1px solid var(--cm-border);border-radius:7px;overflow:hidden;margin-left:auto}
+  .dp-proj-mode button{border:0;background:var(--cm-surface);color:var(--cm-fg-muted);font:600 10.5px/1 var(--cm-font-sans);padding:0 9px;height:28px;cursor:pointer;white-space:nowrap}
+  .dp-proj-mode button+button{border-left:1px solid var(--cm-border)}
+  .dp-proj-mode button.is-on{background:var(--cm-accent-soft);color:var(--cm-fg-strong)}
 
   .dp-players{display:flex;flex-wrap:wrap;gap:4px 6px}
   .dp-player{display:inline-flex;align-items:center;gap:5px;padding:3px 7px;border-radius:4px;background:transparent;border:0.5px solid transparent;font:500 12.5px/1 var(--cm-font-sans);color:var(--cm-fg);cursor:pointer;position:relative}
@@ -473,7 +479,11 @@
       <div class="dp-card dp-coll is-collapsed no-print" id="dpGpsProj">
         <div class="dp-card-h dp-coll-h" id="dpProjHead">
           <h3 style="margin:0" data-i18n="daily_planning.projected_gps_load">Projected GPS load</h3>
-          <button type="button" id="dpProjGear" title="Choose metrics" data-i18n-attr="title:daily_planning.choose_metrics" style="margin-left:auto;background:none;border:1px solid var(--cm-border);border-radius:7px;width:28px;height:28px;color:var(--cm-fg-muted);cursor:pointer"><i class="ti ti-adjustments-horizontal"></i></button>
+          <div class="dp-proj-mode" id="dpProjMode">
+            <button type="button" data-mode="team" class="is-on" aria-pressed="true" data-i18n="daily_planning.line_team">Team</button>
+            <button type="button" data-mode="lines" aria-pressed="false" data-i18n="daily_planning.proj_by_line">By line</button>
+          </div>
+          <button type="button" id="dpProjGear" title="Choose metrics" data-i18n-attr="title:daily_planning.choose_metrics" style="margin-left:6px;background:none;border:1px solid var(--cm-border);border-radius:7px;width:28px;height:28px;color:var(--cm-fg-muted);cursor:pointer"><i class="ti ti-adjustments-horizontal"></i></button>
           <span class="chev" style="margin-left:6px"><i class="ti ti-chevron-down"></i></span>
         </div>
         <div class="dp-coll-body">

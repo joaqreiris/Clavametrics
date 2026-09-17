@@ -6691,6 +6691,28 @@ begin
 end; $function$
 ;
 
+-- Posición de plantilla → línea (migración 180). Espejo exacto de _DP_POS_GROUP en
+-- assets/pages/daily-planning.js: las dos tienen que moverse juntas. NULL cuando la posición
+-- está vacía o no se reconoce — ese jugador no cuenta para ninguna línea, pero sí para el total.
+create or replace function public.cm_pos_group(pos text)
+ RETURNS text
+ LANGUAGE sql
+ IMMUTABLE PARALLEL SAFE STRICT
+AS $function$
+  select case upper(trim(pos))
+    when 'GK'  then 'GK'
+    when 'CB'  then 'DEF' when 'LB'  then 'DEF' when 'RB' then 'DEF' when 'LWB' then 'DEF'
+    when 'RWB' then 'DEF' when 'FB'  then 'DEF' when 'WB' then 'DEF' when 'DEF' then 'DEF'
+    when 'CDM' then 'MID' when 'DM'  then 'MID' when 'CM' then 'MID' when 'MF'  then 'MID'
+    when 'CAM' then 'MID' when 'AM'  then 'MID' when 'MID' then 'MID'
+    when 'LM'  then 'WNG' when 'RM'  then 'WNG' when 'LW' then 'WNG' when 'RW'  then 'WNG'
+    when 'WG'  then 'WNG'
+    when 'SS'  then 'FWD' when 'CF'  then 'FWD' when 'ST' then 'FWD' when 'ATT' then 'FWD'
+    when 'FW'  then 'FWD'
+  end;
+$function$
+;
+
 -- =========================== VISTAS ===========================
 
 create or replace view public.v_exercise_gps_profile with (security_invoker = on) as
@@ -6720,6 +6742,87 @@ create or replace view public.v_exercise_gps_profile with (security_invoker = on
      JOIN gps_drill_map m ON m.club_id = r.club_id AND m.period_name = r.period_name
   WHERE m.exercise_id IS NOT NULL AND m.ignored = false AND r.duration_seconds >= 30::numeric AND (r.total_distance IS NULL OR (r.total_distance / r.duration_seconds) <= 13::numeric) AND (r.total_distance IS NULL OR r.high_speed_distance IS NULL OR r.total_distance >= r.high_speed_distance)
   GROUP BY r.club_id, m.exercise_id;
+
+-- Perfil GPS por línea (migración 180). La media de un drill sobre todo el plantel no le pasa
+-- a ningún jugador: hay tareas donde una línea corre 82 m/min y otra 39. La fila ALL es todo el
+-- campo junto (la que lee el modo equipo de Daily Planning), así que los dos modos de la card
+-- no pueden contradecirse. Porteros excluidos: no llevan GPS en las tareas mapeadas.
+create or replace view public.v_exercise_gps_profile_pos with (security_invoker = on) as
+ WITH base AS (
+   SELECT r.club_id, m.exercise_id, r.player_id,
+          cm_pos_group(p."position") AS pos_group,
+          r.duration_seconds / 60.0 AS mins,
+          r.total_distance, r.high_speed_distance, r.very_high_speed_distance,
+          r.sprint_distance, r.sprint_count, r.accelerations, r.decelerations,
+          r.player_load, r.hmld
+     FROM gps_period_reports r
+       JOIN gps_drill_map m ON m.club_id = r.club_id AND m.period_name = r.period_name
+       JOIN players p ON p.id = r.player_id
+       JOIN training_sessions ts ON ts.id = r.session_id
+       LEFT JOIN club_gps_settings s ON s.club_id = r.club_id
+    WHERE m.exercise_id IS NOT NULL AND m.ignored = false AND r.duration_seconds >= 30::numeric
+      AND r.is_flagged = false AND r.work_context = 'team'
+      AND (r.total_distance IS NULL OR (r.total_distance / NULLIF(r.duration_seconds, 0::numeric)) <= 13::numeric)
+      AND (r.total_distance IS NULL OR r.high_speed_distance IS NULL OR r.total_distance >= r.high_speed_distance)
+      AND (s.gps_valid_from IS NULL OR ts.session_date >= s.gps_valid_from)
+      AND cm_pos_group(p."position") IS DISTINCT FROM 'GK'
+ )
+ SELECT b.club_id, b.exercise_id, g.pos_group,
+    count(*) AS n_instances,
+    count(DISTINCT b.player_id) AS n_players,
+    avg(b.total_distance / b.mins) AS total_distance_per_min,
+    avg(b.high_speed_distance / b.mins) AS high_speed_distance_per_min,
+    avg(b.very_high_speed_distance / b.mins) AS very_high_speed_distance_per_min,
+    avg(b.sprint_distance / b.mins) AS sprint_distance_per_min,
+    avg(b.sprint_count / b.mins) AS sprint_count_per_min,
+    avg(b.accelerations / b.mins) AS accelerations_per_min,
+    avg(b.decelerations / b.mins) AS decelerations_per_min,
+    avg(b.player_load / b.mins) AS player_load_per_min,
+    avg(b.hmld / b.mins) AS hmld_per_min
+   FROM base b
+     CROSS JOIN LATERAL (VALUES (b.pos_group), ('ALL')) g(pos_group)
+  WHERE g.pos_group IS NOT NULL
+  GROUP BY b.club_id, b.exercise_id, g.pos_group;
+
+-- Lo que corre cada línea en un partido (migración 180). Es la referencia que hace legible la
+-- proyección: «5060 m» no dice nada, «el 51% de lo que corre un mediocampista» sí. Sólo cuentan
+-- los partidos de 60 minutos o más: la referencia es lo que corre quien JUEGA el partido — con
+-- ref_min_minutes en su valor por defecto (0), un suplente de 10' hundiría la media.
+create or replace view public.v_match_demand_pos with (security_invoker = on) as
+ WITH base AS (
+   SELECT gr.club_id, gr.player_id,
+          cm_pos_group(p."position") AS pos_group,
+          gr.total_distance, gr.high_speed_distance, gr.very_high_speed_distance,
+          gr.sprint_distance, gr.sprint_count, gr.accelerations, gr.decelerations,
+          gr.player_load, gr.hmld, gr.time_played
+     FROM gps_reports gr
+       JOIN training_sessions ts ON ts.id = gr.session_id
+       JOIN players p ON p.id = gr.player_id
+       LEFT JOIN club_gps_settings s ON s.club_id = gr.club_id
+    WHERE ts.session_type = 'match' AND COALESCE(gr.is_invalid, false) = false
+      AND gr.work_context = 'team'
+      AND COALESCE(gr.time_played, 0::numeric) >= GREATEST(COALESCE(s.ref_min_minutes, 0), 60)::numeric
+      AND (s.ref_from_date IS NULL OR ts.session_date >= s.ref_from_date)
+      AND (s.gps_valid_from IS NULL OR ts.session_date >= s.gps_valid_from)
+      AND cm_pos_group(p."position") IS DISTINCT FROM 'GK'
+ )
+ SELECT b.club_id, g.pos_group,
+    count(*) AS n_matches,
+    count(DISTINCT b.player_id) AS n_players,
+    avg(b.time_played) AS time_played_avg,
+    avg(b.total_distance) AS total_distance,
+    avg(b.high_speed_distance) AS high_speed_distance,
+    avg(b.very_high_speed_distance) AS very_high_speed_distance,
+    avg(b.sprint_distance) AS sprint_distance,
+    avg(b.sprint_count) AS sprint_count,
+    avg(b.accelerations) AS accelerations,
+    avg(b.decelerations) AS decelerations,
+    avg(b.player_load) AS player_load,
+    avg(b.hmld) AS hmld
+   FROM base b
+     CROSS JOIN LATERAL (VALUES (b.pos_group), ('ALL')) g(pos_group)
+  WHERE g.pos_group IS NOT NULL
+  GROUP BY b.club_id, g.pos_group;
 
 create or replace view public.v_gps_period_names as
  SELECT club_id,
