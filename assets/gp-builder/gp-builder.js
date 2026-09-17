@@ -1122,28 +1122,9 @@
     if (_hasDataCache.has(clubId)) return _hasDataCache.get(clubId);
     const has = new Set();
     const customKeys = rows.filter(r => !r.is_core).map(r => r.key);
-
-    // UN viaje para todas. Antes era una consulta POR MÉTRICA — trece a gps_reports (una por
-    // columna) más una por cada métrica propia del club — o sea ~15 consultas de ~0,9 kB haciendo
-    // cola sólo para saber qué métricas ofrecer. La función de base hace los mismos trece EXISTS
-    // (cada uno corta al primer acierto: ~1 ms medido) y devuelve la lista.
-    // Va con SECURITY INVOKER, así que respeta la RLS igual que las consultas sueltas.
-    try {
-      const { data, error } = await window.sb.rpc('gps_metricas_con_datos', { p_club_id: clubId });
-      if (error) throw error;
-      if (Array.isArray(data)) {
-        data.forEach(k => k && has.add(k));
-        _hasDataCache.set(clubId, has);
-        return has;
-      }
-    } catch (e) {
-      // FAIL-OPEN igual que abajo: si la función no está (motor viejo cacheado) o falla, se sigue
-      // por el camino de siempre. Vale de más una consulta por métrica que esconder una que sí
-      // tiene datos.
-      console.warn('[gp-builder] gps_metricas_con_datos no disponible → una consulta por métrica:', e?.message || e);
-    }
-
-    // Camino de respaldo: una consulta por columna/clave, todas en paralelo.
+    // The project has no server-side aggregates enabled, so we probe existence per column/key with
+    // a limit-1 query instead of one count() aggregate. Bounded (~13 core + N custom), run fully
+    // concurrently, once per club (cached below).
     const coreChecks = _CORE_DATA_COLS.map(async (col) => {
       try {
         const { data, error } = await window.sb.from('gps_reports')

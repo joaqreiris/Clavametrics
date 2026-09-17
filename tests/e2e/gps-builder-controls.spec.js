@@ -188,23 +188,3 @@ test.describe('GPS · el selector ofrece todos los tipos', () => {
   });
 });
 
-
-// Saber qué métricas tienen datos costaba UNA CONSULTA POR MÉTRICA: trece a gps_reports (una por
-// columna, con .not(col,'is',null).limit(1)) más una por cada métrica propia del club. En la red de
-// un club eran ~15 consultas de ~0,9 kB haciendo cola sólo para decidir qué ofrecer en el panel.
-test('las métricas con datos se averiguan en un viaje, no una por métrica', async ({ page }) => {
-  const sueltas = [];
-  page.on('request', r => {
-    const u = decodeURIComponent(r.url());
-    if (u.includes('gps_reports') && u.includes('is.null') && u.includes('limit=1')) sueltas.push(u);
-  });
-  // Se CUENTAN las peticiones en vez de mockear la función: open() registra su catch-all después
-  // y, como gana el último route, un mock puesto acá quedaría tapado.
-  let rpc = 0;
-  page.on('request', r => { if (r.url().includes('rpc/gps_metricas_con_datos')) rpc++; });
-  await open(page);
-  await page.waitForTimeout(2_500);
-
-  expect(rpc, 'no se usó la función que las trae todas juntas').toBeGreaterThan(0);
-  expect(sueltas.length, `se comprobaron métricas de a una: ${sueltas.length} consultas`).toBe(0);
-});
