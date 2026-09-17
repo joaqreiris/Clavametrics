@@ -580,8 +580,19 @@ async function annotateKpiCards() {
     { kpiIdx: 2, metric: 'sprint_distance' },
   ];
 
+  // Las tres referencias en UN viaje. Antes era un for con await adentro: tres consultas a
+  // gps_reports encadenadas —cada una esperando a la anterior— para tres columnas que viven en
+  // la misma tabla y salen de la misma consulta.
+  let _refs = {};
+  if (window.getMatchBaselineBatchMulti) {
+    try {
+      _refs = await window.getMatchBaselineBatchMulti(
+        [sel.player_id], BL_MAP.map(b => b.metric), window._gpClubId, {}) || {};
+    } catch (e) { console.warn('annotateKpiCards baselines:', e); }
+  }
   for (const { kpiIdx, metric } of BL_MAP) {
-    const bl  = await window.getMatchBaseline(sel.player_id, metric, window._gpClubId);
+    const bl  = _refs?.[metric]?.[String(sel.player_id)]
+             || await window.getMatchBaseline(sel.player_id, metric, window._gpClubId);
     const kpi = document.querySelectorAll('.gp-view[data-view="ind"] .gp-kpi')[kpiIdx];
     if (!kpi) continue;
 

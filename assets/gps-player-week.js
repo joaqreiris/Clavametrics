@@ -252,10 +252,18 @@
               .map(c => c.baseKey)
           )];
           if (pctKeys.length) {
-            const results = await Promise.all(
-              pctKeys.map(k => window.getMatchBaseline(playerId, k, clubId))
-            );
-            pctKeys.forEach((k, i) => { baseline[k] = results[i]; });
+            // UN viaje para todas. Antes era una consulta por columna de %: con seis columnas,
+            // seis consultas a gps_reports que traen casi lo mismo. getMatchBaselineBatchMulti
+            // pide todas las columnas core juntas.
+            if (window.getMatchBaselineBatchMulti) {
+              const refs = await window.getMatchBaselineBatchMulti([playerId], pctKeys, clubId, {});
+              pctKeys.forEach(k => { baseline[k] = refs?.[k]?.[String(playerId)] || null; });
+            } else {
+              const results = await Promise.all(
+                pctKeys.map(k => window.getMatchBaseline(playerId, k, clubId))
+              );
+              pctKeys.forEach((k, i) => { baseline[k] = results[i]; });
+            }
           }
         } catch { baseline = {}; }
       }

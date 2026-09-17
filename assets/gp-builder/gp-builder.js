@@ -904,6 +904,31 @@
    *  El ACWR no tiene agregación que mostrar — no suma ni promedia una métrica, compara dos
    *  ventanas de tiempo —, así que en vez de un «sum» que no quiere decir nada muestra cuáles
    *  son esas ventanas, leídas del propio motor por si algún día cambian. */
+  /** Referencias de partido de TODAS las métricas de la card, en UN viaje.
+   *  Antes se pedían con un for + await: una consulta por métrica y ENCADENADAS, así que una card
+   *  de seis métricas pagaba seis idas y vueltas en fila. getMatchBaselineBatchMulti trae todas
+   *  las columnas core juntas — es lo que usa la card «% del partido» desde que se armó.
+   *  Devuelve id → el objeto completo del baseline (no sólo el número) porque alguna card
+   *  necesita también count/source/warning para su diagnóstico. */
+  async function _refsDePartido(config, ctx) {
+    const out = new Map();
+    const pid = ctx?.playerId;
+    const ids = (config?.metrics || []).map(m => m.id).filter(Boolean);
+    if (!pid || !ids.length) return out;
+    try {
+      if (window.getMatchBaselineBatchMulti) {
+        const refs = await window.getMatchBaselineBatchMulti([pid], ids, _clubId, {});
+        ids.forEach(id => { const r = refs?.[id]?.[String(pid)]; if (r) out.set(id, r); });
+        return out;
+      }
+      // Motor viejo cacheado: queda la ruta de una por métrica, pero al menos en paralelo.
+      const rs = await Promise.all(ids.map(id =>
+        window.getMatchBaseline(pid, id, _clubId, {}).catch(() => null)));
+      ids.forEach((id, i) => { if (rs[i]) out.set(id, rs[i]); });
+    } catch (e) { console.warn('gpb match baselines:', e); }
+    return out;
+  }
+
   function _subCard(S, agg0) {
     const viz = _vizFull(S.type).toLowerCase();
     if (S.type === 'acwr') {
@@ -3798,13 +3823,11 @@
             // suppressed (hasRealBaseline) + a note is shown, instead of a fake 100%.
             const bmap = new Map();
             const _mDiag = [];   // per-metric baseline result (pinned diagnostics only)
+            const _refs4 = await _refsDePartido(config, ctx);
             for (const m of config.metrics) {
-              try {
-                const r = await window.getMatchBaseline(ctx.playerId, m.id, _clubId, {});
-                if (r && r.baseline != null) bmap.set(m.id, r.baseline);
-                if (_isPinned) _mDiag.push({ id: m.id, baseline: r?.baseline ?? null, count: r?.count ?? 0, source: r?.source || 'n/a', warning: r?.warning || null });
-              }
-              catch (e) { console.warn('gpb match baseline:', e); if (_isPinned) _mDiag.push({ id: m.id, error: e?.message || String(e) }); }
+              const r = _refs4.get(m.id);
+              if (r && r.baseline != null) bmap.set(m.id, r.baseline);
+              if (_isPinned) _mDiag.push({ id: m.id, baseline: r?.baseline ?? null, count: r?.count ?? 0, source: r?.source || 'n/a', warning: r?.warning || null });
             }
             if (bmap.size) {
               drawOpts.baselineMap = bmap;
@@ -3928,10 +3951,8 @@
               const rb = await fetchRoleBaseline(sessionIds, config, ctx, catalogMap, sb);
               if (rb) for (const m of config.metrics) { const v = rb.get(m.id); if (v != null) bmap.set(m.id, v); }
             } else if (cmp === 'match' && config.scope.level === 'player' && ctx.playerId && window.getMatchBaseline) {
-              for (const m of config.metrics) {
-                const r = await window.getMatchBaseline(ctx.playerId, m.id, _clubId, {});
-                if (r && r.baseline != null) bmap.set(m.id, r.baseline);
-              }
+              const _refs = await _refsDePartido(config, ctx);
+              _refs.forEach((r, k) => { if (r?.baseline != null) bmap.set(k, r.baseline); });
             }
           } catch (e) { console.warn('gpb kpi baseline:', e); }
           if (bmap.size) drawOpts.baselineMap = bmap;
@@ -3962,10 +3983,8 @@
               const rb = await fetchRoleBaseline(sessionIds, config, ctx, catalogMap, sb);
               if (rb) for (const m of config.metrics) { const v = rb.get(m.id); if (v != null) bmap.set(m.id, v); }
             } else if (cmp === 'match' && config.scope.level === 'player' && ctx.playerId && window.getMatchBaseline) {
-              for (const m of config.metrics) {
-                const r = await window.getMatchBaseline(ctx.playerId, m.id, _clubId, {});
-                if (r && r.baseline != null) bmap.set(m.id, r.baseline);
-              }
+              const _refs = await _refsDePartido(config, ctx);
+              _refs.forEach((r, k) => { if (r?.baseline != null) bmap.set(k, r.baseline); });
             }
           } catch (e) { console.warn('gpb gauge baseline:', e); }
           if (bmap.size) drawOpts.baselineMap = bmap;
@@ -4007,10 +4026,8 @@
               const rb = await fetchRoleBaseline(sessionIds, config, ctx, catalogMap, sb);
               if (rb) for (const m of config.metrics) { const v = rb.get(m.id); if (v != null) bmap.set(m.id, v); }
             } else if (cmp === 'match' && config.scope.level === 'player' && ctx.playerId && window.getMatchBaseline) {
-              for (const m of config.metrics) {
-                const r = await window.getMatchBaseline(ctx.playerId, m.id, _clubId, {});
-                if (r && r.baseline != null) bmap.set(m.id, r.baseline);
-              }
+              const _refs = await _refsDePartido(config, ctx);
+              _refs.forEach((r, k) => { if (r?.baseline != null) bmap.set(k, r.baseline); });
             }
           } catch (e) { console.warn('gpb heatmap baseline:', e); }
           if (bmap.size) drawOpts.baselineMap = bmap;

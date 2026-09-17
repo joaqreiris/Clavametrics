@@ -54,8 +54,9 @@ async function open(page, cards, { sessions = SESSIONS, reports = REPORTS } = {}
     // La card pide TODAS las referencias en un viaje (getMatchBaselineBatchMulti). El doble
     // responde igual, métrica por métrica, para que el test siga midiendo la aritmética del
     // porcentaje y no la consulta.
-    window.__refCalls = { single: 0, multi: 0 };
+    window.__refCalls = { single: 0, multi: 0, lotes: [] };
     const stubMulti = async (pids, metrics, club, o) => {
+      try { window.__refCalls.lotes.push([...(metrics || [])]); } catch (_) {}
       window.__refCalls.multi++;
       window.__inMulti = true;
       const out = {};
@@ -187,7 +188,14 @@ test.describe('GPS · % de la demanda de partido', () => {
       { id: 'high_speed_distance', agg: 'avg' },
     ]));
     const calls = await page.evaluate(() => window.__refCalls);
-    expect(calls.multi).toBe(1);      // una sola llamada, con las dos métricas dentro
+    // Se mira el LOTE de la card, no el total de llamadas: desde que las anotaciones de los KPI y
+    // las cards con comparación «match» también usan el batch, en la página hay más de una — que
+    // es justo lo que se buscaba. Lo que esta card no puede hacer es pedir métrica por métrica.
+    // Exactamente esas dos y nada más: las anotaciones de los KPI mandan un lote de TRES que
+    // incluye a las dos, y un filtro por «las contiene» se lo llevaría puesto.
+    const deLaCard = calls.lotes.filter(l =>
+      l.length === 2 && l.includes('total_distance') && l.includes('high_speed_distance'));
+    expect(deLaCard.length).toBe(1);  // sus dos métricas viajaron juntas, en un solo lote
     expect(calls.single).toBe(0);     // ninguna consulta suelta por métrica
   });
 });
