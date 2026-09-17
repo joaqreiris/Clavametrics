@@ -1054,6 +1054,9 @@
     window.refreshDashboard?.();   // radar / science cards siguen al jugador y fecha de la barra
   }
   window._pwReapply = _pwReapply;
+  // Lo usa el arranque del dashboard para que gpState tenga el rango de la barra ANTES del primer
+  // pedido. Sin eso la primera consulta sale con el rango por defecto y se tira al llegar la buena.
+  window._pwApplyBarDate = _pwApplyBarDate;
 
   window._pwInit = pwInit;
   window._pwLoad = _pwLoad;

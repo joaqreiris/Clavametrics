@@ -4489,6 +4489,19 @@ function _hayCardsClasicas() {
     || [...v.querySelectorAll('.gp-zt')].some(t => !t.closest('.gp-c[data-card-id]'));
 }
 
+/** Espera a que gpFilterBar diga que ya restauró los filtros del dashboard activo, con tope.
+ *  Devuelve al toque si la barra no existe o ya está lista. */
+function _esperarFiltrosRestaurados(topeMs) {
+  const listo = () => { try { return window.gpFilterBar?.getState?.()?.restored === true; } catch (_) { return false; } };
+  if (!window.gpFilterBar?.getState || listo()) return Promise.resolve();
+  return new Promise(res => {
+    let hecho = false;
+    const terminar = () => { if (hecho) return; hecho = true; clearInterval(iv); clearTimeout(to); res(); };
+    const iv = setInterval(() => { if (listo()) terminar(); }, 60);
+    const to = setTimeout(terminar, topeMs);
+  });
+}
+
 window.refreshDashboard = async function (opts = {}) {
   // Invalidate the shared resolver cache so a refresh always reads fresh data (post-import,
   // post-flag, etc.). cmInvalidateGpsCache is the single entry point (supabase-init.js).
@@ -4861,6 +4874,14 @@ async function _detectSmartDefault(clubId, userId) {
     });
     document.querySelectorAll('.gp-grid').forEach(g => g.classList.add('layout-ready'));
   }
+  // El primer pedido tiene que salir YA con el rango que el usuario dejó guardado. Antes salía con
+  // el de por defecto (30 días) porque quien aplica el de la barra a gpState es _pwReapply, que
+  // corre bastante después: esa primera consulta —~68 kB en un club real— se recibía y se tiraba
+  // entera al llegar la de verdad, y de paso le sacaba el lugar en la cola a las que sí se dibujan.
+  // La barra RESTAURA rápido (es aplicar lo restaurado lo que tarda), así que esperarla cuesta
+  // poco; y con tope, para no dejar el dashboard en blanco si no restaura nunca.
+  await _esperarFiltrosRestaurados(2500);
+  try { window._pwApplyBarDate?.(); } catch (e) { console.warn('aplicar rango de la barra:', e); }
   await window.refreshDashboard();
   // Backstop: saca cualquier skeleton huérfano (card que nunca renderizó)
   setTimeout(() => document.querySelectorAll('.gp-skel').forEach(s => s.remove()), 8000);
