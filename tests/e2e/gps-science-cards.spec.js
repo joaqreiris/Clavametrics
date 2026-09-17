@@ -37,7 +37,7 @@ const REP = SES.flatMap(s => PL.map(p => ({
 })));
 
 /** Monta el dashboard y devuelve un contador de consultas por etiqueta de cmFetchAll. */
-async function montar(page) {
+async function montar(page, layoutInd) {
   const pedidos = [];
   page.on('request', r => { const u = r.url(); if (u.includes('/rest/v1/')) pedidos.push(u); });
 
@@ -77,7 +77,7 @@ async function montar(page) {
     if (req.method() !== 'GET') return r.fulfill({ json: acc ? {} : [{}] });
     const did = (new URL(req.url()).searchParams.get('dashboard_id') || '').replace('eq.', '');
     if (did !== 'player_week') return r.fulfill({ json: acc ? null : [] });
-    const fila = { user_id: 'user-1', club_id: CLUB_ID, dashboard_id: did, layout: [
+    const fila = { user_id: 'user-1', club_id: CLUB_ID, dashboard_id: did, layout: layoutInd || [
       { card_id: 'acwr', size: 'md', config: {}, x: 0, y: 60, w: 6, h: 7 },
       { card_id: 'tsb',  size: 'md', config: {}, x: 6, y: 60, w: 6, h: 7 },
     ] };
@@ -119,4 +119,14 @@ test('si la card nace fuera de pantalla, sus datos no se piden hasta llegar a el
   // Y al llegar a la card, se pide: el ahorro no puede ser "no cargar nunca".
   await page.locator('#card-acwr').scrollIntoViewIfNeeded({ timeout: 20_000 });
   await expect.poll(() => pidioHistorico(pedidos), { timeout: 30_000 }).toBe(true);
+});
+
+test('si esas cards no están en el dashboard, sus datos no se piden nunca', async ({ page }) => {
+  // Un dashboard donde el usuario se quedó con OTRA card: las del bloque histórico no están.
+  // Es el caso real y el más común — y era el peor, porque se pedían sus ~1.270 filas igual.
+  const { pedidos } = await montar(page, [{ card_id: 'vzones', size: 'md', config: {}, x: 0, y: 0, w: 6, h: 7 }]);
+  await expect(page.locator('#card-acwr')).toHaveCount(0, { timeout: 20_000 });
+  // Margen amplio: lo que se afirma es que NO llega, así que hay que darle tiempo a llegar.
+  await page.waitForTimeout(5_000);
+  expect(pidioHistorico(pedidos)).toBe(false);
 });

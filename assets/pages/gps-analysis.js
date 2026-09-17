@@ -5185,9 +5185,16 @@ function _showCardEmpty(cardId, msg) {
 // El observer anterior se desconecta al crear uno nuevo — gpRenderScienceCards se vuelve a llamar
 // en cada refresco, y sin esto un solo scroll dispararía todos los bloques pendientes a la vez.
 let _ioHist = null;
+// Devuelve null cuando NINGUNA de esas cards existe: ahi no hay nada que dibujar y no hay que
+// pedir nada. Es el caso mas comun en un dashboard armado por el usuario — si borro el ACWR y el
+// resto del bloque, se le pedian igual ~1.270 filas y varios segundos para cards que no tiene.
+// Para cuando corre esto el DOM ya dice que cards hay: applyDefaultLayout* retira las que no
+// estan en el layout guardado, y corre ANTES de refreshDashboard. Si mas tarde el usuario agrega
+// una, el siguiente refresco la encuentra y sus datos se piden entonces.
 function _cuandoSeVean(ids) {
   const els = ids.map(i => document.getElementById(i)).filter(Boolean);
-  if (!els.length || typeof IntersectionObserver === 'undefined' || window.__gpLazyRender === false) {
+  if (!els.length) return null;
+  if (typeof IntersectionObserver === 'undefined' || window.__gpLazyRender === false) {
     return Promise.resolve();
   }
   try { _ioHist && _ioHist.disconnect(); } catch (_) {}
@@ -5215,7 +5222,9 @@ window.gpRenderScienceCards = async function (reports, clubId) {
   // El bloque histórico NO bloquea el retorno de esta función: quien la llama sigue con las cards
   // que no dependen de él (ver gps-analysis-2.js, que la espera antes de pintar las suyas).
   (async () => {
-  await _cuandoSeVean(['card-acwr', 'card-tsb', 'card-mc-heat', 'card-match-vs-train']);
+  const _espera = _cuandoSeVean(['card-acwr', 'card-tsb', 'card-mc-heat', 'card-match-vs-train']);
+  if (!_espera) return;             // ninguna de esas cards esta en el dashboard → nada que pedir
+  await _espera;
   // ── Historical data for ACWR / TSB / MC heatmap / Match vs Training
   // Always use a 84-day window (or full range if allTime) for these time-series charts.
   // Baselines always include historical matches regardless of the toggle — more data = more accurate.
