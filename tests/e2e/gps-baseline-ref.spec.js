@@ -27,7 +27,7 @@ const REPORTS  = MATCHES.map((m, i) => ({
 }));
 
 /** Abre la página y deja el motor listo, con los ajustes de club que se le pasen. */
-async function open(page, settings = {}, { topupDay = null } = {}) {
+async function open(page, settings = {}, { topupDay = null, partidosCalendario = [] } = {}) {
   const cfg = Object.assign({ club_id: CLUB_ID, baseline_n: 3, baseline_mode: 'personal', active_metrics: null,
     acwr_model: 'ewma', include_archived: false, gps_builder_enabled: true,
     ref_min_minutes: 0, ref_from_date: null }, settings);
@@ -36,7 +36,7 @@ async function open(page, settings = {}, { topupDay = null } = {}) {
   await page.route(`${SB}/rest/v1/profiles**`, r => r.fulfill({ json: [PROFILE] }));
   await page.route(`${SB}/rest/v1/clubs**`, r => r.fulfill({ json: [CLUB] }));
   await page.route(`${SB}/rest/v1/club_gps_settings**`, r => r.fulfill({ json: [cfg] }));
-  await page.route(`${SB}/rest/v1/calendar_events**`, r => r.fulfill({ json: [] }));
+  await page.route(`${SB}/rest/v1/calendar_events**`, r => r.fulfill({ json: partidosCalendario }));
   // Períodos: por defecto no hay ninguno etiquetado. Con `topupDay`, ese partido fue para el
   // jugador SÓLO top-up — no tiene ni un período con el equipo.
   await page.route(`${SB}/rest/v1/gps_period_reports**`, r => {
@@ -160,4 +160,26 @@ test.describe('GPS · referencia de partido', () => {
     expect(r.baseline).toBe(8000);
     expect(r.count).toBe(3);
   });
+});
+
+// Los partidos que todavía no se jugaron no tienen datos, así que no pueden ser referencia — pero
+// venían igual desde el calendario y viajaban en la URL de CADA consulta de baseline. En un club
+// eran 23 de 67 fechas, la más lejana a más de un año vista, repetidas en una decena de consultas.
+test('un partido todavía no jugado no viaja en la consulta', async ({ page }) => {
+  const futuro = (() => { const d = new Date(); d.setDate(d.getDate() + 60); return d.toISOString().slice(0, 10); })();
+  const urls = [];
+  page.on('request', r => { const u = r.url(); if (u.includes('gps_reports')) urls.push(decodeURIComponent(u)); });
+
+  // El calendario trae un partido dentro de dos meses, además de los cinco ya jugados. Va por
+  // parámetro y no registrando una ruta acá: open() registra la suya después y, como gana el
+  // último route, la de acá quedaba tapada (el test daba verde con y sin el filtro).
+  await open(page, {}, { partidosCalendario: [{ date: futuro }] });
+  const r = await ref(page, { mode: 'avg' });
+
+  // La referencia no cambia: sigue saliendo de los cinco partidos jugados.
+  expect(r.baseline).toBe(8000);
+  const conFechas = urls.filter(u => u.includes('session_date=in.'));
+  expect(conFechas.length, 'no se consultó ningún baseline').toBeGreaterThan(0);
+  expect(conFechas.some(u => u.includes(futuro)),
+    `la fecha futura ${futuro} viajó en la consulta`).toBe(false);
 });

@@ -160,7 +160,12 @@
     const _rf    = settings.ref_from_date || null;
     const _vf    = settings.gps_valid_from || null;
     const from   = (_rf && _vf) ? (_rf > _vf ? _rf : _vf) : (_rf || _vf || null);
-    const dates  = from ? [...matchDates].filter(d => d >= from) : [...matchDates];
+    // Los partidos que todavía NO se jugaron no pueden ser referencia de nada: no tienen datos.
+    // Venían igual desde el calendario y viajaban en la URL de CADA consulta de baseline — en un
+    // club, 23 de 67 fechas (la más lejana, a más de un año vista) repetidas en una decena de
+    // consultas. Se cortan acá, que es por donde pasan las tres rutas (una, batch y batch-multi).
+    const hoy = (window.cmToday ? window.cmToday() : new Date().toISOString().slice(0, 10));
+    const dates  = [...matchDates].filter(d => d <= hoy && (!from || d >= from));
     return { dates, longEnough: r => !(minMin > 0 && r.time_played != null && +r.time_played < minMin) };
   }
   window.gpsRefRule = _refRule;
