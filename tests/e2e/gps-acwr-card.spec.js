@@ -145,3 +145,25 @@ test('la card ACWR no arrastra el fetch del período', async ({ page }) => {
   // …y NO el bloque del resolver, que para este tipo no se usa para nada.
   expect(await viajes(page, 'resolver.fetchReports')).toBe(0);
 });
+
+test('el eje no arranca antes del primer dato', async ({ page }) => {
+  // La ventana que se pide es larga a propósito (28 días de crónica antes del primer punto), pero
+  // dibujar ese tramo en blanco estira el eje sin decir nada: en un club, datos desde agosto y el
+  // eje arrancando en junio.
+  await montar(page);
+  await expect(page.locator('.gp-view.is-on .gp-c[data-card-id="c-acwr"]')).toHaveCount(1, { timeout: 25_000 });
+  await expect.poll(() => page.evaluate(() => {
+    const c = document.querySelector('.gp-c[data-card-id="c-acwr"] canvas');
+    const ch = c && window.Chart?.getChart?.(c);
+    const d = ch?.data?.datasets?.[0]?.data;
+    if (!d?.length) return null;
+    return { primero: d[0], ultimo: d[d.length - 1], total: d.length };
+  }), { timeout: 60_000 }).not.toBeNull();
+  const s = await page.evaluate(() => {
+    const c = document.querySelector('.gp-c[data-card-id="c-acwr"] canvas');
+    const d = window.Chart.getChart(c).data.datasets[0].data;
+    return { primero: d[0], ultimo: d[d.length - 1] };
+  });
+  expect(s.primero, 'el primer punto del eje no puede estar vacío').not.toBeNull();
+  expect(s.ultimo, 'el último punto del eje no puede estar vacío').not.toBeNull();
+});

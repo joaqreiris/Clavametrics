@@ -7870,7 +7870,18 @@
       ? Object.fromEntries(Object.entries(byPlayer || {}).filter(([pid]) => permitidos.has(String(pid))))
       : (byPlayer || {});
     const t = A.squadTimeline(usados, desde, hasta, {}, desde);
-    return { ...t, metricKey, jugadores: Object.keys(usados).length };
+    // La ventana que se PIDE es siempre larga (hacen falta 28 días de crónica antes del primer
+    // punto), pero lo que se DIBUJA no tiene por qué serlo: si los datos empiezan en agosto, de
+    // junio a agosto salen días en blanco y el eje se estira sin decir nada. Se recorta el tramo
+    // vacío de los dos extremos — el relleno de la crónica ya hizo su trabajo dentro del cálculo.
+    let a = 0, b = t.squadAcwr.length - 1;
+    while (a <= b && t.squadAcwr[a] == null) a++;
+    while (b >= a && t.squadAcwr[b] == null) b--;
+    const rec = (arr) => (a <= b ? arr.slice(a, b + 1) : []);
+    return {
+      dates: rec(t.dates), squadAcwr: rec(t.squadAcwr), squadLoad: rec(t.squadLoad),
+      metricKey, jugadores: Object.keys(usados).length,
+    };
   }
 
   async function _buildDemandData(config, series) {
