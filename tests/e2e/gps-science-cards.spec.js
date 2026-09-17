@@ -20,7 +20,7 @@ const d = (n) => { const x = new Date(); x.setDate(x.getDate() - n); return x.to
 // 40 sesiones repartidas en los últimos 80 días: el ACWR necesita historia (agudo 7d vs crónico 28d).
 const SES = Array.from({ length: 40 }, (_, i) => ({
   id: 's' + i, club_id: CLUB_ID, session_date: d(i * 2), session_type: i % 7 === 0 ? 'match' : 'training',
-  team_id: null, microcycle_id: null, is_historical: false, match_day_offset: -3, notes: null,
+  team_id: null, microcycle_id: 'mc-' + Math.floor(i / 4), is_historical: false, match_day_offset: -3, notes: null,
 }));
 const PL = Array.from({ length: 6 }, (_, i) => ({
   id: `0000000${i}-1111-4111-8111-111111111111`, club_id: CLUB_ID, first_name: 'N' + i, last_name: 'Ape' + i,
@@ -32,9 +32,17 @@ const REP = SES.flatMap(s => PL.map(p => ({
   sprint_distance: 40, sprint_count: 3, accelerations: 15, decelerations: 12, max_speed: 27, avg_speed: 6,
   player_load: 250 + (s.id.length * 7), hmld: 350, time_played: 90, distance_per_minute: 55,
   players: { id: p.id, first_name: p.first_name, last_name: p.last_name, number: p.number, position: 'CB', positions: ['CB'] },
-  training_sessions: { session_date: s.session_date, session_attributes: null, microcycle_id: null,
+  training_sessions: { session_date: s.session_date, session_attributes: null, microcycle_id: s.microcycle_id,
     team_id: null, session_type: s.session_type, match_day_offset: -3, season_id: null },
 })));
+
+// Microciclos: la vista Microcycle Compare necesita AL MENOS DOS con el MD elegido para llegar a
+// pedir sus datos. Sin ellos sale antes y un test sobre esa consulta no prueba nada.
+const MCS = Array.from({ length: 10 }, (_, i) => ({
+  id: 'mc-' + i, club_id: CLUB_ID, name: 'MC 0' + i,
+  start_date: d(i * 8 + 7), end_date: d(i * 8), match_date: d(i * 8),
+  rival: 'Rival ' + i, home_away: 'home',
+}));
 
 /** Monta el dashboard y devuelve un contador de consultas por etiqueta de cmFetchAll. */
 async function montar(page, layoutInd) {
@@ -57,6 +65,7 @@ async function montar(page, layoutInd) {
     return r.fulfill({ json: acc ? ord[0] : SES });
   });
   await page.route(`${SB}/rest/v1/players**`, r => r.fulfill({ json: PL }));
+  await page.route(`${SB}/rest/v1/microcycles**`, r => r.fulfill({ json: MCS }));
   await page.route(`${SB}/rest/v1/gps_reports**`, r => {
     const sp = new URL(r.request().url()).searchParams;
     const off = +(sp.get('offset') || 0);
@@ -129,4 +138,17 @@ test('si esas cards no están en el dashboard, sus datos no se piden nunca', asy
   // Margen amplio: lo que se afirma es que NO llega, así que hay que darle tiempo a llegar.
   await page.waitForTimeout(5_000);
   expect(pidioHistorico(pedidos)).toBe(false);
+});
+
+test('si la vista Microcycle Compare no tiene cards, no pide sus datos al entrar', async ({ page }) => {
+  // El layout de esta vista queda vacío (el mock sólo devuelve fila para player_week), así que
+  // sus cards se retiran del grid. Entrar a la pestaña no puede disparar su consulta.
+  await montar(page);
+  await page.locator('[data-view="mc"]').first().click();
+  await expect(page.locator('.gp-view[data-view="mc"].is-on')).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator('#card-mc-table')).toHaveCount(0, { timeout: 15_000 });
+  await page.waitForTimeout(5_000);   // margen para que la consulta llegue, si fuera a llegar
+  // El contador de viajes del propio producto, por etiqueta: es exactamente lo que se quiere cero.
+  const viajes = await page.evaluate(() => window.__cmFetchStats?.['mc-heatmap']?.calls || 0);
+  expect(viajes).toBe(0);
 });

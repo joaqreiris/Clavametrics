@@ -139,7 +139,16 @@
   }
 
   // ── load & compare ───────────────────────────────────────────
+  // Cards de esta vista. Si NINGUNA está en el dashboard no hay nada que dibujar, así que
+  // tampoco hay que pedir los datos. Hace falta decirlo explícitamente porque los contenedores
+  // de arriba caen a sinks detached cuando faltan (para no romper los mensajes de estado): sin
+  // esta guarda la consulta se hacía igual y el resultado no lo miraba nadie. Medido en datos
+  // reales de un club cuyo dashboard es todo del builder: ~4 s de una carga de ~30 s.
+  const _CARDS_MC = ['card-mc-table', 'card-mc-shape', 'card-mc-monotony', 'card-mc-exposure',
+                     'card-mc-movers', 'card-mc-trend', 'card-mc-heat', 'card-mc-diff-metric',
+                     'card-mc-scatter'];
   async function _mcLoad() {
+    if (!_CARDS_MC.some(id => document.getElementById(id))) return;
     // Inputs derivados de la barra (única fuente de filtrado). La comparación vs MC
     // es per-card: las cards bespoke comparan contra el MC previo (vs_last) por defecto;
     // mc-table usa su propia config (refMcId en __config).
