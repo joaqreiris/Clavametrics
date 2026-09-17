@@ -1859,20 +1859,58 @@ function dpProfFor(exId, line){
 // perfil de cada línea, no en el peso del bloque.
 function dpProjectLine(contribs, keys, line){
   const num = x => (x == null || x === '') ? 0 : Number(x);
+  const mult = k => { const m = (window.CM_GPS_METRICS || []).find(x => x.key === k); return m ? m.mult : 1; };
   const vals = {}; let fb = 0;
+  const porTarea = [];           // el detalle, para el desglose de abajo y para el PDF
   keys.forEach(k => { vals[k] = 0; });
   contribs.forEach(({ e, factor }) => {
     const pf = dpProfFor(e.planner_exercise_id, line);
     if (!pf) return;
     if (pf.fb) fb++;
     const mins = dpBlockMins(e).work_min;
-    keys.forEach(k => { vals[k] += num(pf.row[k]) * mins * factor; });
+    const suyos = {};
+    keys.forEach(k => {
+      const v = num(pf.row[k]) * mins * factor;
+      vals[k] += v;
+      suyos[k] = Math.round(v * mult(k));
+    });
+    porTarea.push({ e, mins, factor, fb: pf.fb, vals: suyos });
   });
+  keys.forEach(k => { vals[k] = Math.round(vals[k] * mult(k)); });
+  return { line, vals, fb, porTarea };
+}
+
+// ── Aporte de cada tarea ───────────────────────────────────────────────────
+// La proyección decía «5060 m» y «cubre 5 de 7», pero no CUÁL bloque aporta qué: para
+// subir el HSR había que adivinar qué tarea tocar. Esto lo responde donde se está
+// editando la sesión, y sale en la hoja del día.
+//
+// Va siempre con los números del EQUIPO, también en modo línea: es el desglose de la
+// sesión, y cuatro tablas —una por línea— no se leen ni en pantalla ni en papel.
+//
+// Las tareas sin perfil GPS también aparecen, con un guion. Saber cuáles no están
+// mapeadas es justamente lo que hace falta para que la proyección mejore: la nota
+// «cubre 5 de 7» decía que faltaban dos, nunca cuáles.
+function dpBreakdownData(keys, teamCol, bloques){
+  const porId = new Map((teamCol.porTarea || []).map(t => [String(t.e.id), t]));
+  const filas = (bloques || []).map(e => {
+    const t = porId.get(String(e.id));
+    return {
+      id: e.id,
+      nombre: e.name || tt('daily_planning.untitled_task', 'Untitled'),
+      mins: dpBlockMins(e).work_min,
+      par: !!_dpParGroup(e),
+      vals: t ? t.vals : null,
+    };
+  });
+  // El que más aporta de cada métrica: es lo que se busca de un vistazo.
+  const top = {};
   keys.forEach(k => {
-    const m = (window.CM_GPS_METRICS || []).find(x => x.key === k);
-    vals[k] = Math.round(vals[k] * (m ? m.mult : 1));
+    let mejor = null;
+    filas.forEach(f => { if (f.vals && (mejor == null || f.vals[k] > mejor.v)) mejor = { id: f.id, v: f.vals[k] }; });
+    if (mejor && mejor.v > 0) top[k] = mejor.id;
   });
-  return { line, vals, fb };
+  return { filas, top };
 }
 
 // Qué porcentaje de un partido de esa línea es este valor. null = sin referencia
@@ -2020,7 +2058,7 @@ async function renderGpsProjection(){
   const headHTML = mode !== 'lines' ? '' :
     `<div style="display:grid;grid-template-columns:${gridCols};gap:10px;align-items:end;padding:0 2px 6px">
       <div></div>
-      ${cols.map(c => `<div style="font:600 9px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted);min-width:0">${_dpEsc(_dpLineLabel(c.line))}${c.fb ? `<span title="${_dpEsc(tt('daily_planning.line_fallback_title', `${c.fb} drill(s) without data for this line — team average used`, {count: c.fb}))}" style="color:var(--cm-warning,#d97706)"> ●</span>` : ''}</div>`).join('')}
+      ${cols.map(c => `<div style="font:600 9px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted);min-width:0">${_dpEsc(_dpLineLabel(c.line))}${c.fb ? `<span title="${_dpEsc(tt('daily_planning.line_fallback_title', `${c.fb} drill(s) with fewer than 3 GPS readings for this line — team average used`, {count: c.fb}))}" style="color:var(--cm-warning,#d97706)"> ●</span>` : ''}</div>`).join('')}
       <div style="font:600 9px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted)">${_dpEsc(tt('daily_planning.target', 'Target'))}</div>
     </div>`;
 
@@ -2053,6 +2091,52 @@ async function renderGpsProjection(){
   // Save on blur too (not only on the debounce).
   body.querySelectorAll('[data-proj-target]').forEach(inp => inp.addEventListener('change', async () => { await dpSaveTargets(); dpFlushTargets(); }));
 
+  // ── El desglose: qué tarea aporta qué ───────────────────────────────────
+  const brkEl = document.getElementById('dpProjBreak');
+  const brk = dpBreakdownData(keys, teamCol, withId);
+  window._dpProjBreak = brk;                       // lo lee la hoja del día
+  if (brkEl) {
+    if (!brk.filas.length) { brkEl.innerHTML = ''; }
+    else {
+      const gc = `minmax(0,2.2fr) 40px repeat(${keys.length}, minmax(0,1fr))`;
+      const th = 'font:600 9px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted)';
+      const cab = `<div style="display:grid;grid-template-columns:${gc};gap:8px;padding:0 2px 6px">
+          <div style="${th}">${_dpEsc(tt('daily_planning.task','Task'))}</div>
+          <div style="${th};text-align:right">${_dpEsc(tt('daily_planning.min_suffix','min'))}</div>
+          ${keys.map(k => { const m = (window.CM_GPS_METRICS||[]).find(x => x.key === k);
+            return `<div style="${th};text-align:right">${_dpEsc(m ? m.label : k)}</div>`; }).join('')}
+        </div>`;
+      const filas = brk.filas.map(f => {
+        const celdas = keys.map(k => {
+          if (!f.vals) return `<div style="text-align:right;font:500 11px var(--cm-font-mono);color:var(--cm-fg-faint)">—</div>`;
+          const v = f.vals[k] || 0;
+          const tot = teamCol.vals[k] || 0;
+          const pct = tot > 0 ? Math.round(100 * v / tot) : 0;
+          // El que más aporta va en negrita y sobre un fondo suave: se busca en papel
+          // igual que en pantalla, sin depender del color.
+          const esTop = brk.top[k] === f.id;
+          return `<div style="text-align:right;padding:1px 4px;border-radius:5px;${esTop ? 'background:var(--cm-accent-soft)' : ''}">
+              <div style="font:${esTop ? '700' : '500'} 11px var(--cm-font-mono);color:var(--cm-fg-strong)">${v.toLocaleString()}</div>
+              <div style="font:500 9px var(--cm-font-mono);color:var(--cm-fg-muted)">${pct}%</div>
+            </div>`;
+        }).join('');
+        const marca = f.par ? `<span title="${_dpEsc(tt('daily_planning.in_parallel','In parallel'))}" style="color:var(--cm-fg-faint)"> ⇄</span>` : '';
+        const sinPerfil = !f.vals ? `<span style="font:500 9px var(--cm-font-mono);color:var(--cm-fg-faint)"> · ${_dpEsc(tt('daily_planning.no_gps_yet','no GPS yet'))}</span>` : '';
+        return `<div style="display:grid;grid-template-columns:${gc};gap:8px;align-items:center;padding:5px 2px;border-top:1px solid var(--cm-border)">
+            <div style="font:500 11.5px var(--cm-font-sans);color:var(--cm-fg);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_dpEsc(f.nombre)}${marca}${sinPerfil}</div>
+            <div style="text-align:right;font:500 11px var(--cm-font-mono);color:var(--cm-fg-muted)">${f.mins}</div>
+            ${celdas}
+          </div>`;
+      }).join('');
+      brkEl.innerHTML = `<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--cm-border)">
+          <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:8px">
+            <h4 style="margin:0;font:600 11px var(--cm-font-sans);color:var(--cm-fg-strong);text-transform:uppercase;letter-spacing:.04em">${_dpEsc(tt('daily_planning.breakdown_title','Contribution by task'))}</h4>
+            <span style="font:500 10px var(--cm-font-sans);color:var(--cm-fg-muted)">${_dpEsc(tt('daily_planning.breakdown_team_note','whole squad, whichever view is selected'))}</span>
+          </div>${cab}${filas}
+        </div>`;
+    }
+  }
+
   const Y = withId.length, X = covered.length, Z = Y - X;
   // Cuántos bloques en paralelo entraron: se promediaron por jugadores en vez de sumarse,
   // y eso baja la proyección respecto de lo que daría la lista leída en fila.
@@ -2061,7 +2145,7 @@ async function renderGpsProjection(){
   if (!note) return;
   if (!Y) { note.textContent = tt('daily_planning.no_mapped_drills','No mapped drills with a GPS profile yet.'); return; }
   const parts = [
-    tt('daily_planning.projection_covers', `Projection covers ${X} of ${Y} drill${Y!==1?'s':''}${Z ? ` (${Z} have no GPS profile yet)` : ''}.`, {covered: X, total: Y, extra: Z ? ' ' + tt('daily_planning.projection_no_profile', `(${Z} have no GPS profile yet)`, {count: Z}) : ''})
+    tt('daily_planning.projection_covers', `Projection covers ${X} of ${Y} drill${Y!==1?'s':''}${Z ? ` (${Z} have no GPS profile yet)` : ''}.`, {covered: X, total: Y, extra: Z ? ' ' + tt('daily_planning.projection_no_profile', `(${Z} with no GPS profile yet)`, {count: Z}) : ''})
       + (P ? ' ' + tt('daily_planning.projection_parallel', `${P} parallel block${P!==1?'s':''} averaged by players.`, {count: P}) : ''),
   ];
   // Sólo se nombra la referencia de partido si de verdad se está usando en pantalla.
@@ -2248,9 +2332,50 @@ async function dpRenderPrintSheet() {
         <div style="font:700 12px ${MONO};color:#15181D;margin-top:2px">${(proj||0).toLocaleString()}${tgt!=null?` <span style="color:#9CA3AF;font-weight:500">/ ${tgt.toLocaleString()}</span>`:''}${unit?` <span style="font-size:8.5px;color:#8A93A0;font-weight:500">${esc(unit)}</span>`:''}</div>
       </div>`;
     }).filter(Boolean);
+    // Aporte de cada tarea al total del dia. Es la mitad util de la carga proyectada en
+    // papel: el bloque de arriba dice cuanto, este dice de donde sale. Sin color —la hoja
+    // se imprime en blanco y negro—: el que mas aporta va en negrita sobre gris claro.
+    const _brk = window._dpProjBreak;
+    let gpsBreak = '';
+    if (_brk && _brk.filas && _brk.filas.length && _gpsKeys.length) {
+      const _bkKeys = _gpsKeys.filter(k => (_gpsVals[k] || 0) > 0);
+      if (_bkKeys.length) {
+        const _gc = `minmax(0,2.2fr) 30px repeat(${_bkKeys.length}, minmax(0,1fr))`;
+        const _th = `font:600 7.5px ${MONO};letter-spacing:.06em;text-transform:uppercase;color:#9CA3AF`;
+        const _cab = `<div style="display:grid;grid-template-columns:${_gc};gap:6px;padding:0 2px 4px">
+            <div style="${_th}">${esc(tt('daily_planning.task','Task'))}</div>
+            <div style="${_th};text-align:right">${esc(tt('daily_planning.min_suffix','min'))}</div>
+            ${_bkKeys.map(k => { const m = (window.CM_GPS_METRICS||[]).find(x => x.key === k);
+              return `<div style="${_th};text-align:right">${esc(m ? m.label : k)}</div>`; }).join('')}
+          </div>`;
+        const _filas = _brk.filas.map(f => {
+          const celdas = _bkKeys.map(k => {
+            if (!f.vals) return `<div style="text-align:right;font:500 9px ${MONO};color:#C7CBD1">—</div>`;
+            const v = f.vals[k] || 0, tot = _gpsVals[k] || 0;
+            const pct = tot > 0 ? Math.round(100 * v / tot) : 0;
+            const top = _brk.top[k] === f.id;
+            return `<div style="text-align:right;padding:1px 3px;border-radius:4px;${top ? 'background:#F0F1F3' : ''}">
+                <div style="font:${top ? '700' : '500'} 9.5px ${MONO};color:#15181D">${v.toLocaleString()}</div>
+                <div style="font:500 7.5px ${MONO};color:#9CA3AF">${pct}%</div>
+              </div>`;
+          }).join('');
+          const sinPerfil = !f.vals ? ` <span style="font:500 7.5px ${MONO};color:#C7CBD1">· ${esc(tt('daily_planning.no_gps_yet','no GPS yet'))}</span>` : '';
+          return `<div style="display:grid;grid-template-columns:${_gc};gap:6px;align-items:center;padding:3px 2px;border-top:1px solid #EFEFEC">
+              <div style="font:500 9.5px ${FONT};color:#15181D;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(f.nombre)}${f.par ? ' ⇄' : ''}${sinPerfil}</div>
+              <div style="text-align:right;font:500 9px ${MONO};color:#8A93A0">${f.mins}</div>
+              ${celdas}
+            </div>`;
+        }).join('');
+        gpsBreak = `<div style="margin-top:10px;border:1px solid #E7E7E4;border-radius:8px;padding:8px 9px">
+            <div style="font:600 7.5px ${MONO};letter-spacing:.06em;text-transform:uppercase;color:#8A93A0;margin-bottom:6px">${esc(tt('daily_planning.breakdown_title','Contribution by task'))}</div>
+            ${_cab}${_filas}
+          </div>`;
+      }
+    }
     const gpsStrip = _gpsCells.length ? `<div class="dsp-brk" style="margin-bottom:16px">
       ${sectionTitle(tt('daily_planning.sheet_gps_load','Conditional load · GPS'))}
       <div style="display:grid;grid-template-columns:repeat(${Math.min(_gpsCells.length,6)},1fr);gap:8px">${_gpsCells.join('')}</div>
+      ${gpsBreak}
     </div>` : '';
 
     // 4) Squad — recompute status like dpRenderSquad (same status chain: other_team/day_off/rehab included)

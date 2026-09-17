@@ -62,7 +62,9 @@ async function abrirCard(page, { sinPartidos = false, pedidas = null } = {}) {
     // El mock tiene que respetar la fase: sin esto los mismos bloques vuelven como
     // activación y la proyección los cuenta dos veces.
     if (url.includes('/session_exercises')) return route.fulfill({
-      json: url.includes('phase=eq.main') ? [EX('e1','PFB 7v5 + 3v2', 22), EX('e2','Rondo 6v3', 14)] : [] });
+      json: url.includes('phase=eq.main')
+        ? [EX('e1','PFB 7v5 + 3v2', 22), EX('e2','Rondo 6v3', 14), EX('e9','Circuito de fuerza', 10)]
+        : [] });
     if (url.includes('/players')) return route.fulfill({ json: [PLAYER] });
     await route.fallback();
   });
@@ -70,7 +72,7 @@ async function abrirCard(page, { sinPartidos = false, pedidas = null } = {}) {
   await page.waitForSelector('#dpSquadBody', { timeout: 15_000 });
   await page.locator('#dpGpsProj').waitFor({ state: 'visible', timeout: 10_000 });
   await page.locator('#dpGpsProj').evaluate(el => el.classList.remove('is-collapsed'));   // arranca colapsada
-  await expect(page.locator('#dpProjNote')).toContainText('2 of 2', { timeout: 10_000 });
+  await expect(page.locator('#dpProjNote')).toContainText('2 of 3', { timeout: 10_000 });   // la tercera tarea va sin perfil a proposito
 }
 
 const valor = (page, línea) => page.locator(`[data-bar="total_distance_per_min:${línea}"]`)
@@ -141,5 +143,40 @@ test.describe('Daily Planning · carga proyectada por línea', () => {
     const vieja = pedidas.filter(u => /\/v_exercise_gps_profile\?/.test(u));
     expect(vieja, `no debería pedirse:\n${vieja.join('\n')}`).toEqual([]);
     expect(pedidas.some(u => u.includes('/v_exercise_gps_profile_pos'))).toBe(true);
+  });
+
+  test('el desglose dice que tarea aporta cuanto', async ({ page }) => {
+    await abrirCard(page);
+    const brk = page.locator('#dpProjBreak');
+    // Son los numeros del EQUIPO (fila ALL), no los de una linea: PFB 70×22 = 1540 y
+    // Rondo 62×14 = 868 sobre un total de 2408 → 64% y 36%.
+    await expect(brk).toContainText('1,540');
+    await expect(brk).toContainText('868');
+    await expect(brk).toContainText('64%');
+    await expect(brk).toContainText('36%');
+  });
+
+  test('la tarea sin perfil aparece igual, con guion', async ({ page }) => {
+    await abrirCard(page);
+    // Saber CUALES faltan es lo que hace falta para que la proyeccion mejore: la nota
+    // «cubre 2 de 3» decia que faltaba una, nunca cual.
+    await expect(page.locator('#dpProjBreak')).toContainText('Circuito de fuerza');
+    await expect(page.locator('#dpProjBreak')).toContainText(/no GPS yet|sin GPS/i);
+  });
+
+  test('el desglose no cambia al pasar a por linea', async ({ page }) => {
+    // Es el desglose de la SESION, no de una linea: cuatro tablas no se leen en papel.
+    await abrirCard(page);
+    const antes = await page.locator('#dpProjBreak').textContent();
+    await page.locator('#dpProjMode [data-mode="lines"]').click();
+    await page.waitForTimeout(400);
+    expect(await page.locator('#dpProjBreak').textContent()).toBe(antes);
+  });
+
+  test('el desglose viaja a la hoja del dia', async ({ page }) => {
+    await abrirCard(page);
+    await page.evaluate(() => window.dpRenderPrintSheet && window.dpRenderPrintSheet());
+    await expect(page.locator('#dpPrintSheet')).toContainText(/Contribution by task|Aporte por tarea/i, { timeout: 15_000 });
+    await expect(page.locator('#dpPrintSheet')).toContainText('1,540');
   });
 });
