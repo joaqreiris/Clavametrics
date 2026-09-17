@@ -900,6 +900,19 @@
 
   // ── Helpers ───────────────────────────────────────────────
 
+  /** Subtítulo de la card: «tipo · agregación · alcance».
+   *  El ACWR no tiene agregación que mostrar — no suma ni promedia una métrica, compara dos
+   *  ventanas de tiempo —, así que en vez de un «sum» que no quiere decir nada muestra cuáles
+   *  son esas ventanas, leídas del propio motor por si algún día cambian. */
+  function _subCard(S, agg0) {
+    const viz = _vizFull(S.type).toLowerCase();
+    if (S.type === 'acwr') {
+      const C = window.gpsACWR?.CONFIG || {};
+      return `${viz} · ${C.acuteDays || 7}d/${C.chronicDays || 28}d · ${S.scope}${cmpBadge(S)}`;
+    }
+    return `${viz}${agg0 ? ' · ' + agg0 : ''} · ${S.scope}${cmpBadge(S)}`;
+  }
+
   function esc(s) { return String(s).replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c])); }
   function fmt(n) { return n >= 1000 ? n.toLocaleString('en-US') : (Number.isInteger(n) ? n : n.toFixed(1)); }
   // Decimal-aware value formatter. `dec` = the metric's configured decimals (catalog).
@@ -1694,7 +1707,7 @@
       if (titleElE) titleElE.textContent = autoTitle(S);
       if (subElE) {
         const agg0 = _subAgg(S);
-        subElE.textContent = `${_vizFull(S.type).toLowerCase()}${agg0?' · '+agg0:''} · ${S.scope}${cmpBadge(S)}`;
+        subElE.textContent = _subCard(S, agg0);
       }
       gpApplyHeaderFormat(targetCard, { titleFormat: S.titleFormat, subtitleFormat: S.subtitleFormat }, S.type);
       const mapSz = { S:'sm', M:'md', L:'lg', FULL:'full' };
@@ -1782,7 +1795,7 @@
     if (titleEl) titleEl.textContent = autoTitle(S);
     if (subEl) {
       const agg0 = _subAgg(S);
-      subEl.textContent = `${_vizFull(S.type).toLowerCase()}${agg0?' · '+agg0:''} · ${S.scope}${cmpBadge(S)}`;
+      subEl.textContent = _subCard(S, agg0);
     }
     gpApplyHeaderFormat(savedCard, { titleFormat: S.titleFormat, subtitleFormat: S.subtitleFormat }, S.type);
 
@@ -3171,7 +3184,7 @@
     if (titleEl && document.activeElement !== titleEl) titleEl.textContent = autoTitle(S);
     if (subEl) {
       const agg0 = _subAgg(S);
-      subEl.textContent = `${_vizFull(S.type).toLowerCase()}${agg0?' · '+agg0:''} · ${S.scope}${cmpBadge(S)}`;
+      subEl.textContent = _subCard(S, agg0);
     }
     _wireInlineTitle(titleEl);
     // Live format preview (draftCard IS the real card in edit mode). Idempotent. viz=S.type so a KPI
@@ -8196,68 +8209,121 @@
     }
     if (typeof Chart === 'undefined') { body.innerHTML = renderTypeFromDataset(config, []); return; }
 
-    // La franja verde es la «sweet spot» del modelo (0,8–1,3 por defecto), leída del propio motor
-    // para que la card y la card fija digan lo mismo si alguna vez se cambia.
-    const zonas = (window.gpsACWR?.ZONES) || [];
-    const sweet = zonas.find(z => z.cls === 'sweet') || { from: 0.8, to: 1.3 };
-    const col   = config.style?.color || _cssVar('--cm-accent', '#2563EB');
-    // Verde translúcido literal: el resto del archivo también usa rgba fijos para los rellenos,
-    // y con este alfa tan bajo la franja se lee igual sobre fondo claro y oscuro.
-    const verdeSuave = 'rgba(21,128,61,0.12)';
-    const canvas = _lienzoAlto(body, 220);
+    // Las CUATRO zonas del modelo, no sólo la verde: el sentido del gráfico es dónde cae la línea,
+    // y con una sola banda no se distingue «venís bajo» de «te fuiste al riesgo». Los cortes salen
+    // del propio motor (window.gpsACWR.ZONES) para que card y motor no se separen nunca.
+    const ZN = (window.gpsACWR?.ZONES) || [
+      { from: 0, to: 0.8, cls: 'under' }, { from: 0.8, to: 1.3, cls: 'sweet' },
+      { from: 1.3, to: 1.5, cls: 'caution' }, { from: 1.5, to: 99, cls: 'risk' },
+    ];
+    const TINTA = {
+      under:   'rgba(100,116,139,0.13)',   // gris: poca carga
+      sweet:   'rgba(21,128,61,0.13)',     // verde: la franja buena
+      caution: 'rgba(217,119,6,0.13)',     // ámbar: te estás pasando
+      risk:    'rgba(220,38,38,0.13)',     // rojo: riesgo
+    };
+    const TINTA_FUERTE = { under:'#64748B', sweet:'#15803D', caution:'#D97706', risk:'#DC2626' };
+
+    const vals   = d.squadAcwr.filter(v => v != null);
+    const actual = vals.length ? vals[vals.length - 1] : null;
+    const zAct   = actual != null ? (window.gpsACWR?.getZone?.(actual) || null) : null;
+    const sweet  = ZN.find(z => z.cls === 'sweet') || { from: 0.8, to: 1.3 };
+
+    // Escala: encuadrar la franja buena SIEMPRE, y estirar sólo si los datos se van más lejos.
+    const maxDato = Math.max(...vals, sweet.to);
+    const minDato = Math.min(...vals, sweet.from);
+    const yMax = Math.min(3, Math.max(sweet.to + 0.35, maxDato + 0.15));
+    const yMin = Math.max(0, Math.min(sweet.from - 0.35, minDato - 0.15));
+
+    // Fechas cortas: «24 jun» en vez de «2026-06-24», que amontonado no se lee.
+    const corta = (iso) => {
+      const dt = new Date(iso + 'T00:00:00');
+      if (isNaN(dt)) return iso;
+      try {
+        return dt.toLocaleDateString(document.documentElement.lang || 'es',
+          { day: 'numeric', month: 'short' });
+      } catch (_) { return iso.slice(5); }
+    };
+
+    const linea = _cssVar('--cm-fg-strong', '#0F172A');
+    const canvas = _lienzoAlto(body, 230);
+
+    // Plugin propio: pinta las bandas ANTES de la línea. Con datasets fantasma habría que sumar
+    // rellenos encadenados y ensucia la leyenda y el tooltip.
+    const bandas = {
+      id: 'acwrZonas',
+      beforeDatasetsDraw(chart) {
+        const { ctx, chartArea: a, scales } = chart;
+        if (!a || !scales?.y) return;
+        ctx.save();
+        ZN.forEach(z => {
+          const y1 = scales.y.getPixelForValue(Math.min(z.to, yMax));
+          const y2 = scales.y.getPixelForValue(Math.max(z.from, yMin));
+          if (y2 <= y1) return;
+          ctx.fillStyle = TINTA[z.cls] || 'transparent';
+          ctx.fillRect(a.left, y1, a.right - a.left, y2 - y1);
+        });
+        ctx.restore();
+      },
+    };
 
     body.__chart = _newChart(body, canvas, {
       type: 'line',
       data: {
         labels: d.dates,
-        datasets: [
-          // Los dos bordes de la franja: el de arriba rellena HASTA el de abajo ('+1').
-          { label: '', data: d.dates.map(() => sweet.to), borderWidth: 0, pointRadius: 0,
-            fill: '+1', backgroundColor: verdeSuave, order: 3 },
-          { label: '', data: d.dates.map(() => sweet.from), borderWidth: 0, pointRadius: 0,
-            fill: false, order: 2 },
-          { label: 'ACWR', data: d.squadAcwr, borderColor: col, backgroundColor: col,
-            borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, tension: 0.25,
-            spanGaps: false, order: 1 },
-        ],
+        datasets: [{
+          label: 'ACWR', data: d.squadAcwr,
+          borderColor: linea, backgroundColor: linea,
+          borderWidth: 2, pointRadius: 0, pointHoverRadius: 4,
+          tension: 0.3, spanGaps: false,
+        }],
       },
+      plugins: [bandas],
       options: {
         responsive: true, maintainAspectRatio: false,
+        layout: { padding: { top: 6, right: 4, bottom: 2, left: 2 } },
         interaction: { mode: 'index', intersect: false },
         scales: {
-          x: { grid: { display: false }, ticks: { maxTicksLimit: 7, autoSkip: true } },
-          y: { beginAtZero: false, suggestedMin: 0.5, suggestedMax: 1.8,
-               grid: { color: _cssVar('--cm-border-soft', 'rgba(0,0,0,.06)') } },
+          x: { grid: { display: false },
+               ticks: { maxTicksLimit: 6, autoSkip: true, maxRotation: 0,
+                        font: { size: 10 }, callback(v) { return corta(this.getLabelForValue(v)); } } },
+          y: { min: yMin, max: yMax,
+               ticks: { stepSize: 0.5, font: { size: 10 } },
+               grid: { color: _cssVar('--cm-border-soft', 'rgba(0,0,0,.05)') } },
         },
         plugins: {
           legend: { display: false },
-          tooltip: { filter: (i) => i.datasetIndex === 2,
-            callbacks: { label: (i) => {
-              const v = i.parsed.y;
-              if (v == null) return '';
-              const z = window.gpsACWR?.getZone?.(v);
-              return 'ACWR ' + v.toFixed(2) + (z?.label ? ' · ' + z.label : '');
-            } } },
+          tooltip: {
+            callbacks: {
+              title: (it) => corta(it[0]?.label || ''),
+              label: (i) => {
+                const v = i.parsed.y;
+                if (v == null) return '';
+                const z = window.gpsACWR?.getZone?.(v);
+                return 'ACWR ' + v.toFixed(2) + (z?.label ? ' · ' + z.label : '');
+              },
+            },
+          },
         },
       },
     });
-    _acwrNota(body, d, sweet);
+    _acwrBadge(body, actual, zAct, TINTA_FUERTE, d.jugadores);
   }
 
-  /** Pie de la card: el valor de hoy, su zona, y con cuántos jugadores se calculó. */
-  function _acwrNota(body, d, sweet) {
-    const ultimos = d.squadAcwr.filter(v => v != null);
-    const hoy = ultimos.length ? ultimos[ultimos.length - 1] : null;
-    if (hoy == null) return;
-    const z = window.gpsACWR?.getZone?.(hoy);
-    const nota = document.createElement('div');
-    nota.style.cssText = 'position:absolute;left:0;right:0;bottom:2px;text-align:center;'
-      + 'font:500 10.5px/1.3 var(--cm-font-sans);color:var(--cm-fg-muted);pointer-events:none';
-    nota.textContent = `${hoy.toFixed(2)}${z?.label ? ' · ' + z.label : ''}`
-      + ` · ${_tt('gps_analysis.acwr_sweet', 'sweet spot')} ${sweet.from}–${sweet.to}`
-      + ` · ${d.jugadores} ${_tt('gps_analysis.players_lc', 'players')}`;
+  /** Valor de hoy arriba a la derecha, con el color de su zona. Antes esto iba de nota al pie y
+   *  se montaba encima de las fechas del eje — ilegible, y repetía el nombre de la zona. */
+  function _acwrBadge(body, actual, zona, tintas, jugadores) {
+    if (actual == null) return;
+    const col = tintas[zona?.cls] || _cssVar('--cm-fg-strong', '#0F172A');
+    const b = document.createElement('div');
+    b.style.cssText = 'position:absolute;top:6px;right:8px;display:flex;align-items:baseline;gap:6px;'
+      + 'pointer-events:none;background:var(--cm-surface);padding:2px 7px;border-radius:999px;'
+      + 'border:1px solid var(--cm-border-soft)';
+    b.innerHTML = `<span style="font:700 15px/1 var(--cm-font-sans);color:${col}">${actual.toFixed(2)}</span>`
+      + (zona?.label ? `<span style="font:600 10px/1 var(--cm-font-sans);color:${col}">${esc(zona.label)}</span>` : '')
+      + `<span style="font:500 10px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">· ${jugadores}</span>`;
     if (!body.style.position) body.style.position = 'relative';
-    body.appendChild(nota);
+    body.appendChild(b);
   }
 
   function mountDivergingCard(body, config, series, opts = {}) {
