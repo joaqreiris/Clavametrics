@@ -4468,6 +4468,27 @@ window._gpRoster = _gpRoster;
 
 // ── refreshDashboard — reusable after import ──────────────────
 // opts.sessionId: if provided, update date range to cover that session
+// ¿La vista que se está mirando tiene alguna card CLÁSICA? El pedido base (_fetchReports) trae
+// TODOS los datos GPS del rango y alimenta sólo a ésas: la tabla z-score vieja, los KPI de arriba,
+// el ranking del plantel, el scatter y las científicas. Ninguna card del builder lo usa — esas
+// piden lo suyo por el resolver, que tiene su propio caché compartido. En un dashboard armado
+// entero con el builder eran ~1.200 filas y ~18 s de una carga de ~30 s para no dibujar nada.
+//
+// Se mira la VISTA ACTIVA y no todo el documento a propósito: casi siempre queda alguna card
+// clásica en alguna de las otras cuatro pestañas, y mirar el documento entero haría que la guarda
+// no ahorrara nunca. Al cambiar de pestaña se vuelve a pasar por acá (gps-analysis-cards.js llama
+// a renderView cuando no hay datos cacheados), así que una vista que SÍ tenga clásicas los pide
+// al llegar a ella.
+//
+// Cómo se distinguen: las clásicas vienen del HTML y tienen id (card-acwr, card-tsb…); las del
+// builder las crea gpBuildBuilderCardEl, que pone class y data-card-id pero NUNCA id. La tabla
+// z-score vieja va aparte porque no vive dentro de una card.
+function _hayCardsClasicas() {
+  const v = document.querySelector('.gp-view.is-on') || document;
+  return !!v.querySelector('.gp-c[id]')
+    || [...v.querySelectorAll('.gp-zt')].some(t => !t.closest('.gp-c[data-card-id]'));
+}
+
 window.refreshDashboard = async function (opts = {}) {
   // Invalidate the shared resolver cache so a refresh always reads fresh data (post-import,
   // post-flag, etc.). cmInvalidateGpsCache is the single entry point (supabase-init.js).
@@ -4520,6 +4541,12 @@ window.refreshDashboard = async function (opts = {}) {
   const { count: playerCount } = await _pcQ;
 
   _updateGpSub(playerCount, sessionCount);
+
+  if (!_hayCardsClasicas()) {
+    // Las cards de ejemplo del builder sí se montan: son suyas, no dependen de estos datos.
+    _renderGenericExampleCards();
+    return;
+  }
 
   // Fetch GPS reports using the active filter state
   const reports = await _fetchReports(window.gpState);
@@ -6074,6 +6101,10 @@ window.renderView = async function () {
   const state   = window.gpState;
   const clubId  = window._gpClubId;
   if (!clubId) return;
+  // Igual que en refreshDashboard: sin cards clásicas en la vista, estos datos no los dibuja
+  // nadie. El subtítulo no queda sin poner — refreshDashboard ya lo escribe antes, con sus
+  // propios counts, que no salen de estos reports.
+  if (!_hayCardsClasicas()) return;
   const reports = await _fetchReports(state);
 
   // Count unique sessions and players for subtitle

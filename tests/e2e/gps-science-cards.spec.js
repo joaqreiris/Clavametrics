@@ -45,7 +45,7 @@ const MCS = Array.from({ length: 10 }, (_, i) => ({
 }));
 
 /** Monta el dashboard y devuelve un contador de consultas por etiqueta de cmFetchAll. */
-async function montar(page, layoutInd) {
+async function montar(page, layoutInd, layoutGrp) {
   const pedidos = [];
   page.on('request', r => { const u = r.url(); if (u.includes('/rest/v1/')) pedidos.push(u); });
 
@@ -85,6 +85,10 @@ async function montar(page, layoutInd) {
     const acc = (req.headers()['accept'] || '').includes('object');
     if (req.method() !== 'GET') return r.fulfill({ json: acc ? {} : [{}] });
     const did = (new URL(req.url()).searchParams.get('dashboard_id') || '').replace('eq.', '');
+    if (did === 'session_control' && layoutGrp) {
+      const f = { user_id: 'user-1', club_id: CLUB_ID, dashboard_id: did, layout: layoutGrp };
+      return r.fulfill({ json: acc ? f : [f] });
+    }
     if (did !== 'player_week') return r.fulfill({ json: acc ? null : [] });
     const fila = { user_id: 'user-1', club_id: CLUB_ID, dashboard_id: did, layout: layoutInd || [
       { card_id: 'acwr', size: 'md', config: {}, x: 0, y: 60, w: 6, h: 7 },
@@ -151,4 +155,38 @@ test('si la vista Microcycle Compare no tiene cards, no pide sus datos al entrar
   // El contador de viajes del propio producto, por etiqueta: es exactamente lo que se quiere cero.
   const viajes = await page.evaluate(() => window.__cmFetchStats?.['mc-heatmap']?.calls || 0);
   expect(viajes).toBe(0);
+});
+
+// ── El pedido base del dashboard clásico ────────────────────────────────────────────────────
+// _fetchReports trae TODOS los datos GPS del rango y alimenta sólo cards clásicas (KPI, tabla
+// z-score vieja, ranking, scatter, científicas). Las del builder no lo tocan.
+const viajesBase = (page) =>
+  page.evaluate(() => window.__cmFetchStats?.['_fetchReports.chunk']?.calls || 0);
+
+test('con cards clásicas en el dashboard, el pedido base se hace', async ({ page }) => {
+  await montar(page);   // layout por defecto del helper: trae card-acwr y card-tsb
+  await expect(page.locator('#card-acwr')).toHaveCount(1, { timeout: 20_000 });
+  await expect.poll(() => viajesBase(page), { timeout: 30_000 }).toBeGreaterThan(0);
+});
+
+test('sin ninguna card clásica, el pedido base no se hace', async ({ page }) => {
+  // Layout vacío = el usuario se quedó sólo con cards del builder. Es el caso real que motivó
+  // esto: 10 cards, todas del builder, y el pedido base viajaba igual.
+  await montar(page, []);
+  await expect(page.locator('.gp-view.is-on .gp-c[id]')).toHaveCount(0, { timeout: 20_000 });
+  await page.waitForTimeout(5_000);   // margen para que llegue, si fuera a llegar
+  expect(await viajesBase(page)).toBe(0);
+});
+
+test('al cambiar a una pestaña que SÍ tiene cards clásicas, los datos se piden', async ({ page }) => {
+  // La vista de arranque queda sin cards clásicas (no se pide nada) pero Session Control conserva
+  // una. Es el caso que la guarda no puede romper: si no pidiera al llegar, la card queda muda.
+  await montar(page, [], [{ card_id: 'outliers', size: 'md', config: {}, x: 0, y: 0, w: 6, h: 7 }]);
+  await page.waitForTimeout(3_000);
+  expect(await viajesBase(page)).toBe(0);            // en la vista de arranque, nada
+
+  await page.locator('[data-view="grp"]').first().click();
+  await expect(page.locator('.gp-view[data-view="grp"].is-on')).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator('#card-outliers')).toHaveCount(1, { timeout: 15_000 });
+  await expect.poll(() => viajesBase(page), { timeout: 30_000 }).toBeGreaterThan(0);
 });
