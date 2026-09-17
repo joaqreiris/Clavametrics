@@ -2205,6 +2205,27 @@ create table if not exists public.player_teams (
 CREATE INDEX player_teams_club_team_idx ON public.player_teams USING btree (club_id, team_id);
 CREATE INDEX player_teams_player_idx ON public.player_teams USING btree (player_id);
 
+create table if not exists public.player_call_ups (
+  id uuid default gen_random_uuid() not null,
+  club_id uuid not null,
+  player_id uuid not null,
+  team_id uuid not null,
+  date date not null,
+  created_by uuid,
+  created_at timestamp with time zone default now() not null,
+  constraint player_call_ups_pkey primary key (id),
+  constraint player_call_ups_player_id_team_id_date_key UNIQUE (player_id, team_id, date)
+);
+CREATE INDEX player_call_ups_team_date_idx ON public.player_call_ups USING btree (club_id, team_id, date);
+CREATE INDEX player_call_ups_player_date_idx ON public.player_call_ups USING btree (player_id, date);
+-- Llamada PUNTUAL de un jugador a un equipo que no es el suyo, válida SOLO para ese día
+-- (migración 182). No crea membresía: player_teams no se toca, el jugador sigue siendo del filial
+-- a todos los efectos y solo se suma al roster del equipo que llama, ese día.
+-- team_id = el equipo que LLAMA (el destino), no el del jugador.
+-- No vive en availability porque esa tabla tiene PK (player_id, date) y los estados globales
+-- (injured/sick/away/rehab) guardan team_id NULL a propósito: marcar lesionado al llamado le
+-- borraría el team_id y lo haría desaparecer de la lista del equipo que lo llamó.
+
 create table if not exists public.players (
   id uuid default gen_random_uuid() not null,
   club_id uuid not null,
@@ -3265,6 +3286,10 @@ alter table public.player_preventive_assignments add constraint player_preventiv
 alter table public.player_teams add constraint player_teams_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
 alter table public.player_teams add constraint player_teams_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE;
 alter table public.player_teams add constraint player_teams_team_id_fkey FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE;
+alter table public.player_call_ups add constraint player_call_ups_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.player_call_ups add constraint player_call_ups_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE;
+alter table public.player_call_ups add constraint player_call_ups_team_id_fkey FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE;
+alter table public.player_call_ups add constraint player_call_ups_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE SET NULL;
 alter table public.players add constraint players_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
 alter table public.players add constraint players_team_id_fkey FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE SET NULL;
 alter table public.preventive_routines add constraint preventive_routines_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
@@ -5549,7 +5574,7 @@ $function$
 ;
 
 CREATE OR REPLACE FUNCTION public.session_rpe_status(p_session_id uuid)
- RETURNS TABLE(player_id uuid, player_name text, responded boolean, rpe numeric, note text, body_areas text[], duration integer, load numeric, submitted_at timestamp with time zone, av_status text)
+ RETURNS TABLE(player_id uuid, player_name text, responded boolean, rpe numeric, note text, body_areas text[], duration integer, load numeric, submitted_at timestamp with time zone, av_status text, exempt_kind text, exempt_reason text, exempt_note text, entered_by uuid)
  LANGUAGE plpgsql
  STABLE SECURITY DEFINER
  SET search_path TO 'public'
@@ -5561,16 +5586,18 @@ declare
   v_dur  integer;
   v_type text;
 begin
-  -- Qualify with the table alias: `duration`/`load` are also OUT columns of this function,
-  -- so an unqualified `duration` would be an ambiguous reference and raise at runtime.
   select ts.club_id, ts.team_id, ts.session_date, ts.duration, ts.session_type
     into v_club, v_team, v_date, v_dur, v_type
   from public.training_sessions ts
   where ts.id = p_session_id;
 
+  if v_club is null then return; end if;
+  perform public.assert_my_club(v_club);
+
   return query
     select q.player_id, q.player_name, q.responded, q.rpe,
-           q.note, q.body_areas, q.duration, q.load, q.submitted_at, q.av_status
+           q.note, q.body_areas, q.duration, q.load, q.submitted_at, q.av_status,
+           q.exempt_kind, q.exempt_reason, q.exempt_note, q.entered_by
     from (
       select distinct on (p.id)
         p.id as player_id,
@@ -5579,9 +5606,6 @@ begin
         r.rpe        as rpe,
         r.note       as note,
         r.body_areas as body_areas,
-        -- Duration/load follow the session's CURRENT effective duration (from Daily Planning),
-        -- so already-submitted RPE updates if the plan's effective time changes. En partidos,
-        -- los minutos individuales de availability (>0) pisan la duración default por jugador.
         case when v_type = 'match'
              then coalesce(nullif(am.minutes, 0), v_dur, r.duration)
              else coalesce(v_dur, r.duration) end           as duration,
@@ -5589,16 +5613,17 @@ begin
                      then coalesce(nullif(am.minutes, 0), v_dur, r.duration)
                      else coalesce(v_dur, r.duration) end   as load,
         r.created_at as submitted_at,
-        -- Estado de disponibilidad del día: la pantalla marca al lesionado/limitado y lo
-        -- deja fuera de la media de la sesión (su carga no representa el entrenamiento).
         am.status    as av_status,
+        x.kind       as exempt_kind,
+        x.reason     as exempt_reason,
+        x.note       as exempt_note,
+        r.entered_by as entered_by,
         p.last_name as ln, p.first_name as fn
       from public.players p
       left join public.rpe r
         on r.player_id = p.id and r.session_id = p_session_id
-      -- Una fila de availability por jugador/día: la del equipo de la sesión manda, si no
-      -- la global (team_id null). Sin el lateral, un jugador con filas en dos equipos
-      -- duplicaba y el distinct on se quedaba con cualquiera de las dos.
+      left join public.rpe_exemptions x
+        on x.session_id = p_session_id and x.player_id = p.id
       left join lateral (
         select a2.status, a2.minutes
         from public.availability a2
@@ -5609,9 +5634,6 @@ begin
       where p.club_id = v_club
         and p.archived_at is null
         and p.status <> 'inactive'
-        -- Not expected to check in that day: sick, unavailable, national-team (away) o día
-        -- libre. day_off es relativo al equipo (availability.team_id): solo excluye si es
-        -- global o del equipo de esta sesión.
         and not exists (
           select 1 from public.availability a
           where a.player_id = p.id::text and a.date = v_date
@@ -5621,10 +5643,6 @@ begin
                   and (a.team_id is null or v_team is null or a.team_id = v_team))
             )
         )
-        -- Quién se espera en ESTA sesión:
-        --  · con convocatoria definida (session_participants) → solo los anotados, sean del equipo que sean
-        --  · sin convocatoria → roster del equipo vía player_teams (incluye invitados de otros equipos),
-        --    con fallback a players.team_id por si falta el vínculo multi-equipo
         and (
           exists (select 1 from public.session_participants sp
                   where sp.session_id = p_session_id and sp.player_id = p.id)
@@ -5633,13 +5651,18 @@ begin
             and (v_team is null
                  or p.team_id = v_team
                  or exists (select 1 from public.player_teams pt
-                            where pt.player_id = p.id and pt.team_id = v_team))
+                            where pt.player_id = p.id and pt.team_id = v_team)
+                 -- Llamado de otra categoría PARA ESE DÍA (migración 182): entrena acá hoy, así
+                 -- que su RPE es de esta sesión. No tiene membresía y no debe tenerla.
+                 or exists (select 1 from public.player_call_ups cu
+                            where cu.player_id = p.id and cu.team_id = v_team and cu.date = v_date))
           )
         )
       order by p.id, r.created_at desc nulls last
     ) q
     order by q.responded, q.ln nulls last, q.fn nulls last;
-end; $function$
+end;
+$function$
 ;
 
 CREATE OR REPLACE FUNCTION public.set_club_settings_updated_at()
@@ -8225,6 +8248,25 @@ create policy "player_teams_headcoach_write" on public.player_teams as permissiv
   with check (((club_id = get_user_club_id()) AND (EXISTS ( SELECT 1
    FROM profiles p
   WHERE ((p.id = auth.uid()) AND ((lower(COALESCE(p.role, '')) = 'coach') OR (lower(COALESCE(p.club_role, '')) = 'coach')))))));
+
+alter table public.player_call_ups enable row level security;
+-- SELECT club-wide a propósito: el equipo de ORIGEN tiene que poder ver que le llamaron al
+-- jugador. Limitarlo al equipo que llama dejaría al filial enterándose por el pasillo.
+create policy "player_call_ups_select" on public.player_call_ups as permissive for select to authenticated
+  using ((club_id = get_user_club_id()));
+-- Llama el staff del equipo DESTINO (member_teams) o quien tiene acceso pleno de planificación.
+-- El club se verifica en las dos ramas Y el equipo tiene que ser de ese club (el EXISTS): sin él,
+-- un admin podía escribir una fila con su club_id y el team_id de otro club. El EXISTS va solo en
+-- las ramas de escritura — en el SELECT, que es la consulta caliente, correría por fila.
+create policy "player_call_ups_insert" on public.player_call_ups as permissive for insert to authenticated
+  with check (((club_id = get_user_club_id()) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))
+    AND (EXISTS ( SELECT 1 FROM teams t WHERE ((t.id = player_call_ups.team_id) AND (t.club_id = get_user_club_id()))))));
+create policy "player_call_ups_update" on public.player_call_ups as permissive for update to authenticated
+  using (((club_id = get_user_club_id()) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))))
+  with check (((club_id = get_user_club_id()) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))
+    AND (EXISTS ( SELECT 1 FROM teams t WHERE ((t.id = player_call_ups.team_id) AND (t.club_id = get_user_club_id()))))));
+create policy "player_call_ups_delete" on public.player_call_ups as permissive for delete to authenticated
+  using (((club_id = get_user_club_id()) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))));
 
 alter table public.players enable row level security;
 create policy "players_scoped_delete" on public.players as permissive for delete to public

@@ -696,7 +696,7 @@
       list.innerHTML = players.map(p => `
         <div class="lu-picker-row${p._posAll.includes(posHint) ? ' is-match' : ''}" data-id="${p.id}">
           <span class="lu-pr-num">${esc(p.number || '?')}</span>
-          <span class="lu-pr-name">${esc(p.last_name)}, ${esc((p.first_name || '')[0] || '')}.</span>
+          <span class="lu-pr-name">${esc(p.last_name)}, ${esc((p.first_name || '')[0] || '')}.${p._calledUp ? ` <span title="${esc(tt('lineup.called_up_title','Called up from another squad for this match'))}" style="color:#C2410C;font:600 9px/1 var(--cm-font-mono)">${esc(tt('lineup.called_up_tag','CALLED'))}</span>` : ''}</span>
           <span class="role-tag ${p._pos.toLowerCase()}">${p._pos}</span>
         </div>`).join('');
 
@@ -1298,6 +1298,21 @@
     _currentMatch = match;
     if (match) {
       updateBanner(match);
+      // Llamados para el DÍA del partido (player_call_ups, migración 182): el jugador del filial
+      // que sube solo para este partido tiene que poder entrar al once y al banco. No está en
+      // player_teams a propósito — la membresía sería permanente y lo dejaría acá para siempre.
+      // Se piden después del partido porque la llamada es por fecha y la fecha sale de él.
+      try {
+        const _calls = await window.cmCallUps(_clubId, _luTeamId, match.date, match.date);
+        const _extra = await window.cmCalledUpPlayers(
+          _calls, 'id,first_name,last_name,number,position,positions,nationality',
+          new Set(_allPlayers.map(p => String(p.id))));
+        if (_extra.length) {
+          _extra.forEach(p => { p._calledUp = true; });
+          _allPlayers = _allPlayers.concat(_extra).sort((a, b) => String(a.last_name || '').localeCompare(String(b.last_name || '')));
+          renderComposer();   // el picker ya estaba dibujado sin ellos
+        }
+      } catch (e) { console.warn('[lineup] call-ups:', e && e.message); }
 
       const lineup = await getOrCreateLineup(_clubId, match.id);
       if (lineup) {

@@ -1121,6 +1121,131 @@
     return q;
   };
 
+  // ── Llamadas puntuales entre categorías (player_call_ups) ───────────────────
+  // Un jugador del filial que sube al primer equipo SOLO ese día no tiene (ni debe tener) una
+  // membresía en player_teams: la membresía es permanente y lo dejaría en la lista para siempre.
+  // La llamada es una fila (jugador, equipo que llama, día) y vale únicamente ese día.
+  // Ver migración 182.
+  //
+  // Devuelve { rows, byDate, byPlayer, ids } para el equipo y el rango pedidos:
+  //   rows     — filas crudas (incluye created_by/created_at para el "quién lo llamó")
+  //   byDate   — 'YYYY-MM-DD' → Set(player_id)
+  //   byPlayer — player_id → Set('YYYY-MM-DD')
+  //   ids      — Set(player_id) con todos los llamados del rango
+  // Sin equipo, sin club o con rango vacío devuelve la estructura vacía (nunca null): las
+  // pantallas la concatenan al roster sin guardas extra.
+  window.cmCallUps = async function (clubId, teamId, fromDate, toDate) {
+    const empty = { rows: [], byDate: new Map(), byPlayer: new Map(), ids: new Set() };
+    if (!clubId || !teamId || !fromDate) return empty;
+    try {
+      const { data, error } = await window.sb.from('player_call_ups')
+        .select('player_id, date, created_by, created_at')
+        .eq('club_id', clubId).eq('team_id', teamId)
+        .gte('date', fromDate).lte('date', toDate || fromDate);
+      if (error) { console.warn('[call-ups]', error.message); return empty; }
+      const out = { rows: data || [], byDate: new Map(), byPlayer: new Map(), ids: new Set() };
+      out.rows.forEach(r => {
+        const d = String(r.date).slice(0, 10), pid = String(r.player_id);
+        if (!out.byDate.has(d)) out.byDate.set(d, new Set());
+        out.byDate.get(d).add(pid);
+        if (!out.byPlayer.has(pid)) out.byPlayer.set(pid, new Set());
+        out.byPlayer.get(pid).add(d);
+        out.ids.add(pid);
+      });
+      return out;
+    } catch (e) { console.warn('[call-ups]', e && e.message); return empty; }
+  };
+
+  // Fichas de los jugadores llamados, para sumarlos al roster de la pantalla. Recibe el
+  // resultado de cmCallUps() ya resuelto (no lo vuelve a pedir: quien lo llama casi siempre
+  // necesita también las fechas, y dos consultas por lo mismo sobran). Solo trae a los que NO
+  // están ya en `excludeIds` (los del propio plantel), así nadie aparece dos veces.
+  // Devuelve [] cuando no hay llamados: el `.concat()` de la pantalla es seguro.
+  window.cmCalledUpPlayers = async function (calls, selectFields, excludeIds) {
+    if (!calls || !calls.ids || !calls.ids.size) return [];
+    const skip = excludeIds instanceof Set ? excludeIds : new Set(excludeIds || []);
+    const want = [...calls.ids].filter(id => !skip.has(id));
+    if (!want.length) return [];
+    try {
+      const { data, error } = await window.sb.from('players')
+        .select(selectFields || 'id, first_name, last_name, position, number, team_id')
+        .in('id', want).is('archived_at', null);
+      if (error) { console.warn('[call-ups] players', error.message); return []; }
+      return data || [];
+    } catch (e) { console.warn('[call-ups] players', e && e.message); return []; }
+  };
+
+  // Estados de availability que valen en TODOS los equipos del jugador (se guardan con
+  // team_id NULL). Una llamada no los pisa: si el chico está lesionado, sigue lesionado
+  // aunque el primer equipo lo haya llamado. Espejo de GLOBAL_STATUS en Availability.html.
+  const _CM_GLOBAL_AV = new Set(['injured', 'sick', 'away', 'rehab']);
+
+  // Llamar jugadores a `teamId` en las fechas dadas. Además de registrar la llamada, marca su
+  // disponibilidad de ese día con el team_id del equipo que llama: así el equipo de ORIGEN lo ve
+  // automáticamente como "entrena con otro equipo" y nadie lo cuenta dos veces.
+  // Nunca pisa un estado global (lesión/enfermedad/selección/rehab) ni un día con minutos de
+  // partido ya cargados — esos datos son del jugador, no del equipo que llama.
+  // Devuelve { ok, error, availError }: la llamada puede quedar registrada y el marcado de
+  // disponibilidad fallar por permisos (no tener el equipo de origen entre los propios), y la
+  // pantalla tiene que poder decirlo sin dar la operación entera por perdida.
+  window.cmCallUpAdd = async function (clubId, teamId, playerIds, dates) {
+    const pids = [...new Set((playerIds || []).map(String))];
+    const days = [...new Set((dates || []).map(d => String(d).slice(0, 10)))];
+    if (!clubId || !teamId || !pids.length || !days.length) return { ok: false, error: 'missing args' };
+    let me = null;
+    try { me = (await window.sb.auth.getUser()).data?.user?.id || null; } catch (_) {}
+    const rows = [];
+    pids.forEach(pid => days.forEach(d => rows.push({ club_id: clubId, player_id: pid, team_id: teamId, date: d, created_by: me })));
+    const { error } = await window.sb.from('player_call_ups')
+      .upsert(rows, { onConflict: 'player_id,team_id,date', ignoreDuplicates: true });
+    if (error) return { ok: false, error: error.message };
+
+    // Marcado de disponibilidad, respetando lo que ya hubiera guardado ese día.
+    let availError = null;
+    try {
+      const { data: cur } = await window.sb.from('availability')
+        .select('player_id, date, status, minutes, team_id')
+        .in('player_id', pids).in('date', days);
+      const byKey = {};
+      (cur || []).forEach(r => { byKey[r.player_id + '|' + String(r.date).slice(0, 10)] = r; });
+      const up = [];
+      rows.forEach(r => {
+        const e = byKey[r.player_id + '|' + r.date];
+        if (e && (_CM_GLOBAL_AV.has(e.status) || (e.minutes || 0) > 0)) return;   // no se toca
+        if (e && e.team_id === teamId) return;                                    // ya está con nosotros
+        up.push({ player_id: r.player_id, date: r.date, status: 'available', minutes: 0, club_id: clubId, team_id: teamId });
+      });
+      if (up.length) {
+        const { error: e2 } = await window.sb.from('availability').upsert(up, { onConflict: 'player_id,date' });
+        if (e2) availError = e2.message;
+      }
+    } catch (e) { availError = e && e.message; }
+    return { ok: true, availError };
+  };
+
+  // Revocar la llamada. Borra también la fila de disponibilidad de ese día SI es de este equipo:
+  // el jugador vuelve a su categoría y el día deja de figurar como "estuvo con nosotros". Los
+  // estados globales y las filas de otros equipos no se tocan nunca.
+  window.cmCallUpRemove = async function (clubId, teamId, playerIds, dates) {
+    const pids = [...new Set((playerIds || []).map(String))];
+    const days = [...new Set((dates || []).map(d => String(d).slice(0, 10)))];
+    if (!clubId || !teamId || !pids.length || !days.length) return { ok: false, error: 'missing args' };
+    const { error } = await window.sb.from('player_call_ups').delete()
+      .eq('club_id', clubId).eq('team_id', teamId).in('player_id', pids).in('date', days);
+    if (error) return { ok: false, error: error.message };
+    let availError = null;
+    try {
+      // Un día con minutos de partido cargados NO se borra: el jugador estuvo y jugó, y esos
+      // minutos son suyos (van a su carga, a sus estadísticas y al informe del partido).
+      // Revocar una llamada es decir "no vino", no "no jugó" — si ya jugó, el dato manda.
+      const { error: e2 } = await window.sb.from('availability').delete()
+        .eq('club_id', clubId).eq('team_id', teamId).in('player_id', pids).in('date', days)
+        .or('minutes.is.null,minutes.eq.0');
+      if (e2) availError = e2.message;
+    } catch (e) { availError = e && e.message; }
+    return { ok: true, availError };
+  };
+
   // ── Notification recipients by role bucket ──────────────────────────────────
   // Mirrors the SQL role_bucket() mapping (db/schema.sql). Keep both in sync when
   // roles change. Buckets: 'admin' (owner/admin), 'medical' (medical/physio/doctor/

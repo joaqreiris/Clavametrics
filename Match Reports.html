@@ -927,6 +927,18 @@
       if (_mrTeamId) q = q.eq('team_id', _mrTeamId);
       const { data } = await q;
       _mrSquad = data || [];
+      /* El llamado de otra categoría jugó este partido pero no es del plantel (player_call_ups,
+         migración 182): sin esto no aparece en el editor y no se le pueden cargar minutos,
+         goles ni tarjetas — el partido quedaría contado a medias. */
+      try {
+        const _d = _mrCtx.match && _mrCtx.match.session_date ? String(_mrCtx.match.session_date).slice(0, 10) : null;
+        if (_d && _mrTeamId) {
+          const _calls = await window.cmCallUps(_mrCtx.clubId, _mrTeamId, _d, _d);
+          const _extra = await window.cmCalledUpPlayers(
+            _calls, 'id, first_name, last_name, number, position', new Set(_mrSquad.map(p => String(p.id))));
+          if (_extra.length) _mrSquad = _mrSquad.concat(_extra);
+        }
+      } catch (e) { console.warn('[MR] call-ups:', e && e.message); }
     } catch (_e) { _mrSquad = []; }
     return _mrSquad;
   }
