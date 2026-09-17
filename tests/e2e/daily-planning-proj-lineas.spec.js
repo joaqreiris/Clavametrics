@@ -47,12 +47,13 @@ const DEMANDA = [
   demanda('WNG',74,8424), demanda('FWD',140,8826),
 ];
 
-async function abrirCard(page, { sinPartidos = false } = {}) {
+async function abrirCard(page, { sinPartidos = false, pedidas = null } = {}) {
   await page.setViewportSize({ width: 1440, height: 1000 });
   await injectSession(page);
   await mockBase(page);
   await page.route(`${SB}/rest/v1/**`, async route => {
     const url = route.request().url();
+    if (pedidas) pedidas.push(url);
     if (route.request().method() !== 'GET') return route.fulfill({ json: [SESS] });
     if (url.includes('/v_exercise_gps_profile_pos')) return route.fulfill({ json: PERFILES });
     if (url.includes('/v_match_demand_pos'))        return route.fulfill({ json: sinPartidos ? [] : DEMANDA });
@@ -127,5 +128,18 @@ test.describe('Daily Planning · carga proyectada por línea', () => {
     await page.reload();
     await page.waitForSelector('#dpSquadBody', { timeout: 15_000 });
     await expect(page.locator('#dpProjMode [data-mode="lines"]')).toHaveClass(/is-on/, { timeout: 10_000 });
+  });
+
+  test('el tick de las tarjetas no vuelve a pedir la vista vieja', async ({ page }) => {
+    // El tick verde sale de la fila ALL de la misma vista que la proyección. Cuando lo
+    // sacaba de v_exercise_gps_profile eran dos viajes por cada carga del día, y la vieja
+    // tarda ~1,2 s con la RLS puesta — fue parte de lo que tiró la pantalla al timeout.
+    // Peor: las dos vistas no filtran igual, así que el tick podía decir «hay datos» sobre
+    // una tarea que la proyección dejaba fuera.
+    const pedidas = [];
+    await abrirCard(page, { pedidas });
+    const vieja = pedidas.filter(u => /\/v_exercise_gps_profile\?/.test(u));
+    expect(vieja, `no debería pedirse:\n${vieja.join('\n')}`).toEqual([]);
+    expect(pedidas.some(u => u.includes('/v_exercise_gps_profile_pos'))).toBe(true);
   });
 });

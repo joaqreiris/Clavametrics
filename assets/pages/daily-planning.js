@@ -24,8 +24,6 @@ let _dpClubId = null, _dpProfile = null, _dpPlayers = [], _dpInjMap = {}, _dpReh
 let _dpDaySessions = [], _dpPreferredSessionId = null, _dpDayOff = false, _dpDayOffIds = new Set();
 let _dpTeamId = null, _dpTeams = [];
 let _dpGpsTargets = {};        // metric_key → session target (display units), persisted in training_sessions.gps_targets
-let _dpGpsProfiles = {};       // exercise_id → v_exercise_gps_profile row (null = fetched, no GPS profile)
-let _dpGpsProfIn = {};         // exercise_id → in-flight fetch promise (dedupe badges vs projection)
 let _libExercises = [], _libFolders = [], _libOrient = '', _dpMicrocycles = [], _dpPublished = false;
 let _dpGpsExSet = null;         // Set of exercise_ids with a GPS profile (library picker tick), or null until loaded
 let _dpCalFields = new Set();
@@ -1319,35 +1317,23 @@ function dpPaintGkStrip(){
   strip.innerHTML = dpParListHTML(gks) + addBtn;
   dpPaintGpsBadges();
 }
-// Perfil de equipo de estos ejercicios, para el tick verde de las tarjetas. La proyección
-// ya NO lee de aquí: desde la migración 180 usa v_exercise_gps_profile_pos (dpEnsureProfPos),
-// que trae la fila del equipo y la de cada línea y filtra rehab, filas marcadas y tramos de
-// menos de 30 s. Este cache se queda porque el badge sólo necesita saber si hay datos y
-// cuántas sesiones, y la vista vieja ya lo resuelve en una consulta deduplicada.
-async function dpEnsureGpsProfiles(ids){
-  const need = [...new Set(ids.filter(id => id && !(id in _dpGpsProfiles) && !_dpGpsProfIn[id]))];
-  if (need.length) {
-    const p = window.sb.from('v_exercise_gps_profile').select('*').in('exercise_id', need).then(({ data, error }) => {
-      if (error) { console.warn('[dp-gps-profile] fetch failed:', error.message); need.forEach(id => { delete _dpGpsProfIn[id]; }); return; }   // don't cache a failure as "no profile"
-      const found = {}; (data||[]).forEach(r => { found[r.exercise_id] = r; });
-      need.forEach(id => { _dpGpsProfiles[id] = found[id] || null; delete _dpGpsProfIn[id]; });   // null = fetched, no profile
-    });
-    need.forEach(id => { _dpGpsProfIn[id] = p; });
-  }
-  const waits = [...new Set(ids.map(id => _dpGpsProfIn[id]).filter(Boolean))];
-  if (waits.length) await Promise.all(waits);
-}
-// Green tick on field cards whose exercise has associated GPS data (v_exercise_gps_profile).
-// DOM-patched (not baked into the card HTML) so it survives async profile loading without
-// re-rendering cards mid-drag. Helps the coach see which blocks feed the GPS projection.
+// Tick verde en las tarjetas de campo cuyo ejercicio tiene datos de GPS asociados.
+// Se parchea en el DOM (no va en el HTML de la tarjeta) para que sobreviva a la carga
+// asíncrona del perfil sin repintar tarjetas en mitad de un arrastre.
+//
+// Lee la fila del equipo de v_exercise_gps_profile_pos, la misma que alimenta la proyección.
+// Antes pedía v_exercise_gps_profile en una consulta aparte: eran dos viajes a dos vistas
+// distintas por cada carga del día, y la vieja tarda ~1,2 s con la RLS puesta. Además podían
+// contradecirse — el tick decía «hay datos» y la proyección dejaba la tarea fuera, porque la
+// vieja no filtra rehab ni las filas marcadas.
 async function dpPaintGpsBadges(){
   const blocks = [...(_dpFieldExercises||[]), ...((window._dpActItems)||[]), ...((window._dpGkItems)||[])];
   const bySeid = new Map();
   blocks.forEach(e => { if (e.planner_exercise_id) bySeid.set(String(e.id), e.planner_exercise_id); });
-  await dpEnsureGpsProfiles([...bySeid.values()]);
+  await dpEnsureProfPos([...bySeid.values()]);
   document.querySelectorAll('.dp-ex[data-seid]').forEach(card => {
     const pid  = bySeid.get(card.dataset.seid);
-    const prof = pid ? _dpGpsProfiles[pid] : null;
+    const prof = pid ? (_dpProfPos[pid] && _dpProfPos[pid].ALL) : null;
     let badge = card.querySelector('.dp-ex-gps');
     if (prof) {
       if (!badge) {
@@ -1820,8 +1806,8 @@ function _dpLineLabel(line){
   return tt('daily_planning.line_' + line.toLowerCase(), line);
 }
 
-// Perfil por línea de estos ejercicios. Misma mecánica de deduplicado que
-// dpEnsureGpsProfiles: una sola consulta aunque varios repintados la pidan a la vez.
+// Perfil por línea de estos ejercicios. Las promesas en vuelo se deduplican: una sola
+// consulta aunque la proyección y los ticks de las tarjetas la pidan a la vez al arrancar.
 async function dpEnsureProfPos(ids){
   const need = [...new Set(ids.filter(id => id && !(id in _dpProfPos) && !_dpProfPosIn[id]))];
   if (need.length) {
@@ -2559,13 +2545,15 @@ async function openLibModal(mode) {
   // traídas desde otra categoría mía).
   try { await window.cmMyScope(); } catch (_) {}
   _libExercises = (data || []).filter(ex => window.cmExVisibleForTeam(ex, _dpTeamId));
-  // Which library exercises have associated GPS data → green tick in the picker.
-  // One batch query over the club's exercises; cached for the session.
+  // Qué ejercicios de la biblioteca tienen datos de GPS → tick verde en el selector.
+  // Una sola consulta por sesión de trabajo. Sale de la MISMA vista que el tick de las
+  // tarjetas y que la proyección (fila ALL): si el selector dijera que hay datos y la
+  // proyección dejara la tarea fuera, el tick estaría mintiendo.
   if (_dpGpsExSet === null) {
     try {
       const ids = _libExercises.map(e => e.id);
       const { data: gps } = ids.length
-        ? await window.sb.from('v_exercise_gps_profile').select('exercise_id').in('exercise_id', ids)
+        ? await window.sb.from('v_exercise_gps_profile_pos').select('exercise_id').eq('pos_group', 'ALL').in('exercise_id', ids)
         : { data: [] };
       _dpGpsExSet = new Set((gps||[]).map(r => r.exercise_id));
     } catch(_) { _dpGpsExSet = new Set(); }
