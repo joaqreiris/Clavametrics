@@ -19,6 +19,7 @@ const SQUAD = [
 const GUEST = { id: 'p-9', club_id: 'club-1', team_id: 'team-2', first_name: 'Nico', last_name: 'Zeta', number: 30, position: 'CM' };
 
 const CALL_DAY = '2026-05-18';
+const PIXEL = 'data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==';
 const CALL_UPS = [{ player_id: 'p-9', date: CALL_DAY, created_by: 'user-1', created_at: '2026-05-17T10:00:00Z' }];
 
 /**
@@ -31,6 +32,7 @@ async function mockAvail(page, opts = {}) {
   const pending = opts.pending || [];
   const posted = [];
   const patched = [];
+  const deleted = [];
   await mockBase(page);
 
   await page.route(`${SB}/rest/v1/**`, async route => {
@@ -42,7 +44,11 @@ async function mockAvail(page, opts = {}) {
     // Y son dos distintas: my_team_ids devuelve ids sueltos, call_up_candidates fichas.
     if (url.includes('/rpc/')) {
       if (url.includes('call_up_candidates')) {
-        const base = { team_id: 'team-2', team_name: 'Second Team', can_call: canCall };
+        // Foto como data: URI — la app acepta tanto una ruta del bucket privado (que hay que
+        // firmar contra Storage) como un enlace directo, y acá interesa el comportamiento de la
+        // pantalla, no el de Storage: firmar exigiría emular esa API para nada.
+        const base = { team_id: 'team-2', team_name: 'Second Team', can_call: canCall,
+                       photo_url: opts.photo === undefined ? PIXEL : opts.photo };
         const many = Array.from({ length: opts.extraCandidates || 0 }, (_, i) => ({
           ...base, id: `x-${i}`, first_name: 'Extra', last_name: `Player ${String(i).padStart(2, '0')}`,
           number: 40 + i, position: 'MF',
@@ -79,7 +85,7 @@ async function mockAvail(page, opts = {}) {
     if (url.includes('/player_call_ups')) {
       if (method === 'POST') { posted.push(JSON.parse(route.request().postData() || '[]')); return route.fulfill({ status: 201, json: [] }); }
       if (method === 'PATCH') { patched.push({ url, body: JSON.parse(route.request().postData() || '{}') }); return route.fulfill({ status: 200, json: [] }); }
-      if (method === 'DELETE') return route.fulfill({ status: 204, body: '' });
+      if (method === 'DELETE') { deleted.push(url); return route.fulfill({ status: 204, body: '' }); }
       // La pantalla pide por separado los aprobados (los que entran a la grilla) y los
       // pendientes (la bandeja de decisión): el mock respeta ese filtro.
       if (/status=eq\.pending/.test(url)) return route.fulfill({ json: pending });
@@ -107,7 +113,7 @@ async function mockAvail(page, opts = {}) {
     }
     return route.fulfill({ json: [] });
   });
-  return { posted, patched };
+  return { posted, patched, deleted };
 }
 
 async function gotoGrid(page) {
@@ -312,5 +318,70 @@ test.describe('Campana — aceptar el pedido sin salir de donde estás', () => {
     await expect(item).toBeVisible();
     await expect(item).toContainText('Nico Zeta');
     await expect(item.locator('[data-cu-act]')).toHaveCount(0);
+  });
+});
+
+// ── Ir para atrás: cancelar un pedido propio ─────────────────────────────────
+// Un pedido pendiente NO pone al jugador en la grilla, así que no hay fila con una × donde
+// soltarlo: sin este bloque, mandarlo era irreversible hasta que el otro contestara.
+test.describe('Availability — cancelar un pedido enviado', () => {
+  const MIO = { id: 'cu-5', player_id: 'p-9', team_id: 'team-1', date: CALL_DAY, created_by: 'user-1' };
+
+  test('el pedido propio se ve y se puede cancelar', async ({ page }) => {
+    const { deleted } = await mockAvail(page, { callUps: [], canCall: false, pending: [MIO] });
+    await gotoGrid(page);
+
+    const inbox = page.locator('#avCallUpInbox');
+    await expect(inbox).toBeVisible();
+    await expect(inbox).toContainText('ZETA');
+    const btn = inbox.locator('.av-callup-req.is-sent button');
+    await expect(btn).toHaveCount(1);
+
+    page.on('dialog', d => d.accept());
+    await btn.click();
+    await expect.poll(() => deleted.length, { timeout: 10_000 }).toBeGreaterThan(0);
+    expect(deleted.some(u => u.includes('player_call_ups'))).toBe(true);
+  });
+
+  test('el pedido que mandó OTRA categoría no se cancela desde acá', async ({ page }) => {
+    // Mismo jugador y mismo día, pero lo pidió team-2: no es mío, no aparece como enviado.
+    await mockAvail(page, { callUps: [], canCall: false, pending: [{ ...MIO, team_id: 'team-2' }] });
+    await gotoGrid(page);
+    await expect(page.locator('.av-callup-req.is-sent')).toHaveCount(0);
+  });
+});
+
+// ── La cara del jugador en el picker ─────────────────────────────────────────
+// "A veces los entrenadores no conocen bien al jugador": el picker lista gente de otras
+// categorías, que es justamente a la que no le ven la cara.
+test.describe('Availability — foto en el picker', () => {
+  test('cada fila trae su avatar y el zoom se abre al pasar el mouse, sin click', async ({ page }) => {
+    await mockAvail(page, { callUps: [] });
+    await gotoGrid(page);
+    await page.click('#avCallUpBtn');
+
+    const face = page.locator('.av-callup-opt .av-cu-face').first();
+    await expect(face).toHaveCount(1);
+    await expect(face).toHaveClass(/has-face/);
+
+    const zoom = page.locator('#avFaceZoom');
+    await expect(zoom).toBeHidden();
+    await face.hover();
+    await expect(zoom).toBeVisible({ timeout: 5_000 });
+    // El casillero NO se marcó: el avatar vive dentro del <label> y un click ahí lo tildaría.
+    await expect(page.locator('.av-callup-opt input[value="p-9"]')).not.toBeChecked();
+    // Y muestra de quién es la cara.
+    await expect(zoom).toContainText('Zeta');
+  });
+
+  test('sin foto cargada no hay zoom: agrandar unas iniciales no dice nada', async ({ page }) => {
+    await mockAvail(page, { callUps: [], photo: null });
+    await gotoGrid(page);
+    await page.click('#avCallUpBtn');
+    const face = page.locator('.av-callup-opt .av-cu-face').first();
+    await expect(face).not.toHaveClass(/has-face/);
+    await face.hover();
+    await page.waitForTimeout(400);
+    await expect(page.locator('#avFaceZoom')).toBeHidden();
   });
 });

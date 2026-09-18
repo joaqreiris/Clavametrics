@@ -74,6 +74,10 @@
         title: _ttx('shell.notif.callup_direct', '{team} called up {player}', { team: d.team, player: d.player }),
         body: cuando,
       };
+      if (n.type === 'call_up_cancelled') return {
+        title: _ttx('shell.notif.callup_cancelled', '{team} cancelled the request for {player}', { team: d.team, player: d.player }),
+        body: cuando,
+      };
       if (n.type === 'call_up_decided') return {
         title: d.accepted
           ? _ttx('shell.notif.callup_yes', '{team} approved {player}', { team: d.team, player: d.player })
@@ -780,7 +784,7 @@ html.cm-rail .hub-nav-grip{display:none}
   function _visibleNotifs() { return _notifData.filter(_passesTeamFilter); }
 
   function _notifIcon(type) {
-    const map = { physio: ['physio','ti-stethoscope'], task: ['task','ti-checkbox'], task_assigned: ['task','ti-checkbox'], task_completed: ['task','ti-checkbox'], injury: ['injury','ti-bandage'], session: ['session','ti-soccer-field'], player_birthday: ['birthday','ti-cake'], staff_birthday: ['birthday','ti-cake'], sanction_accumulation: ['injury','ti-cards'], call_up_request: ['session','ti-user-plus'], call_up_direct: ['session','ti-user-plus'], call_up_decided: ['session','ti-user-check'] };
+    const map = { physio: ['physio','ti-stethoscope'], task: ['task','ti-checkbox'], task_assigned: ['task','ti-checkbox'], task_completed: ['task','ti-checkbox'], injury: ['injury','ti-bandage'], session: ['session','ti-soccer-field'], player_birthday: ['birthday','ti-cake'], staff_birthday: ['birthday','ti-cake'], sanction_accumulation: ['injury','ti-cards'], call_up_request: ['session','ti-user-plus'], call_up_direct: ['session','ti-user-plus'], call_up_decided: ['session','ti-user-check'], call_up_cancelled: ['session','ti-user-x'] };
     const [cls, icon] = map[type] || ['def','ti-bell'];
     return `<div class="cm-ni-ico ${cls}"><i class="ti ${icon}"></i></div>`;
   }

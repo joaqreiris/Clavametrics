@@ -401,6 +401,9 @@
   .av-callup-inbox .hd { display:flex; align-items:center; gap:7px; font:600 12px/1 var(--cm-font-sans); color:#C2410C; }
   .av-callup-req { display:flex; align-items:center; gap:9px; flex-wrap:wrap; padding:5px 0; border-top:1px solid rgba(234,88,12,0.18); }
   .av-callup-req:first-of-type { border-top:0; }
+  .av-callup-inbox .hd.sent { color:var(--cm-fg-muted); margin-top:2px; }
+  .av-callup-inbox .hd.sent + .av-callup-req { border-top:0; }
+  .av-callup-req.is-sent .who { color:var(--cm-fg); }
   .av-callup-req .who { font:600 12.5px/1.3 var(--cm-font-sans); color:var(--cm-fg-strong); }
   .av-callup-req .meta { font:500 11.5px/1.3 var(--cm-font-sans); color:var(--cm-fg-muted); }
   .av-callup-req .sp { flex:1; }
@@ -425,6 +428,22 @@
   .av-callup-opt { display:flex; align-items:center; gap:8px; padding:5px 6px; border-radius:6px; cursor:pointer; font:500 12px var(--cm-font-sans); color:var(--cm-fg-strong); }
   .av-callup-opt:hover { background:var(--cm-bg-soft); }
   .av-callup-opt .num { width:20px; text-align:center; color:var(--cm-fg-faint); font:600 11px var(--cm-font-mono); }
+  /* Cara del jugador en el picker: lista gente de OTRAS categorías, que es justamente a la que
+     el entrenador no le ve la cara. Sin foto queda en las iniciales, como el resto de la app. */
+  .av-cu-face { width:26px; height:26px; border-radius:50%; flex-shrink:0; display:flex; align-items:center; justify-content:center;
+    background:var(--cm-bg-sunk); border:1px solid var(--cm-border); color:var(--cm-fg-muted);
+    font:600 9.5px/1 var(--cm-font-sans); background-size:cover; background-position:center; overflow:hidden; }
+  .av-cu-face[data-cm-photo-src-done] { color:transparent; border-color:transparent; }
+  .av-cu-face.has-face { cursor:zoom-in; }
+  /* La ampliación va en un nodo suelto y position:fixed: dentro de la lista la recortaría el
+     overflow del scroll. */
+  .av-face-zoom { position:fixed; z-index:80; width:190px; border-radius:12px; overflow:hidden; display:none;
+    background:var(--cm-surface); border:1px solid var(--cm-border); box-shadow:0 18px 44px rgba(15,23,42,.24); pointer-events:none; }
+  .av-face-zoom.is-on { display:block; }
+  .av-face-zoom .img { width:190px; height:190px; background-size:cover; background-position:center top; background-color:var(--cm-bg-sunk); }
+  .av-face-zoom .cap { padding:7px 10px; }
+  .av-face-zoom .cap .n { font:600 12.5px/1.25 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .av-face-zoom .cap .s { margin-top:2px; font:500 11px/1.2 var(--cm-font-sans); color:var(--cm-fg-muted); }
   .av-callup-panel .ft { border-top:1px solid var(--cm-border); padding:9px 12px; display:flex; flex-direction:column; gap:7px; }
   .av-callup-panel .ft .when { color:var(--cm-fg-muted); font:500 11px/1.4 var(--cm-font-sans); }
   .av-callup-panel .ft .row { display:flex; gap:6px; }
@@ -694,6 +713,7 @@
 
       <!-- Panel «Llamar jugadores»: jugadores de otra categoría, solo por los días elegidos.
            No crea membresía (player_teams no se toca) — ver migración 185. -->
+      <div class="av-face-zoom" id="avFaceZoom"><div class="img"></div><div class="cap"><div class="n"></div><div class="s"></div></div></div>
       <div class="av-callup-panel" id="avCallUpPanel">
         <div class="hd"><i class="ti ti-user-plus" style="font-size:14px"></i><span data-i18n="availability.callUpTitle">Call up players</span><button class="x" onclick="avCloseCallUp()"><i class="ti ti-x"></i></button></div>
         <div class="sub" data-i18n="availability.callUpSub">From other squads, for the days you choose only. They don't join this squad.</div>
@@ -2479,6 +2499,7 @@
   let _avCallUpPool = null;      // fichas candidatas (lazy: se piden al abrir el panel)
   let _avCallUpPick = new Set(); // seleccionados en el panel
   let _avPending    = [];        // pedidos de otras categorías por MIS jugadores (a decidir)
+  let _avSent       = [];        // pedidos que MANDÉ y siguen sin respuesta (a cancelar)
 
   // Fechas a las que aplica la llamada. 'selection' = las celdas marcadas en la grilla (sirve
   // para "el martes y el jueves"); 'range' = los días del rango visible que TIENEN actividad
@@ -2547,16 +2568,66 @@
       html += `<div class="grp">${esc(list[0]?._srcName || _avTeamsById.get(tid)?.name || tt('availability.callUpOtherSquad','Other squad'))}${okTag}</div>`;
       list.forEach(p => {
         const nm = [(p.last_name || '').toUpperCase(), p.first_name || ''].filter(Boolean).join(' ');
+        const ini = [(p.last_name||'')[0], (p.first_name||'')[0]].filter(Boolean).join('').toUpperCase() || '?';
         const already = _avCalledUp.has(p.id)
           ? ` <span style="color:var(--cm-fg-faint);font:600 9.5px var(--cm-font-mono)">${esc(tt('availability.callUpAlready','already called'))}</span>` : '';
-        html += `<label class="av-callup-opt"><input type="checkbox" value="${p.id}" ${_avCallUpPick.has(p.id) ? 'checked' : ''} onchange="avPickCallUp('${p.id}',this.checked)"><span class="num">${esc(p.number ?? '—')}</span><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(nm)}</span>${already}</label>`;
+        // data-cm-photo-src: el painter de supabase-init firma la ruta del bucket privado y la
+        // pinta cuando llega. Sin foto se queda en las iniciales.
+        const face = `<span class="av-cu-face${p.photo_url ? ' has-face' : ''}"${p.photo_url ? ` data-cm-photo-src="${avEscAttr(p.photo_url)}" data-face-id="${esc(p.id)}"` : ''}>${esc(ini)}</span>`;
+        html += `<label class="av-callup-opt"><input type="checkbox" value="${p.id}" ${_avCallUpPick.has(p.id) ? 'checked' : ''} onchange="avPickCallUp('${p.id}',this.checked)">${face}<span class="num">${esc(p.number ?? '—')}</span><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(nm)}</span>${already}</label>`;
       });
     });
     box.innerHTML = html;
+    try { window.cmPaintPhotoSrcs && window.cmPaintPhotoSrcs(box); } catch (_) {}
     avUpdateCallUpFooter();
     avPlaceCallUp();   // filtrar cambia el alto del contenido
   }
   window.avRenderCallUpList = avRenderCallUpList;
+
+  // ── Ver la cara sin abrir nada ───────────────────────────────────────────────────────────
+  // El picker lista jugadores de otras categorías: el entrenador no siempre sabe quién es el
+  // que está tildando. Con el mouse encima del avatar se agranda la foto — sin click, porque
+  // clickear ahí tildaría el casillero (el avatar vive dentro del <label>).
+  let _avZoomTimer = null;
+  function avShowFace(el) {
+    const box = document.getElementById('avFaceZoom');
+    if (!box || !el) return;
+    const src = el.getAttribute('data-cm-photo-src');
+    if (!src) return;
+    const pid = el.getAttribute('data-face-id');
+    const p = (_avCallUpPool || []).find(x => String(x.id) === String(pid));
+    (async () => {
+      let url = '';
+      try { url = await window.cmPlayerPhotoUrlAsync({ id: pid, photo_url: src }); } catch (_) {}
+      if (!url || !el.isConnected || !el.matches(':hover')) return;   // se fue el mouse mientras firmaba
+      box.querySelector('.img').style.backgroundImage = `url('${String(url).replace(/'/g, "%27")}')`;
+      box.querySelector('.cap .n').textContent = p ? `${p.first_name || ''} ${p.last_name || ''}`.trim() : '';
+      box.querySelector('.cap .s').textContent = p
+        ? [p.number != null ? '#' + p.number : '', p.position || '', p.team_name || ''].filter(Boolean).join(' · ')
+        : '';
+      box.classList.add('is-on');
+      // Al costado del panel, del lado donde entre; si no entra a ninguno, encima del avatar.
+      const r = el.getBoundingClientRect();
+      const w = box.offsetWidth || 190, h = box.offsetHeight || 250;
+      const panel = document.getElementById('avCallUpPanel');
+      const pr = panel ? panel.getBoundingClientRect() : r;
+      let left = pr.left - w - 10;
+      if (left < 8) left = Math.min(pr.right + 10, window.innerWidth - w - 8);
+      box.style.left = Math.max(8, left) + 'px';
+      box.style.top  = Math.max(8, Math.min(r.top - 20, window.innerHeight - h - 8)) + 'px';
+    })();
+  }
+  function avHideFace() {
+    document.getElementById('avFaceZoom')?.classList.remove('is-on');
+  }
+  document.addEventListener('mouseover', e => {
+    const face = e.target.closest && e.target.closest('.av-cu-face.has-face');
+    clearTimeout(_avZoomTimer);
+    if (!face) { avHideFace(); return; }
+    // Un respiro antes de abrir: paseando el mouse por la lista, sin esto se prende y se apaga
+    // en cada fila.
+    _avZoomTimer = setTimeout(() => avShowFace(face), 180);
+  });
 
   window.avPickCallUp = function (pid, on) {
     if (on) _avCallUpPick.add(pid); else _avCallUpPick.delete(pid);
@@ -2649,6 +2720,8 @@
   window.avCloseCallUp = function () {
     document.getElementById('avCallUpPanel')?.classList.remove('is-open');
     _avCallUpAnchor = null;
+    clearTimeout(_avZoomTimer);
+    avHideFace();
   };
   // La página scrollea con el panel abierto (la grilla es larga): el panel está anclado al
   // botón, así que hay que reubicarlo o queda flotando lejos de su origen.
@@ -2724,49 +2797,114 @@
   // staff el pedido es invisible: verlo sin poder resolverlo solo genera preguntas.
   async function avLoadPending(from, to) {
     _avPending = [];
-    if (!_avCanDecide || !_avTeamId) return;
+    _avSent    = [];
+    if (!_avTeamId) return;
     try {
       const rows = await window.cmCallUpsPending(CLUB_ID, from, to);
-      // Me toca si el jugador es de la categoría que estoy viendo y lo pide OTRA.
-      _avPending = (rows || []).filter(r => {
-        if (r.team_id === _avTeamId) return false;
+      (rows || []).forEach(r => {
+        // Pedido MÍO: lo mandó el equipo que estoy viendo y sigue esperando. Va siempre, para
+        // cualquiera del staff: un pedido sin respuesta hay que poder cancelarlo (cambió la
+        // semana, se lesionó otro, ya no hace falta) sin ir a pedirle el favor al de al lado.
+        if (r.team_id === _avTeamId) { _avSent.push(r); return; }
+        // Pedido de OTRA categoría por un jugador de esta: solo lo ve quien puede resolverlo.
+        if (!_avCanDecide) return;
         const teams = _avPlayerTeams.get(String(r.player_id)) || [];
-        return teams.indexOf(_avTeamId) >= 0;
+        if (teams.indexOf(_avTeamId) >= 0) _avPending.push(r);
       });
+      // Los jugadores pedidos son de otra categoría: sus nombres no están en el roster. El pool
+      // del picker es la única fuente que los tiene, así que se carga si hace falta.
+      if (_avSent.length) await avLoadCallUpPool();
     } catch (e) { console.warn('[Availability] pending:', e && e.message); }
+  }
+
+  // Agrupa filas (una por día) en una decisión por jugador + equipo.
+  function avGroupReq(rows) {
+    const g = new Map();
+    (rows || []).forEach(r => {
+      const k = r.player_id + '|' + r.team_id;
+      if (!g.has(k)) g.set(k, { player_id: r.player_id, team_id: r.team_id, rows: [] });
+      g.get(k).rows.push(r);
+    });
+    return [...g.values()];
+  }
+  function avReqWhen(rows) {
+    const fmt = d => { try { return new Date(d + 'T00:00:00').toLocaleDateString(undefined, { day:'numeric', month:'short' }); } catch (_) { return d; } };
+    const ds = rows.map(r => String(r.date).slice(0, 10)).sort();
+    return ds.length === 1 ? fmt(ds[0]) : `${fmt(ds[0])} → ${fmt(ds[ds.length-1])} (${ds.length})`;
   }
 
   function avRenderPending() {
     const box = document.getElementById('avCallUpInbox');
     if (!box) return;
-    if (!_avPending.length) { box.style.display = 'none'; box.innerHTML = ''; return; }
+    if (!_avPending.length && !_avSent.length) { box.style.display = 'none'; box.innerHTML = ''; return; }
     // Un pedido de cinco días son cinco filas en la base pero UNA decisión para el entrenador:
-    // se agrupa por jugador + quién lo pide, y se acepta o niega todo junto.
-    const grupos = new Map();
-    _avPending.forEach(r => {
-      const k = r.player_id + '|' + r.team_id;
-      if (!grupos.has(k)) grupos.set(k, { player_id: r.player_id, team_id: r.team_id, rows: [] });
-      grupos.get(k).rows.push(r);
-    });
-    const fmt = d => { try { return new Date(d + 'T00:00:00').toLocaleDateString(undefined, { day:'numeric', month:'short' }); } catch (_) { return d; } };
-    let html = `<div class="hd"><i class="ti ti-hand-stop" style="font-size:14px"></i>${esc(tt('availability.inboxTitle','Requests for your players'))}</div>`;
-    [...grupos.values()].forEach(g => {
-      const p  = players.find(x => x.id === g.player_id);
-      const nm = p ? [(p.last_name || '').toUpperCase(), p.first_name || ''].filter(Boolean).join(' ') : tt('availability.inboxSomePlayer','A player');
-      const tn = _avTeamsById.get(g.team_id)?.name || tt('availability.callUpOtherSquad','Other squad');
-      const ds = g.rows.map(r => String(r.date).slice(0, 10)).sort();
-      const cuando = ds.length === 1 ? fmt(ds[0]) : `${fmt(ds[0])} → ${fmt(ds[ds.length-1])} (${ds.length})`;
-      html += `<div class="av-callup-req" data-req="${esc(g.player_id)}|${esc(g.team_id)}">
-        <span class="who">${esc(nm)}</span>
-        <span class="meta">${esc(tt('availability.inboxAsks', `${tn} asks · ${cuando}`, { team: tn, when: cuando }))}</span>
-        <span class="sp"></span>
-        <button type="button" onclick="avDecideCallUp('${esc(g.player_id)}','${esc(g.team_id)}',false)">${esc(tt('availability.inboxNo','Decline'))}</button>
-        <button type="button" class="yes" onclick="avDecideCallUp('${esc(g.player_id)}','${esc(g.team_id)}',true)">${esc(tt('availability.inboxYes','Approve'))}</button>
-      </div>`;
-    });
+    // se agrupa por jugador + quién lo pide, y se resuelve todo junto.
+    let html = '';
+    if (_avPending.length) {
+      html += `<div class="hd"><i class="ti ti-hand-stop" style="font-size:14px"></i>${esc(tt('availability.inboxTitle','Requests for your players'))}</div>`;
+      avGroupReq(_avPending).forEach(g => {
+        const p  = players.find(x => x.id === g.player_id);
+        const nm = p ? [(p.last_name || '').toUpperCase(), p.first_name || ''].filter(Boolean).join(' ') : tt('availability.inboxSomePlayer','A player');
+        const tn = _avTeamsById.get(g.team_id)?.name || tt('availability.callUpOtherSquad','Other squad');
+        const cuando = avReqWhen(g.rows);
+        html += `<div class="av-callup-req" data-req="${esc(g.player_id)}|${esc(g.team_id)}">
+          <span class="who">${esc(nm)}</span>
+          <span class="meta">${esc(tt('availability.inboxAsks', `${tn} asks · ${cuando}`, { team: tn, when: cuando }))}</span>
+          <span class="sp"></span>
+          <button type="button" onclick="avDecideCallUp('${esc(g.player_id)}','${esc(g.team_id)}',false)">${esc(tt('availability.inboxNo','Decline'))}</button>
+          <button type="button" class="yes" onclick="avDecideCallUp('${esc(g.player_id)}','${esc(g.team_id)}',true)">${esc(tt('availability.inboxYes','Approve'))}</button>
+        </div>`;
+      });
+    }
+    // Lo mandado y todavía sin respuesta. Es la única vía para ir para atrás: un pedido
+    // pendiente no pone al jugador en la grilla, así que no hay fila con una × donde soltarlo.
+    if (_avSent.length) {
+      html += `<div class="hd sent"><i class="ti ti-send" style="font-size:14px"></i>${esc(tt('availability.sentTitle','Your requests, waiting for an answer'))}</div>`;
+      avGroupReq(_avSent).forEach(g => {
+        const p  = (_avCallUpPool || []).find(x => String(x.id) === String(g.player_id));
+        const nm = p ? [(p.last_name || '').toUpperCase(), p.first_name || ''].filter(Boolean).join(' ') : tt('availability.inboxSomePlayer','A player');
+        const tn = (p && p.team_name) || '';
+        const cuando = avReqWhen(g.rows);
+        html += `<div class="av-callup-req is-sent" data-sent="${esc(g.player_id)}">
+          <span class="who">${esc(nm)}</span>
+          <span class="meta">${esc(tn ? tt('availability.sentTo', `to ${tn} · ${cuando}`, { team: tn, when: cuando }) : cuando)}</span>
+          <span class="sp"></span>
+          <button type="button" onclick="avCancelRequest('${esc(g.player_id)}')">${esc(tt('availability.sentCancel','Cancel request'))}</button>
+        </div>`;
+      });
+    }
     box.innerHTML = html;
     box.style.display = '';
   }
+
+  // Cancelar un pedido propio: borra las filas pendientes de ese jugador en el rango visible.
+  // Al que tenía que decidir se le avisa — se quedó con un aviso en la campana esperando una
+  // respuesta que ya no hace falta dar.
+  window.avCancelRequest = async function (playerId) {
+    const rows = _avSent.filter(r => String(r.player_id) === String(playerId));
+    if (!rows.length) return;
+    const p = (_avCallUpPool || []).find(x => String(x.id) === String(playerId));
+    const nm = p ? `${p.first_name || ''} ${p.last_name || ''}`.trim() : '';
+    if (!confirm(tt('availability.sentCancelConfirm', `Cancel the request for ${nm}?`, { name: nm }))) return;
+    const card = document.querySelector(`.av-callup-req[data-sent="${playerId}"]`);
+    card && card.querySelectorAll('button').forEach(b => { b.disabled = true; });
+    const dates = rows.map(r => String(r.date).slice(0, 10));
+    const res = await window.cmCallUpRemove(CLUB_ID, _avTeamId, [playerId], dates);
+    if (!res.ok) {
+      card && card.querySelectorAll('button').forEach(b => { b.disabled = false; });
+      alert(tt('availability.sentCancelFailed','Could not cancel the request: {err}', { err: res.error || '' }));
+      return;
+    }
+    try {
+      const who  = await window.cmCallUpDeciders(CLUB_ID, p && p._srcTeam ? [p._srcTeam] : []);
+      const mine = _avTeamsById.get(_avTeamId)?.name || '';
+      if (who.length) await window.cmNotifyCallUp(CLUB_ID, who,
+        `${mine} cancelled the request for ${nm}`, null, 'call_up_cancelled',
+        { kind: 'call_up', player: nm, player_id: playerId, team: mine, team_id: _avTeamId,
+          from: dates[0], to: dates[dates.length - 1], count: dates.length });
+    } catch (e) { console.warn('[Availability] cancel notify:', e && e.message); }
+    if (typeof init === 'function') init();
+  };
 
   window.avDecideCallUp = async function (playerId, askingTeam, yes) {
     const rows = _avPending.filter(r => String(r.player_id) === String(playerId) && String(r.team_id) === String(askingTeam));

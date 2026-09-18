@@ -5120,7 +5120,7 @@ $function$
 -- puesto, categoría) más can_call, que dice si se llama directo o hay que pedirlo.
 -- SECURITY DEFINER acotado: exige ser del club y tener el equipo que llama entre los propios.
 CREATE OR REPLACE FUNCTION public.call_up_candidates(p_team uuid)
- RETURNS TABLE(id uuid, first_name text, last_name text, number integer, "position" text, team_id uuid, team_name text, can_call boolean)
+ RETURNS TABLE(id uuid, first_name text, last_name text, number integer, "position" text, team_id uuid, team_name text, can_call boolean, photo_url text)
  LANGUAGE sql
  STABLE SECURITY DEFINER
  SET search_path TO 'public'
@@ -5128,7 +5128,10 @@ AS $function$
   select distinct on (p.id)
          p.id, p.first_name, p.last_name, p.number, p.position,
          t.id as team_id, t.name as team_name,
-         (p.id in (select public.my_player_ids())) as can_call
+         (p.id in (select public.my_player_ids())) as can_call,
+         -- La foto va cruda (ruta del bucket privado); la firma el cliente. No abre nada nuevo:
+         -- la policy de storage de player-photos ya es por club (migración 188).
+         p.photo_url
   from public.players p
   join public.player_teams pt on pt.player_id = p.id
   join public.teams t on t.id = pt.team_id
