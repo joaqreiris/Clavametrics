@@ -289,10 +289,15 @@
     { id:'match',    name:'vs Match',      icon:'ti-ball-football',  d:'Best N matches reference' },
     { id:'md',       name:'vs MD code',    icon:'ti-calendar-event', d:'Same matchday-minus code' },
     { id:'position', name:'vs Position',   icon:'ti-users',          d:'Same position group' },
+    { id:'squad',    name:'vs Squad',      icon:'ti-users-group',    d:'The whole squad in range' },
     { id:'self',     name:'vs Self',       icon:'ti-user',           d:'The player’s own history' },
     { id:'mc',       name:'vs microcycle', icon:'ti-calendar-stats', d:'Diff vs another MC' },
   ];
-  // How the reference set is aggregated (STEP 2 wires the heavy logic; STEP 1 = model + UI).
+  // Tipos que SABEN dibujar un z-score. El resto expresa la comparación en porcentaje: ofrecer
+  // el método ahí sería un botón que no cambia nada (era lo que pasaba antes de conectarlo).
+  const Z_TIPOS = new Set(['heatmap', 'kpi']);
+  const _zAplica = (S) => !!S && Z_TIPOS.has(S.type) && S.compare !== 'none' && S.compare !== 'mc';
+  // How the reference set is aggregated.
   const CMP_METHODS = [
     { id:'avg',    name:'Average',      d:'Mean of the reference set' },
     { id:'wavg',   name:'Weighted avg', d:'Recency-weighted mean' },
@@ -351,7 +356,8 @@
     if (!S || S.compare === 'none') return null;
     if (S.compare === 'mc') return { baseline: 'mc', refMcId: _validMcId(S.refMcId) ? S.refMcId : null };
     const baseline = S.compare === 'role' ? 'position' : S.compare;   // safety normalize
-    const c = { baseline, method: S.compareMethod || 'avg' };
+    const metodo = (S.compareMethod === 'zscore' && !_zAplica(S)) ? 'avg' : (S.compareMethod || 'avg');
+    const c = { baseline, method: metodo };
     const opts = {};
     if (baseline === 'match') opts.topN       = _clampInt(S.compareOpts?.topN, 5, 1, 20);
     if (baseline === 'md')    opts.mdLookback = _clampInt(S.compareOpts?.mdLookback, 4, 1, 20);
@@ -373,7 +379,8 @@
     if (S.compare === 'match') parts.push(`top ${S.compareOpts?.topN ?? 5}`);
     if (S.compare === 'md')    parts.push(`last ${S.compareOpts?.mdLookback ?? 4}`);
     if (S.compare === 'position' || S.compare === 'self') parts.push(_winLabel(S.refWindow));
-    parts.push(S.compareMethod === 'wavg' ? 'wavg' : S.compareMethod === 'zscore' ? 'z-score' : 'avg');
+    parts.push(S.compareMethod === 'wavg' ? 'wavg'
+      : (S.compareMethod === 'zscore' && _zAplica(S)) ? 'z-score' : 'avg');
     return ` · ${parts.join(' · ')}`;
   }
 
@@ -3541,7 +3548,7 @@
         return;
       }
 
-      const { applyAgg, aggregateSeries, getSessionIds, getMcSessionIds, fetchReports, fetchEavMetrics, fetchExtraMetrics, fetchRoleBaseline, fetchMdBaseline, enrichMcDiff, CORE_COLS, neededKeys, canUsePlayerAgg, resolvePlayerAggSeries, canUsePlayerMcAgg, resolvePlayerMcAggSeries } = await _importResolver();
+      const { applyAgg, aggregateSeries, getSessionIds, getMcSessionIds, fetchReports, fetchEavMetrics, fetchExtraMetrics, fetchRoleBaseline, fetchMdBaseline, fetchSquadStats, enrichMcDiff, CORE_COLS, neededKeys, canUsePlayerAgg, resolvePlayerAggSeries, canUsePlayerMcAgg, resolvePlayerMcAggSeries } = await _importResolver();
       if (stale()) return;
       if (!applyAgg) {
         // Antes: `return` pelado → spinner eterno, sin pista de qué pasó.
@@ -3549,6 +3556,35 @@
           _tt('gps_analysis.builder_resolver_missing', 'Chart engine failed to load. Reload the page.'), config);
         return;
       }
+      /** Mapa de referencia por métrica para kpi / gauge / heatmap: metricId → valor, con la
+       *  dispersión del conjunto colgada en __sd (metricId → σ). Antes cada uno de los tres
+       *  armaba su propio Map copiando SOLO los valores, con lo que la σ que el resolver ya
+       *  calculaba se perdía por el camino y el método "z-score" no tenía con qué dividir. */
+      const _bmapDeComparacion = async (cmp) => {
+        const bmap = new Map();
+        const sds  = new Map();
+        let rb = null;
+        if (cmp === 'md' && fetchMdBaseline)            rb = await fetchMdBaseline(sessionIds, config, ctx, catalogMap, sb);
+        else if (cmp === 'role' && fetchRoleBaseline)   rb = await fetchRoleBaseline(sessionIds, config, ctx, catalogMap, sb);
+        else if (cmp === 'squad' && fetchSquadStats)    rb = await fetchSquadStats(sessionIds, config, ctx, catalogMap, sb);
+        else if (cmp === 'match' && config.scope.level === 'player' && ctx.playerId && window.getMatchBaseline) {
+          const _refs = await _refsDePartido(config, ctx);
+          _refs.forEach((r, k) => {
+            if (r?.baseline != null) bmap.set(k, r.baseline);
+            if (r?.sd != null) sds.set(k, r.sd);
+          });
+        }
+        if (rb) for (const m of config.metrics) {
+          const v = rb.get(m.id);
+          if (v != null) bmap.set(m.id, v);
+          const sd = rb.__sd?.get?.(m.id);
+          if (sd != null) sds.set(m.id, sd);
+        }
+        if (sds.size) bmap.__sd = sds;
+        if (rb?.__n != null) bmap.__n = rb.__n;
+        return bmap;
+      };
+
 
       const _teamPids  = Array.isArray(window._gpPlayerIds) ? window._gpPlayerIds : null;
       // Jugador para las cards de nivel "player" que NO están pineadas.
@@ -4020,20 +4056,10 @@
         // mc's ref name (for the "vs MC ref" caption) comes from Step 5a.
         const cmp = _cmpBase(config);
         drawOpts.mcRefName = mcNamesForDraw?.ref || null;
-        if ((cmp === 'role' || cmp === 'match' || cmp === 'md') && config.metrics?.length) {
-          const bmap = new Map();
-          try {
-            if (cmp === 'md' && fetchMdBaseline) {
-              const rb = await fetchMdBaseline(sessionIds, config, ctx, catalogMap, sb);
-              if (rb) for (const m of config.metrics) { const v = rb.get(m.id); if (v != null) bmap.set(m.id, v); }
-            } else if (cmp === 'role' && fetchRoleBaseline) {
-              const rb = await fetchRoleBaseline(sessionIds, config, ctx, catalogMap, sb);
-              if (rb) for (const m of config.metrics) { const v = rb.get(m.id); if (v != null) bmap.set(m.id, v); }
-            } else if (cmp === 'match' && config.scope.level === 'player' && ctx.playerId && window.getMatchBaseline) {
-              const _refs = await _refsDePartido(config, ctx);
-              _refs.forEach((r, k) => { if (r?.baseline != null) bmap.set(k, r.baseline); });
-            }
-          } catch (e) { console.warn('gpb kpi baseline:', e); }
+        if ((cmp === 'role' || cmp === 'match' || cmp === 'md' || cmp === 'squad') && config.metrics?.length) {
+          let bmap = new Map();
+          try { bmap = await _bmapDeComparacion(cmp); }
+          catch (e) { console.warn('gpb kpi baseline:', e); }
           if (bmap.size) drawOpts.baselineMap = bmap;
         }
         if (stale()) return;
@@ -4052,20 +4078,10 @@
         // value mode → per-metric baseline (role / match / md) for the 0–150% "vs baseline" gauge;
         // same source as the KPI. Always built so the gauge can draw the ring if a comparison is set.
         const cmp = _cmpBase(config);
-        if ((cmp === 'role' || cmp === 'match' || cmp === 'md') && config.metrics?.length) {
-          const bmap = new Map();
-          try {
-            if (cmp === 'md' && fetchMdBaseline) {
-              const rb = await fetchMdBaseline(sessionIds, config, ctx, catalogMap, sb);
-              if (rb) for (const m of config.metrics) { const v = rb.get(m.id); if (v != null) bmap.set(m.id, v); }
-            } else if (cmp === 'role' && fetchRoleBaseline) {
-              const rb = await fetchRoleBaseline(sessionIds, config, ctx, catalogMap, sb);
-              if (rb) for (const m of config.metrics) { const v = rb.get(m.id); if (v != null) bmap.set(m.id, v); }
-            } else if (cmp === 'match' && config.scope.level === 'player' && ctx.playerId && window.getMatchBaseline) {
-              const _refs = await _refsDePartido(config, ctx);
-              _refs.forEach((r, k) => { if (r?.baseline != null) bmap.set(k, r.baseline); });
-            }
-          } catch (e) { console.warn('gpb gauge baseline:', e); }
+        if ((cmp === 'role' || cmp === 'match' || cmp === 'md' || cmp === 'squad') && config.metrics?.length) {
+          let bmap = new Map();
+          try { bmap = await _bmapDeComparacion(cmp); }
+          catch (e) { console.warn('gpb gauge baseline:', e); }
           if (bmap.size) drawOpts.baselineMap = bmap;
         }
         if (stale()) return;
@@ -4095,20 +4111,10 @@
         // enriched the points (.diff) in Step 5a; role/match need a per-metric
         // baseline map — same source as the KPI — handed to the renderer via opts.
         const cmp = _cmpBase(config);
-        if ((cmp === 'role' || cmp === 'match' || cmp === 'md') && config.metrics?.length) {
-          const bmap = new Map();
-          try {
-            if (cmp === 'md' && fetchMdBaseline) {
-              const rb = await fetchMdBaseline(sessionIds, config, ctx, catalogMap, sb);
-              if (rb) for (const m of config.metrics) { const v = rb.get(m.id); if (v != null) bmap.set(m.id, v); }
-            } else if (cmp === 'role' && fetchRoleBaseline) {
-              const rb = await fetchRoleBaseline(sessionIds, config, ctx, catalogMap, sb);
-              if (rb) for (const m of config.metrics) { const v = rb.get(m.id); if (v != null) bmap.set(m.id, v); }
-            } else if (cmp === 'match' && config.scope.level === 'player' && ctx.playerId && window.getMatchBaseline) {
-              const _refs = await _refsDePartido(config, ctx);
-              _refs.forEach((r, k) => { if (r?.baseline != null) bmap.set(k, r.baseline); });
-            }
-          } catch (e) { console.warn('gpb heatmap baseline:', e); }
+        if ((cmp === 'role' || cmp === 'match' || cmp === 'md' || cmp === 'squad') && config.metrics?.length) {
+          let bmap = new Map();
+          try { bmap = await _bmapDeComparacion(cmp); }
+          catch (e) { console.warn('gpb heatmap baseline:', e); }
           if (bmap.size) drawOpts.baselineMap = bmap;
         }
         if (stale()) return;
@@ -7317,6 +7323,7 @@
    */
   function kpiCardData(config, series, opts = {}) {
     const baselineMap = opts.baselineMap || null;
+    const _zActivo = config.comparison?.method === 'zscore';
     const cmpId   = config.comparison?.baseline || null;
     const cmpName = cmpId === 'mc'
       ? (opts.mcRefName ? `vs ${opts.mcRefName}` : '')          // empty if ref MC had no data (degraded)
@@ -7343,11 +7350,17 @@
       if (p.diff != null && isFinite(p.diff)) {                    // vs microciclo
         delta = { dir: p.diff >= 0 ? 'up' : 'down', pct: p.diff };
         if (p.ref != null && isFinite(p.ref)) refVal = p.ref;      // the ref MC's absolute value
-      } else if (baselineMap) {                                    // role / match
+      } else if (baselineMap) {                                    // role / match / md / squad
         const bv = baselineMap.get(m.id);
         if (bv != null && bv > 0 && isFinite(value)) {
           const diff = value - bv;
-          delta = { dir: diff >= 0 ? 'up' : 'down', pct: (diff / bv) * 100 };
+          // Con método z-score y σ disponible, el delta se lee en desviaciones en vez de en
+          // porcentaje: "+1,8σ" dice si está fuera de lo normal, cosa que un "+12%" no dice
+          // sin saber cuánto se mueve habitualmente ese grupo. Sin σ, sigue el porcentaje.
+          const sd = _zActivo ? baselineMap.__sd?.get?.(m.id) : null;
+          delta = (sd != null && sd > 0)
+            ? { dir: diff >= 0 ? 'up' : 'down', pct: diff / sd, z: true }
+            : { dir: diff >= 0 ? 'up' : 'down', pct: (diff / bv) * 100 };
           refVal = bv;                                             // the baseline absolute value
         }
       }
@@ -7369,7 +7382,8 @@
       const sign = d.delta.dir === 'up' ? '+' : '−';
       // % + the reference ABSOLUTE, so the delta never floats without a magnitude.
       const refTxt = d.refVal != null ? ` <span style="opacity:.65;font-weight:500">(ref: ${fmtVal(d.refVal, d.dec)}${d.unit ? ' ' + esc(d.unit) : ''})</span>` : '';
-      tLine = `<div class="t"><span class="d ${d.delta.dir}"><i class="ti ti-arrow-${d.delta.dir}-right"></i>${sign}${Math.abs(d.delta.pct).toFixed(0)}%</span>${d.cmpName ? ' ' + esc(d.cmpName) : ''}${refTxt}</div>`;
+      const dTxt = d.delta.z ? `${Math.abs(d.delta.pct).toFixed(1)}σ` : `${Math.abs(d.delta.pct).toFixed(0)}%`;
+      tLine = `<div class="t"><span class="d ${d.delta.dir}"><i class="ti ti-arrow-${d.delta.dir}-right"></i>${sign}${dTxt}</span>${d.cmpName ? ' ' + esc(d.cmpName) : ''}${refTxt}</div>`;
     } else if (d.cmpName) {
       tLine = `<div class="t">${esc(d.cmpName)}</div>`;
     }
@@ -7394,7 +7408,8 @@
       if (it.delta) {
         const sign = it.delta.dir === 'up' ? '+' : '−';
         const refTxt = it.refVal != null ? ` <span style="opacity:.65;font-weight:500">(ref: ${fmtVal(it.refVal, it.dec)}${it.unit ? ' ' + esc(it.unit) : ''})</span>` : '';
-        t = `<div class="kt"><span class="kd ${it.delta.dir}"><i class="ti ti-arrow-${it.delta.dir}-right"></i>${sign}${Math.abs(it.delta.pct).toFixed(0)}%</span>${it.cmpName ? ' ' + esc(it.cmpName) : ''}${refTxt}</div>`;
+        const dTxt = it.delta.z ? `${Math.abs(it.delta.pct).toFixed(1)}σ` : `${Math.abs(it.delta.pct).toFixed(0)}%`;
+        t = `<div class="kt"><span class="kd ${it.delta.dir}"><i class="ti ti-arrow-${it.delta.dir}-right"></i>${sign}${dTxt}</span>${it.cmpName ? ' ' + esc(it.cmpName) : ''}${refTxt}</div>`;
       } else if (it.cmpName) {
         t = `<div class="kt">${esc(it.cmpName)}</div>`;
       }
@@ -9648,13 +9663,26 @@
         // Same criterion as bars/KPI: colour by VALUE when there's no comparison, by
         // DIFF% when one is set. mc carries .diff per point (enriched upstream);
         // role/match come as a per-metric baseline map handed in via opts.baselineMap.
-        const cmp = config.comparison?.baseline || null;          // null | mc | role | match | md
+        const cmp = config.comparison?.baseline || null;          // null | mc | role | match | md | squad
         const baselineMap = opts.baselineMap || null;
         const unitOf = s => s.unit ? ` ${s.unit}` : '';
+        // Z-SCORE: la celda deja de ser "cuánto por encima en %" y pasa a ser "a cuántas
+        // desviaciones típicas está". Sólo cuando el conjunto de referencia trajo σ; sin σ
+        // (menos de 3 valores, o todos iguales) se sigue pintando el % — que es honesto —
+        // en vez de inventar una escala.
+        const _sdMap = baselineMap?.__sd || null;
+        const esZ = config.comparison?.method === 'zscore' && !!_sdMap && cmp !== 'mc';
+        const zOf = (s, pt) => {
+          const bv = baselineMap ? baselineMap.get(s.label) : null;
+          const sd = _sdMap ? _sdMap.get(s.label) : null;
+          if (bv == null || sd == null || !(sd > 0) || pt?.y == null || !isFinite(pt.y)) return null;
+          return (pt.y - bv) / sd;
+        };
         // diff% for one cell, by comparison mode (null = no reference available).
         const diffOf = (s, pt) => {
           if (!pt) return null;
           if (cmp === 'mc') return (pt.diff != null && isFinite(pt.diff)) ? pt.diff : null;
+          if (esZ) { const z = zOf(s, pt); if (z != null) return z; }
           const bv = baselineMap ? baselineMap.get(s.label) : null;
           if (bv != null && bv > 0 && pt.y != null && isFinite(pt.y)) return (pt.y - bv) / bv * 100;
           return null;
@@ -9669,6 +9697,10 @@
         const colMeta = series.map(s => {
           if (useDiff) {
             const ds = s.points.map(p => diffOf(s, p)).filter(d => d != null && isFinite(d));
+            // El z se pinta contra una escala FIJA de ±2σ (el 95% de una distribución normal
+            // cae dentro): así el color significa lo mismo en todas las columnas y entre
+            // cards. Con porcentajes no hay escala canónica, y se sigue usando el máximo.
+            if (esZ) return { maxAbs: 2 };
             return { maxAbs: Math.max(1, ...ds.map(Math.abs)) };
           }
           const vs = s.points.map(p => p.y).filter(v => v != null && isFinite(v));
@@ -9697,9 +9729,14 @@
                 bg = 'var(--cm-bg-soft)'; fg = 'var(--cm-fg-muted)'; lbl = fmtY(val, s);
                 tip = `${x} · ${s.name}: ${fmtY(val, s)}${unitOf(s)} (sin referencia)`;
               } else {
-                bg = _heatDiff(d / m.maxAbs); fg = _textOn(bg);
-                lbl = (d >= 0 ? '+' : '') + d.toFixed(d >= 10 || d <= -10 ? 0 : 1) + '%';
-                tip = `${x} · ${s.name}: ${fmtY(val, s)}${unitOf(s)} · Δ ${(d >= 0 ? '+' : '') + d.toFixed(1)}%`;
+                bg = _heatDiff(Math.max(-1, Math.min(1, d / m.maxAbs))); fg = _textOn(bg);
+                if (esZ) {
+                  lbl = (d >= 0 ? '+' : '') + d.toFixed(1) + 'σ';
+                  tip = `${x} · ${s.name}: ${fmtY(val, s)}${unitOf(s)} · ${(d >= 0 ? '+' : '') + d.toFixed(2)} σ`;
+                } else {
+                  lbl = (d >= 0 ? '+' : '') + d.toFixed(d >= 10 || d <= -10 ? 0 : 1) + '%';
+                  tip = `${x} · ${s.name}: ${fmtY(val, s)}${unitOf(s)} · Δ ${(d >= 0 ? '+' : '') + d.toFixed(1)}%`;
+                }
               }
             } else {
               bg = _heatVal((val - m.min) / m.span); fg = _textOn(bg);
@@ -9862,10 +9899,18 @@
         sub = `<div class="rb-pop-h" style="margin-top:6px"><div class="t">${_tt('gps_analysis.builder_reference_microcycle', 'Reference microcycle')}</div></div><div class="rb-pop-b">${mcRows}</div>`;
       } else if (kind === 'compare' && S.compare !== 'none') {
         const numStyle = 'width:72px;padding:6px 8px;border:1px solid var(--cm-border);border-radius:6px;background:var(--cm-surface-2);color:var(--cm-fg);font:600 12px/1 var(--cm-font-mono);box-sizing:border-box';
-        const methodRows = CMP_METHODS.map(m => `<button class="rb-opt ${(S.compareMethod||'avg')===m.id?'is-on':''}" data-method="${esc(m.id)}">
+        const methodRows = CMP_METHODS.map(m => {
+          // El z-score necesita un tipo que sepa dibujar desviaciones; en el resto se muestra
+          // apagado y diciendo por qué, en vez de dejar elegir algo que no cambiaría nada.
+          const no = m.id === 'zscore' && !_zAplica(S);
+          const desc = no
+            ? _tt('gps_analysis.builder_method_zscore_na', 'Only on matrix and KPI cards')
+            : _methodDesc(m.id);
+          return `<button class="rb-opt ${(S.compareMethod||'avg')===m.id&&!no?'is-on':''} ${no?'is-disabled':''}" data-method="${esc(m.id)}" ${no?'disabled':''}>
           <span class="ic"><i class="ti ti-adjustments"></i></span>
-          <span class="tx"><span class="t">${esc(_methodName(m.id))}</span><span class="d">${esc(_methodDesc(m.id))}</span></span>
-          <i class="ti ti-check ck"></i></button>`).join('');
+          <span class="tx"><span class="t">${esc(_methodName(m.id))}</span><span class="d">${esc(desc)}</span></span>
+          <i class="ti ti-check ck"></i></button>`;
+        }).join('');
         let opts = '';
         if (S.compare === 'match') {
           opts = `<div class="rb-pop-h" style="margin-top:6px"><div class="t">${_tt('gps_analysis.builder_best_matches_topn', 'Best matches (top N)')}</div></div>
