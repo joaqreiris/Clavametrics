@@ -5472,7 +5472,18 @@
       const s0 = ss[0];
       mcDiffs = cats.map(c => { const p = s0.points.find(q => q.x === c); return p ? (p.diff ?? null) : null; });
     } else {
-      const isLine  = ss.map((s, i) => !!(s.line || config.metrics?.[i]?.line));
+      // Se empareja por ID de métrica y NO por índice. Cuando una métrica tiene el modo % activo
+      // se agrega una serie extra («…__relmc»), así que hay más series que métricas y el índice se
+      // corre: con «Total Distance en %» + «RPE como línea», el RPE quedaba emparejado con una
+      // métrica que no existe y perdía su marca de línea — se dibujaba como una barra de 7,5
+      // contra un eje de 25.000, invisible, y sin eje secundario porque hasLine quedaba en false.
+      const _lineDeMetrica = new Map((config.metrics || []).map(m => [String(m.id), !!m.line]));
+      const isLine  = ss.map((s) => {
+        if (s.line) return true;
+        // Las series del Δ% cuelgan del id de su métrica con sufijo; se lo quita para preguntar.
+        const base = String(s.label || '').replace(/__rel(mc|md)$/, '');
+        return !!_lineDeMetrica.get(base);
+      });
       const barCols = barColors(config, isLine.filter(f => !f).length || 1);
       const lineCol = _cssVar('--cm-warning', '#D97706');
       // Δ% (modo relativo): YA NO se dibuja como línea en un 2º eje (eje dual). Se pinta SOBRE

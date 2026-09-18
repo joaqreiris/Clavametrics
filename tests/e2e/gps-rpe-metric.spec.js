@@ -115,3 +115,35 @@ test.describe('GPS · el RPE como una métrica más', () => {
     expect(rpe.datos[i]).toBe(7);
   });
 });
+
+// El RPE conviviendo con una métrica de otra escala: 7 puntos de RPE contra 10.000 metros. Sin eje
+// propio la línea queda pegada al piso y no se ve — reportado desde el producto.
+// Ojo con el emparejamiento: isLine se resolvía por ÍNDICE entre series y métricas, y cuando una
+// métrica tiene el modo % activo se agrega una serie extra («…__relmc»), así que el índice se corre
+// y la marca de línea cae en la métrica equivocada. Ahora se empareja por id.
+test('el RPE se dibuja como línea, con su propio eje a la derecha', async ({ page }) => {
+  await abrir(page, [{ id: 'card-rpe', position: 0, source: 'builder', size: 'lg', config: {
+    schema: 'gp.card/v1', title: 'Distancia + RPE', viz: 'bars', scope: { level: 'squad' },
+    metrics: [{ id: 'total_distance', agg: 'sum' }, { id: 'rpe', agg: 'avg', line: true }],
+    dimensions: [{ id: 'player' }], range: { type: 'last30' }, style: { color: '#2563EB' } } }]);
+
+  const info = await page.evaluate(() => {
+    const c = document.querySelector('.gp-view.is-on .gp-c[data-card-id="card-rpe"] canvas');
+    const ch = window.Chart.getChart(c);
+    return {
+      ds: ch.data.datasets.map(d => ({ l: d.label, t: d.type || ch.config.type, eje: d.yAxisID || 'y' })),
+      hayY1: !!ch.scales.y1,
+      y1max: ch.scales.y1 ? ch.scales.y1.max : null,
+      ymax: ch.scales.y ? ch.scales.y.max : null,
+    };
+  });
+  const linea = info.ds.find(d => d.l === 'RPE');
+  expect(linea, 'no hay serie de RPE').toBeTruthy();
+  expect(linea.t, 'el RPE tiene que dibujarse como línea').toBe('line');
+  expect(linea.eje, 'el RPE tiene que ir al eje secundario').toBe('y1');
+  expect(info.hayY1, 'no se creó el eje derecho').toBe(true);
+  // Y con ESCALA PROPIA, ajustada al RPE: es una escala de 0 a 10, así que su eje no puede
+  // quedar con el tope de otra métrica. (No se compara contra el eje de los metros porque en las
+  // fixturas los metros son chicos; en el producto son 10.000 y ahí la diferencia salta sola.)
+  expect(info.y1max, `el eje del RPE quedó con un tope ajeno: ${info.y1max}`).toBeLessThanOrEqual(20);
+});
