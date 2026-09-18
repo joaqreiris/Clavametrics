@@ -301,8 +301,12 @@ const SettingsDrawer = ({ open, onClose, profile, userId, setProfile, supabaseSe
         const { error: upErr } = await window.sb.storage.from('profile-avatars')
           .upload(path, photo, { upsert: true, contentType: photo.type || 'image/jpeg', cacheControl: window.CM_CACHE_IMMUTABLE });
         if (upErr) throw upErr;
-        const { data: signed } = await window.sb.storage.from('profile-avatars').createSignedUrl(path, 315360000);
-        avatarUrl = (signed && signed.signedUrl) || avatarUrl;
+        // Se guarda la RUTA, no una URL firmada. cmAvatarUrl() ya distingue: si es una URL
+        // completa la usa tal cual, y si es una ruta la firma bajo demanda con el TTL corto
+        // (7 dias, refrescado un dia antes). Antes se firmaba por 315.360.000 s -unos 10 anos-
+        // y esa URL quedaba guardada en la fila: cualquiera con el enlace veia la foto durante
+        // una decada, aunque la persona se hubiera ido del club.
+        avatarUrl = path;
       }
       const fullName = (first + ' ' + last).trim();
       const patch = {

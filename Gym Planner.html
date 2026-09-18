@@ -1895,6 +1895,16 @@ function gpBuildAiModal() {
         <input id="gpAiPlayers" type="number" min="1" placeholder="${tt('common.players','Players')}" style="width:90px;height:32px;padding:0 10px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:6px;font:var(--cm-body-sm);color:var(--cm-fg);outline:none">
         <input id="gpAiEmphasis" placeholder="${tt('gym_planner.emphasis_optional_ph','Emphasis (optional)')}" style="flex:1;height:32px;padding:0 10px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:6px;font:var(--cm-body-sm);color:var(--cm-fg);outline:none">
       </div>
+      <!-- Estos dos campos son los UNICOS de toda la generacion por IA que viajan como texto
+           libre. El resto de lo que se manda esta acotado: un numero de jugadores, etiquetas
+           de carga AGREGADAS del equipo y el catalogo de ejercicios del club; ni un nombre, ni
+           una ficha, ni un dato clinico. Si alguien escribe aqui "sesion para Perez, que vuelve
+           de lesion", ese nombre SI sale. No es un fallo del sistema, es un riesgo de uso, y se
+           corrige avisando donde se escribe. Ver Anexo III del borrador legal. -->
+      <div style="display:flex;gap:6px;align-items:flex-start;margin-top:8px;font:500 11px/1.45 var(--cm-font-sans);color:var(--cm-fg-muted)">
+        <i class="ti ti-info-circle" style="font-size:13px;flex:0 0 auto;margin-top:1px"></i>
+        <span>${tt('gym_planner.ai_privacy_hint','These two boxes are sent to the AI as written. Don\'t put player names or injury details in them — describe the session, not the person.')}</span>
+      </div>
       <div id="gpAiStatus" style="margin-top:8px;font:var(--cm-body-sm);color:var(--cm-fg-muted);min-height:16px"></div>
       <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
         <button class="cm-btn is-ghost is-sm" onclick="gpCloseAi()">${tt('common.cancel','Cancel')}</button>
