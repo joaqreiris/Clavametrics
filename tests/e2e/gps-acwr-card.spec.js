@@ -19,6 +19,10 @@ const CARD_ACWR = { id: 'c-acwr', position: 0, source: 'builder', size: 'md', co
   schema: 'gp.card/v1', title: 'ACWR', viz: 'acwr', scope: { level: 'squad' },
   metrics: [{ id: 'player_load', agg: 'avg' }], dimensions: [],
   range: { type: 'last30' }, style: { color: '#2563EB' } } };
+const CARD_TSB = { id: 'c-tsb', position: 1, source: 'builder', size: 'md', config: {
+  schema: 'gp.card/v1', title: 'Forma', viz: 'tsb', scope: { level: 'squad' },
+  metrics: [{ id: 'player_load', agg: 'avg' }], dimensions: [],
+  range: { type: 'last30' }, style: {} } };
 
 const CLUB_ID = '11111111-1111-4111-8111-111111111111';
 const PROFILE = { id: 'user-1', club_id: CLUB_ID, first_name: 'T', last_name: 'U', full_name: 'T U', role: 'admin', club_role: 'admin' };
@@ -73,7 +77,7 @@ async function montar(page, layoutInd, layoutGrp) {
     return r.fulfill({ json: acc ? ord[0] : SES });
   });
   await page.route(`${SB}/rest/v1/players**`, r => r.fulfill({ json: PL }));
-  await page.route(`${SB}/rest/v1/dashboard_cards**`, r => r.fulfill({ json: [CARD_ACWR] }));
+  await page.route(`${SB}/rest/v1/dashboard_cards**`, r => r.fulfill({ json: [CARD_ACWR, CARD_TSB] }));
   await page.route(`${SB}/rest/v1/dashboards**`, r => {
     const acc = (r.request().headers()['accept'] || '').includes('object');
     const D = { id: 'd-ind', club_id: CLUB_ID, report_type: 'ind', name: 'Player Week', scope: 'squad', is_shared: true, created_by: null };
@@ -166,4 +170,17 @@ test('el eje no arranca antes del primer dato', async ({ page }) => {
   });
   expect(s.primero, 'el primer punto del eje no puede estar vacío').not.toBeNull();
   expect(s.ultimo, 'el último punto del eje no puede estar vacío').not.toBeNull();
+});
+
+test('la card Fitness/Fatiga/Forma dibuja sus tres curvas', async ({ page }) => {
+  // El cálculo es el de siempre (gpScience.trainingStressBalance); acá se comprueba que la card
+  // del builder lo enchufa bien y dibuja las TRES series, no una.
+  await montar(page);
+  await expect(page.locator('.gp-view.is-on .gp-c[data-card-id="c-tsb"]')).toHaveCount(1, { timeout: 25_000 });
+  await expect.poll(() => page.evaluate(() => {
+    const c = document.querySelector('.gp-c[data-card-id="c-tsb"] canvas');
+    const ch = c && window.Chart?.getChart?.(c);
+    if (!ch) return -1;
+    return (ch.data?.datasets || []).filter(d => (d.data || []).some(v => v != null)).length;
+  }), { timeout: 60_000 }).toBe(3);
 });

@@ -92,6 +92,9 @@
     // lo hace window.gpsACWR, el mismo motor que usaba la card fija, así que los números son los
     // de siempre. sessionOnly: un ejercicio suelto no tiene ventana de 28 días.
     acwr: { name: 'ACWR', icon: 'ti-activity-heartbeat', min: 1, max: 1, dimMax: 0, sessionOnly: true },
+    // Fitness / Fatiga / Forma: lo que venís acumulando contra el cansancio reciente, y la resta.
+    // Como el ACWR: el eje X es el tiempo, se elige la métrica base y el cálculo lo hace gpScience.
+    tsb: { name: 'Form', icon: 'ti-chart-area-line', min: 1, max: 1, dimMax: 0, sessionOnly: true },
   };
 
   // DIMENSIONS — fields you group / label / filter by (no aggregation).
@@ -3298,6 +3301,7 @@
       case 'dumbbell': mountDumbbellCard(container, config, series, { dumbbell: opts.dumbbell || null, dumbbellInfo: opts.dumbbellInfo || null, example: opts.example }); break;
       case 'diverging': mountDivergingCard(container, config, series, { example: opts.example }); break;
       case 'acwr':    mountAcwrCard(container, config, { acwr: opts.acwr || null, example: opts.example }); break;
+      case 'tsb':     mountTsbCard(container, config, { tsb: opts.tsb || null, example: opts.example }); break;
       default:        destroyBodyChart(container); container.innerHTML = renderTypeFromDataset(config, series, opts);
     }
   }
@@ -3547,12 +3551,14 @@
       // (los 28 días de crónica) y se la pide por su lado, trayendo sólo la columna de la métrica
       // base y sin joins. Sin este atajo la card pagaba ADEMÁS el fetch del período, que después
       // no miraba nadie. Sale por acá, con el mismo cierre que el flujo normal.
-      if (config.viz === 'acwr') {
-        let _acwrDatos = null;
-        try { _acwrDatos = await _buildAcwrData(config, ctx); }
-        catch (e) { console.warn('gpb acwr:', e); }
+      if (config.viz === 'acwr' || config.viz === 'tsb') {
+        let _datos = null;
+        try {
+          _datos = config.viz === 'acwr' ? await _buildAcwrData(config, ctx)
+                                         : await _buildTsbData(config, ctx);
+        } catch (e) { console.warn('gpb ' + config.viz + ':', e); }
         if (stale()) return;
-        _renderCardInto(body, config, [], { acwr: _acwrDatos });
+        _renderCardInto(body, config, [], config.viz === 'acwr' ? { acwr: _datos } : { tsb: _datos });
         cardEl.classList.remove('is-draft');
         clearTimeout(cardEl.__loadWatchdog);
         return;
@@ -4395,6 +4401,27 @@
 
   // Single seam for every Chart.js mount (bars/line/scatter/radar/…): create the chart and
   // wire its live-resize observer. Callers keep `body.__chart = _newChart(body, canvas, cfg)`.
+  // ── Estilo común de los gráficos ────────────────────────────────────────────────────────────
+  // Las cards nuevas elegían sus propios valores de rejilla, grises y grosor de línea, y se
+  // notaba: quedaban con otra pinta que las de al lado, como pegadas de afuera. Esto es lo que ya
+  // usaban las de barras y líneas, sacado a un solo lugar para que cualquier card nueva lo herede.
+  //   · rejilla SÓLO horizontal, muy tenue, y sin marcas de tick
+  //   · el eje X con borde, el Y sin borde
+  //   · los mismos grises de siempre para los números
+  const GPB_REJILLA = 'rgba(148,163,184,0.18)';
+  const GPB_GRIS_X  = '#6B7280';
+  const GPB_GRIS_Y  = '#9CA3AF';
+  /** Trazo de línea del proyecto: mismo grosor y misma curvatura en todas las cards. */
+  const GPB_LINEA   = { borderWidth: 2.4, tension: 0.25, pointRadius: 0, pointHoverRadius: 4 };
+  function _ejesGpb(x = {}, y = {}) {
+    return {
+      x: { grid: { display: false, drawTicks: false }, border: { display: true }, ...x,
+           ticks: { font: { size: 10.5 }, color: GPB_GRIS_X, maxRotation: 0, autoSkip: true, ...(x.ticks || {}) } },
+      y: { grid: { display: true, color: GPB_REJILLA, drawTicks: false }, border: { display: false }, ...y,
+           ticks: { font: { size: 10 }, color: GPB_GRIS_Y, padding: 6, ...(y.ticks || {}) } },
+    };
+  }
+
   function _newChart(body, canvas, cfg) {
     const chart = new Chart(canvas, cfg);
     _attachChartResize(body, chart);
@@ -7887,6 +7914,37 @@
     };
   }
 
+  // ── Fitness / Fatiga / Forma ────────────────────────────────────────────────────────────────
+  // Mismo criterio que el ACWR: el cálculo no se reescribe. window.gpScience.trainingStressBalance
+  // es el motor que ya usaba la card fija (medias exponenciales de 42 y 7 días), y la serie diaria
+  // sale del mismo sitio que la del ACWR.
+  async function _buildTsbData(config, ctx) {
+    const A = window.gpsACWR, S = window.gpScience;
+    const club = ctx?.clubId || _clubId;
+    if (!A || !S?.trainingStressBalance || !club) return null;
+    const metricKey = config?.metrics?.[0]?.id || 'player_load';
+    // 56 días es el piso: el CTL usa una ventana de 42 y por debajo de eso el arranque de la curva
+    // es un artefacto, no un dato.
+    const dias  = Math.max(56, Number(config?.style?.tsbDays) || 84);
+    const hasta = cmToday();
+    const desde = _acwrDiasAtras(hasta, dias);
+    const byPlayer = await A.fetchByPlayer({ clubId: club, metricKey, from: desde, to: hasta });
+    const permitidos = _acwrIds(config, ctx);
+    const usados = permitidos
+      ? Object.fromEntries(Object.entries(byPlayer || {}).filter(([pid]) => permitidos.has(String(pid))))
+      : (byPlayer || {});
+    const ids = Object.keys(usados);
+    if (!ids.length) return null;
+    // Una card de jugador dibuja SU curva; una de plantel, la media diaria del plantel.
+    const porJugador = ids.map(pid => A.dailyFill(usados[pid], desde, hasta));
+    const base = porJugador[0] || [];
+    const daily = base.map((d, i) => ({
+      date: d.date,
+      load: porJugador.reduce((acc, serie) => acc + (serie[i]?.load || 0), 0) / porJugador.length,
+    }));
+    return { serie: S.trainingStressBalance(daily), jugadores: ids.length };
+  }
+
   async function _buildDemandData(config, series) {
     const opts = _demandOpts(config);
     const out = [];
@@ -8305,8 +8363,7 @@
         datasets: [{
           label: 'ACWR', data: d.squadAcwr,
           borderColor: linea, backgroundColor: linea,
-          borderWidth: 2, pointRadius: 0, pointHoverRadius: 4,
-          tension: 0.3, spanGaps: false,
+          ...GPB_LINEA, spanGaps: false,
         }],
       },
       plugins: [bandas],
@@ -8314,14 +8371,9 @@
         responsive: true, maintainAspectRatio: false,
         layout: { padding: { top: 6, right: 4, bottom: 2, left: 2 } },
         interaction: { mode: 'index', intersect: false },
-        scales: {
-          x: { grid: { display: false },
-               ticks: { maxTicksLimit: 6, autoSkip: true, maxRotation: 0,
-                        font: { size: 10 }, callback(v) { return corta(this.getLabelForValue(v)); } } },
-          y: { min: yMin, max: yMax,
-               ticks: { stepSize: 0.5, font: { size: 10 } },
-               grid: { color: _cssVar('--cm-border-soft', 'rgba(0,0,0,.05)') } },
-        },
+        scales: _ejesGpb(
+          { ticks: { maxTicksLimit: 6, callback(v) { return corta(this.getLabelForValue(v)); } } },
+          { min: yMin, max: yMax, ticks: { stepSize: 0.5 } }),
         plugins: {
           legend: { display: false },
           tooltip: {
@@ -8355,6 +8407,60 @@
       + `<span style="font:500 10px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">· ${jugadores}</span>`;
     if (!body.style.position) body.style.position = 'relative';
     body.appendChild(b);
+  }
+
+  function mountTsbCard(body, config, opts = {}) {
+    destroyBodyChart(body);
+    const d = opts.tsb;
+    if (!d || !d.serie?.length) {
+      body.innerHTML = '';
+      showEmptyBody(body, _tt('gps_analysis.tsb_sin_datos',
+        'Not enough history yet: the fitness curve needs about six weeks of sessions.'), config);
+      return;
+    }
+    if (typeof Chart === 'undefined') { body.innerHTML = renderTypeFromDataset(config, []); return; }
+
+    // Los mismos tres colores que usaba la card fija, para que quien ya la leía la siga leyendo
+    // igual: verde lo que se acumula, ámbar el cansancio, violeta la resta de los dos.
+    const COL = { ctl: '#22C55E', atl: '#F59E0B', tsb: '#6366F1' };
+    const corta = (iso) => {
+      const dt = new Date(iso + 'T00:00:00');
+      if (isNaN(dt)) return iso;
+      try { return dt.toLocaleDateString(document.documentElement.lang || 'es',
+              { day: 'numeric', month: 'short' }); } catch (_) { return iso.slice(5); }
+    };
+    const canvas = _lienzoAlto(body, 230);
+    const eje = d.serie.map(p => p.date);
+
+    body.__chart = _newChart(body, canvas, {
+      type: 'line',
+      data: {
+        labels: eje,
+        datasets: [
+          { label: _tt('gps_analysis.tsb_forma', 'Form'), data: d.serie.map(p => p.tsb),
+            borderColor: COL.tsb, backgroundColor: 'rgba(99,102,241,0.10)', fill: true,
+            ...GPB_LINEA, order: 3 },
+          { label: _tt('gps_analysis.tsb_fitness', 'Fitness'), data: d.serie.map(p => p.ctl),
+            borderColor: COL.ctl, backgroundColor: 'transparent', ...GPB_LINEA, order: 1 },
+          { label: _tt('gps_analysis.tsb_fatiga', 'Fatigue'), data: d.serie.map(p => p.atl),
+            borderColor: COL.atl, backgroundColor: 'transparent', ...GPB_LINEA, order: 2 },
+        ],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        layout: { padding: { top: 6, right: 8 } },
+        interaction: { mode: 'index', intersect: false },
+        scales: _ejesGpb(
+          { ticks: { maxTicksLimit: 6, callback(v) { return corta(this.getLabelForValue(v)); } } },
+          { ticks: { callback: (v) => kfmt(v) } }),
+        plugins: {
+          legend: { display: true, position: 'bottom',
+            labels: { boxWidth: 20, boxHeight: 0, padding: 12, usePointStyle: true,
+                      pointStyle: 'line', font: { size: 11 } } },
+          tooltip: { callbacks: { title: (it) => corta(it[0]?.label || '') } },
+        },
+      },
+    });
   }
 
   function mountDivergingCard(body, config, series, opts = {}) {
@@ -9918,6 +10024,7 @@
     dumbbell: { name:'Change', icon:'ti-arrows-right-left', dimAx:'one row per (dim)', metAx:'metric to compare between the two dates' },
     diverging: { name:'Facing', icon:'ti-arrow-bar-both', dimAx:'one row per (dim)', metAx:'the two metrics to face off' },
     acwr:    { name:'ACWR', icon:'ti-activity-heartbeat', dimAx:'(el eje es el tiempo)', metAx:'métrica base (1)' },
+    tsb:     { name:'Form', icon:'ti-chart-area-line', dimAx:'(el eje es el tiempo)', metAx:'métrica base (1)' },
   };
   // Los tipos se ofrecen AGRUPADOS por la pregunta que contestan, no en una grilla suelta.
   // Cuando alguien va a armar una card no piensa «quiero un heatmap»: piensa «quiero ver quién se
@@ -9929,7 +10036,7 @@
     { id: 'reparto',    tipos: ['box', 'heatmap', 'scatter'] },
     { id: 'evolucion',  tipos: ['line', 'dumbbell'] },
     { id: 'referencia', tipos: ['kpi', 'gauge', 'demand', 'radar'] },
-    { id: 'carga',      tipos: ['acwr'] },
+    { id: 'carga',      tipos: ['acwr', 'tsb'] },
   ];
   const DD_FAM_NOMBRE = { comparar: 'Compare', reparto: 'Spread', evolucion: 'Over time',
                           referencia: 'Vs reference', carga: 'Load', otros: 'Other' };
