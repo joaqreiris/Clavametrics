@@ -278,7 +278,6 @@ const GP_CARD_DEFS = {
   ],
   mgrp: [
     // ── Default-visible card (científica de ejemplo) ──
-    { name: 'ACWR gauges',                    id: 'card-lm-gauges',      stub: false },
     // ── Not yet implemented ──
     { name: 'Us vs opponent',                 id: null, stub: true },
   ],

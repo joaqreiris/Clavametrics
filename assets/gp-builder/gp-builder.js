@@ -42,7 +42,10 @@
   // The row/X dimension defaults to player_name in the resolver when none picked.
   const VIZ_TYPES = {
     kpi:     { name: 'KPI',     icon: 'ti-number-123',   min: 1, max: 1,  dimMax: 0 },
-    gauge:   { name: 'Gauge',   icon: 'ti-gauge',        min: 1, max: 6,  dimMax: 0 },
+    // UNA sola métrica: el gauge se lee de un vistazo, y con varias agujas deja de decir algo
+    // claro. Las cards ya guardadas con más de una siguen dibujándose; lo que cambia es que el
+    // builder no deja agregar una segunda.
+    gauge:   { name: 'Gauge',   icon: 'ti-gauge',        min: 1, max: 1,  dimMax: 0 },
     // dimMax 2 → eje jerárquico (Fase A): nivel 1 agrupa, nivel 2 subdivide. El orden de
     // S.dimensions ES la jerarquía (reordenable por drag en el panel D&D).
     bars:    { name: 'Bars',    icon: 'ti-chart-bar',    min: 1, max: 6,  dimMax: 2 },
