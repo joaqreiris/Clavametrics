@@ -12,13 +12,24 @@ function ymd(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-async function mockDP(page, callDay) {
+async function mockDP(page, callDay, opts = {}) {
+  const posted = [];
   await mockBase(page);
   // Sin equipo activo no hay llamadas que pedir (la llamada es a UN equipo): hay que mockear
   // /teams y my_team_ids o la página se queda con _dpTeamId null y el spec culpa al roster.
   await page.route(`${SB}/rest/v1/rpc/**`, route => route.fulfill({ json: ['team-1'] }));
   await page.route(`${SB}/rest/v1/**`, async route => {
     const url = route.request().url();
+    // Las RPC son POST y van ANTES de la guarda de método: si caen al fallback, las atiende el
+    // route de my_team_ids y el panel recibe una lista de ids donde espera fichas de jugador.
+    if (url.includes('/rpc/call_up_candidates')) return route.fulfill({ json: [{
+      id: 'p-8', first_name: 'Tomás', last_name: 'Ruiz', number: 21, position: 'MF',
+      team_id: 'team-2', team_name: 'Second Team', can_call: true, photo_url: null,
+    }] });
+    if (route.request().method() === 'POST' && url.includes('/player_call_ups')) {
+      posted.push(JSON.parse(route.request().postData() || '[]'));
+      return route.fulfill({ status: 201, json: [] });
+    }
     if (route.request().method() !== 'GET') return route.fallback();
 
     if (url.includes('/player_call_ups')) {
@@ -40,6 +51,7 @@ async function mockDP(page, callDay) {
     if (url.includes('/training_sessions')) return route.fulfill({ json: [] });
     await route.fallback();
   });
+  return { posted };
 }
 
 test.describe('Daily Planning — llamados de otra categoría', () => {
@@ -63,5 +75,38 @@ test.describe('Daily Planning — llamados de otra categoría', () => {
     await page.dispatchEvent('#dpDateInput', 'change');
     await expect(page.locator('#dpSquadBody .dp-player[data-pid="p-9"]')).toHaveCount(0, { timeout: 10_000 });
     await expect(page.locator('#dpSquadBody .dp-player[data-pid="p-1"]')).toHaveCount(1);
+  });
+});
+
+// ── Llamar desde el día que estás planificando ───────────────────────────────
+// Mismo panel que Availability (assets/call-up-panel.js). Lo propio de acá: no hay que elegir
+// la fecha — es el día abierto — y al volver el llamado ya está en el grupo.
+test.describe('Daily Planning — llamar desde la sesión', () => {
+  test('el botón abre el panel y llama para el día abierto', async ({ page }) => {
+    const today = ymd(new Date());
+    await injectSession(page);
+    const { posted } = await mockDP(page, today);
+    await page.goto('/Daily%20Planning.html');
+    await page.waitForSelector('#dpSquadBody', { timeout: 15_000 });
+
+    await page.click('#dpCallUpBtn');
+    const panel = page.locator('#cmCuPanel');
+    await expect(panel).toHaveClass(/is-open/);
+    await expect(panel.locator('.cm-cu-list')).toContainText('Second Team');
+
+    // Un solo botón de confirmación: el día ya está decidido, no hay rango que elegir.
+    await expect(panel.locator('#cmCuActions button')).toHaveCount(1);
+    await panel.locator('.cm-cu-opt input[value="p-8"]').check();
+    const confirmar = panel.locator('#cmCuAct-day');
+    await expect(confirmar).toBeEnabled();
+    await confirmar.click();
+
+    await expect.poll(() => posted.length, { timeout: 10_000 }).toBeGreaterThan(0);
+    const rows = posted.flat();
+    expect(rows).toHaveLength(1);                      // un jugador, un día
+    expect(rows[0].player_id).toBe('p-8');
+    expect(rows[0].date).toBe(today);
+    expect(rows[0].team_id).toBe('team-1');
+    expect(rows[0].status).toBe('approved');           // categoría que manejo → directo
   });
 });

@@ -37,6 +37,7 @@
      paquete podía romper la app sin que tocáramos nada. -->
 <script src="assets/vendor/supabase-js-2.112.4.min.js"></script>
 <script src="assets/supabase-init.js"></script>
+<script src="assets/call-up-panel.js"></script>
 <script src="assets/sport-packs.js"></script>
 <script src="assets/sport.js"></script>
 <script src="lib/day-context.js"></script>
@@ -411,46 +412,6 @@
   .av-callup-req button.yes { background:var(--cm-success,#16A34A); border-color:var(--cm-success,#16A34A); color:#fff; }
   .av-callup-req button:disabled { opacity:.55; cursor:not-allowed; }
 
-  /* Panel «Llamar jugadores» */
-  .av-callup-panel { position:fixed; z-index:60; width:340px; max-height:min(70vh,520px); display:none; flex-direction:column;
-    background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:12px; box-shadow:var(--cm-shadow-lg,0 18px 40px rgba(15,23,42,.18)); overflow:hidden; }
-  .av-callup-panel.is-open { display:flex; }
-  .av-callup-panel .hd { display:flex; align-items:center; gap:8px; padding:10px 12px; border-bottom:1px solid var(--cm-border); font:600 12.5px/1 var(--cm-font-sans); color:var(--cm-fg-strong); }
-  .av-callup-panel .hd .x { margin-left:auto; border:0; background:transparent; color:var(--cm-fg-faint); cursor:pointer; font-size:15px; }
-  .av-callup-panel .sub { padding:8px 12px 0; color:var(--cm-fg-muted); font:500 11.5px/1.45 var(--cm-font-sans); }
-  .av-callup-panel .srch { padding:8px 12px; }
-  .av-callup-panel .srch input { width:100%; height:30px; padding:0 9px; border:1px solid var(--cm-border); border-radius:7px; background:var(--cm-bg-soft); color:var(--cm-fg-strong); font:500 12px var(--cm-font-sans); }
-  /* min-height:0 — sin eso el flex item no se deja encoger y el scroll interno no aparece:
-     la lista empuja el footer (los botones de confirmar) fuera del panel. */
-  .av-callup-list { flex:1; min-height:0; overflow-y:auto; padding:0 6px 6px; }
-  .av-callup-list .grp { padding:8px 6px 4px; color:var(--cm-fg-faint); font:600 9.5px/1 var(--cm-font-mono); letter-spacing:.06em; text-transform:uppercase; display:flex; align-items:center; gap:6px; }
-  .av-callup-list .grp .ask { color:#C2410C; background:rgba(234,88,12,0.12); border-radius:3px; padding:2px 5px; letter-spacing:.02em; }
-  .av-callup-opt { display:flex; align-items:center; gap:8px; padding:5px 6px; border-radius:6px; cursor:pointer; font:500 12px var(--cm-font-sans); color:var(--cm-fg-strong); }
-  .av-callup-opt:hover { background:var(--cm-bg-soft); }
-  .av-callup-opt .num { width:20px; text-align:center; color:var(--cm-fg-faint); font:600 11px var(--cm-font-mono); }
-  /* Cara del jugador en el picker: lista gente de OTRAS categorías, que es justamente a la que
-     el entrenador no le ve la cara. Sin foto queda en las iniciales, como el resto de la app. */
-  .av-cu-face { width:26px; height:26px; border-radius:50%; flex-shrink:0; display:flex; align-items:center; justify-content:center;
-    background:var(--cm-bg-sunk); border:1px solid var(--cm-border); color:var(--cm-fg-muted);
-    font:600 9.5px/1 var(--cm-font-sans); background-size:cover; background-position:center; overflow:hidden; }
-  .av-cu-face[data-cm-photo-src-done] { color:transparent; border-color:transparent; }
-  .av-cu-face.has-face { cursor:zoom-in; }
-  /* La ampliación va en un nodo suelto y position:fixed: dentro de la lista la recortaría el
-     overflow del scroll. */
-  .av-face-zoom { position:fixed; z-index:80; width:190px; border-radius:12px; overflow:hidden; display:none;
-    background:var(--cm-surface); border:1px solid var(--cm-border); box-shadow:0 18px 44px rgba(15,23,42,.24); pointer-events:none; }
-  .av-face-zoom.is-on { display:block; }
-  .av-face-zoom .img { width:190px; height:190px; background-size:cover; background-position:center top; background-color:var(--cm-bg-sunk); }
-  .av-face-zoom .cap { padding:7px 10px; }
-  .av-face-zoom .cap .n { font:600 12.5px/1.25 var(--cm-font-sans); color:var(--cm-fg-strong); }
-  .av-face-zoom .cap .s { margin-top:2px; font:500 11px/1.2 var(--cm-font-sans); color:var(--cm-fg-muted); }
-  .av-callup-panel .ft { border-top:1px solid var(--cm-border); padding:9px 12px; display:flex; flex-direction:column; gap:7px; }
-  .av-callup-panel .ft .when { color:var(--cm-fg-muted); font:500 11px/1.4 var(--cm-font-sans); }
-  .av-callup-panel .ft .row { display:flex; gap:6px; }
-  .av-callup-panel .ft button { flex:1; height:30px; border-radius:7px; border:1px solid var(--cm-border); background:var(--cm-bg-soft); color:var(--cm-fg-strong); font:600 11.5px var(--cm-font-sans); cursor:pointer; }
-  .av-callup-panel .ft button.primary { background:var(--cm-accent); border-color:var(--cm-accent); color:#fff; }
-  .av-callup-panel .ft button:disabled { opacity:.5; cursor:not-allowed; }
-  .av-callup-panel .empty { padding:14px 12px; color:var(--cm-fg-muted); font:500 11.5px/1.5 var(--cm-font-sans); }
 
   /* Status dot in cell */
   .av-cell-dot { width:14px; height:14px; border-radius:50%; display:inline-block; box-shadow:0 0 0 2.5px var(--cm-surface); transition:transform var(--cm-dur-1); }
@@ -709,23 +670,6 @@
         <div class="grow"></div>
         <button class="cm-btn is-sm" id="avCallUpBtn" onclick="avOpenCallUp(this)"><i class="ti ti-user-plus" style="font-size:14px"></i><span data-i18n="availability.callUpBtn">Call up</span></button>
         <button class="cm-btn is-primary is-sm"><i class="ti ti-pencil" style="font-size:14px"></i><span data-i18n="availability.editMode">Edit mode</span></button>
-      </div>
-
-      <!-- Panel «Llamar jugadores»: jugadores de otra categoría, solo por los días elegidos.
-           No crea membresía (player_teams no se toca) — ver migración 185. -->
-      <div class="av-face-zoom" id="avFaceZoom"><div class="img"></div><div class="cap"><div class="n"></div><div class="s"></div></div></div>
-      <div class="av-callup-panel" id="avCallUpPanel">
-        <div class="hd"><i class="ti ti-user-plus" style="font-size:14px"></i><span data-i18n="availability.callUpTitle">Call up players</span><button class="x" onclick="avCloseCallUp()"><i class="ti ti-x"></i></button></div>
-        <div class="sub" data-i18n="availability.callUpSub">From other squads, for the days you choose only. They don't join this squad.</div>
-        <div class="srch"><input id="avCallUpSearch" type="search" placeholder="Search player…" data-i18n-placeholder="availability.callUpSearch" oninput="avRenderCallUpList()"></div>
-        <div class="av-callup-list" id="avCallUpList"></div>
-        <div class="ft">
-          <div class="when" id="avCallUpWhen"></div>
-          <div class="row">
-            <button id="avCallUpSel" onclick="avDoCallUp('selection')"></button>
-            <button id="avCallUpAll" class="primary" onclick="avDoCallUp('range')"></button>
-          </div>
-        </div>
       </div>
 
       <!-- Legend -->
@@ -2492,18 +2436,18 @@
   window.avOnTeamChange = avOnTeamChange;
 
   // ══ Llamar jugadores de otra categoría (player_call_ups, migración 185) ══════════════════
-  // El pedido del cuerpo técnico: "que el jugador esté en el segundo equipo, pero que desde el
-  // primero podamos añadirlo cuando queramos, solo el día que nos interesa, no un añadido
-  // continuo". Por eso esto NO toca player_teams: la membresía es permanente y lo dejaría en
-  // la lista para siempre. Se registran los días, y nada más que los días.
-  let _avCallUpPool = null;      // fichas candidatas (lazy: se piden al abrir el panel)
-  let _avCallUpPick = new Set(); // seleccionados en el panel
+  // El panel en sí vive en assets/call-up-panel.js, compartido con Daily Planning: es el mismo
+  // acto (llamar o pedir un jugador de otra categoría) y no puede tener dos comportamientos.
+  // Lo único propio de esta pantalla son las FECHAS: acá salen de la grilla — las celdas que
+  // marcaste, o toda la semana visible.
+  let _avCallUpPool = [];        // candidatos, cacheados por el panel (se usan para los nombres
+                                 // de los pedidos enviados, que son de otras categorías)
   let _avPending    = [];        // pedidos de otras categorías por MIS jugadores (a decidir)
   let _avSent       = [];        // pedidos que MANDÉ y siguen sin respuesta (a cancelar)
 
-  // Fechas a las que aplica la llamada. 'selection' = las celdas marcadas en la grilla (sirve
-  // para "el martes y el jueves"); 'range' = los días del rango visible que TIENEN actividad
-  // planificada — llamar a alguien un día sin sesión ni partido no significa nada.
+  // 'selection' = las celdas marcadas en la grilla (sirve para "el martes y el jueves");
+  // 'range' = los días del rango visible que TIENEN actividad planificada — llamar a alguien
+  // un día sin sesión ni partido no significa nada.
   function avCallUpDates(mode) {
     if (mode === 'selection') {
       const out = new Set();
@@ -2513,282 +2457,30 @@
     return MC_DATES.filter(dayCountable);
   }
 
-  // Candidatos: TODAS las categorías del club, no solo las que veo. Las que no veo no se
-  // pueden llamar directo — se piden, y decide el entrenador que tiene al jugador. Por eso no
-  // sirve la tabla players (su RLS, con razón, no deja ver jugadores de otras categorías: ahí
-  // cuelgan ficha, lesiones y evaluaciones): call_up_candidates() devuelve lo mínimo para
-  // elegir a alguien de una lista — nombre, dorsal, puesto y categoría — y el flag can_call.
-  async function avLoadCallUpPool() {
-    if (_avCallUpPool) return _avCallUpPool;
-    if (!_avTeamId) { _avCallUpPool = []; return _avCallUpPool; }
-    try {
-      const { data, error } = await window.sb.rpc('call_up_candidates', { p_team: _avTeamId });
-      if (error) throw error;
-      // Quienes YA son de este plantel (membresía propia) no se llaman: ya están. Los llamados
-      // sí siguen en el pool — es la vía para sumarles otro día sin soltar los que ya tienen.
-      const squadIds = new Set(players.filter(p => !_avCalledUp.has(p.id)).map(p => p.id));
-      _avCallUpPool = (data || [])
-        .filter(p => !squadIds.has(p.id))
-        .map(p => ({ ...p, _srcTeam: p.team_id, _srcName: p.team_name, _needsOk: !p.can_call }))
-        .sort((a, b) => String(a.last_name || '').localeCompare(String(b.last_name || '')));
-    } catch (e) {
-      console.warn('[Availability] call-up pool:', e && e.message);
-      _avCallUpPool = [];
-    }
-    return _avCallUpPool;
-  }
-
-  function avRenderCallUpList() {
-    const box = document.getElementById('avCallUpList');
-    if (!box) return;
-    const pool = _avCallUpPool || [];
-    if (!pool.length) {
-      // Ya no depende de a qué categorías tengas acceso: la lista sale de call_up_candidates()
-      // y cubre todo el club. Vacía significa que no hay nadie más, no que te falten permisos.
-      box.innerHTML = `<div class="empty">${esc(tt('availability.callUpNoPlayers','No players available in other squads.'))}</div>`;
-      avUpdateCallUpFooter();
-      return;
-    }
-    const q = (document.getElementById('avCallUpSearch')?.value || '').trim().toLowerCase();
-    const match = p => !q || `${p.first_name || ''} ${p.last_name || ''} ${p.number ?? ''}`.toLowerCase().includes(q);
-    const byTeam = new Map();
-    pool.filter(match).forEach(p => {
-      const k = p._srcTeam || '';
-      if (!byTeam.has(k)) byTeam.set(k, []);
-      byTeam.get(k).push(p);
+  window.avOpenCallUp = function (btn) {
+    if (!window.cmCallUpPanel) return;
+    window.cmCallUpPanel.open({
+      anchor:   btn,
+      clubId:   CLUB_ID,
+      teamId:   _avTeamId,
+      teamName: _avTeamsById.get(_avTeamId)?.name || '',
+      // Los del plantel no se ofrecen (ya están). Los llamados SÍ: es la vía para sumarles otro
+      // día sin soltar los que ya tienen.
+      excludeIds:  new Set(players.filter(p => !_avCalledUp.has(p.id)).map(p => p.id)),
+      calledUpIds: _avCalledUp,
+      hint: (n) => {
+        const sel = avCallUpDates('selection');
+        return sel.length
+          ? tt('availability.callUpWhenSel', `${n} player(s) · selected days: ${sel[0]} → ${sel[sel.length-1]}`,
+               { count: n, from: sel[0], to: sel[sel.length - 1] })
+          : tt('availability.callUpWhenNoSel', `${n} player(s) · select cells in the grid to call them for specific days`, { count: n });
+      },
+      actions: [
+        { key: 'sel',   kind: 'selection', dates: () => avCallUpDates('selection') },
+        { key: 'range', kind: 'range', primary: true, dates: () => avCallUpDates('range') },
+      ],
+      onDone: () => { if (typeof init === 'function') init(); },
     });
-    if (!byTeam.size) { box.innerHTML = `<div class="empty">${esc(tt('availability.callUpNoMatch','No player matches that search.'))}</div>`; avUpdateCallUpFooter(); return; }
-    let html = '';
-    [...byTeam.entries()].forEach(([tid, list]) => {
-      // Categoría que no manejo → los jugadores se piden, no se llaman. Se avisa en el título
-      // del grupo, antes de elegir a nadie: enterarse después de apretar el botón es peor.
-      const needsOk = list.length && list.every(p => p._needsOk);
-      const okTag = needsOk
-        ? `<span class="ask">${esc(tt('availability.callUpNeedsOk','needs approval'))}</span>` : '';
-      html += `<div class="grp">${esc(list[0]?._srcName || _avTeamsById.get(tid)?.name || tt('availability.callUpOtherSquad','Other squad'))}${okTag}</div>`;
-      list.forEach(p => {
-        const nm = [(p.last_name || '').toUpperCase(), p.first_name || ''].filter(Boolean).join(' ');
-        const ini = [(p.last_name||'')[0], (p.first_name||'')[0]].filter(Boolean).join('').toUpperCase() || '?';
-        const already = _avCalledUp.has(p.id)
-          ? ` <span style="color:var(--cm-fg-faint);font:600 9.5px var(--cm-font-mono)">${esc(tt('availability.callUpAlready','already called'))}</span>` : '';
-        // data-cm-photo-src: el painter de supabase-init firma la ruta del bucket privado y la
-        // pinta cuando llega. Sin foto se queda en las iniciales.
-        const face = `<span class="av-cu-face${p.photo_url ? ' has-face' : ''}"${p.photo_url ? ` data-cm-photo-src="${avEscAttr(p.photo_url)}" data-face-id="${esc(p.id)}"` : ''}>${esc(ini)}</span>`;
-        html += `<label class="av-callup-opt"><input type="checkbox" value="${p.id}" ${_avCallUpPick.has(p.id) ? 'checked' : ''} onchange="avPickCallUp('${p.id}',this.checked)">${face}<span class="num">${esc(p.number ?? '—')}</span><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(nm)}</span>${already}</label>`;
-      });
-    });
-    box.innerHTML = html;
-    try { window.cmPaintPhotoSrcs && window.cmPaintPhotoSrcs(box); } catch (_) {}
-    avUpdateCallUpFooter();
-    avPlaceCallUp();   // filtrar cambia el alto del contenido
-  }
-  window.avRenderCallUpList = avRenderCallUpList;
-
-  // ── Ver la cara sin abrir nada ───────────────────────────────────────────────────────────
-  // El picker lista jugadores de otras categorías: el entrenador no siempre sabe quién es el
-  // que está tildando. Con el mouse encima del avatar se agranda la foto — sin click, porque
-  // clickear ahí tildaría el casillero (el avatar vive dentro del <label>).
-  let _avZoomTimer = null;
-  function avShowFace(el) {
-    const box = document.getElementById('avFaceZoom');
-    if (!box || !el) return;
-    const src = el.getAttribute('data-cm-photo-src');
-    if (!src) return;
-    const pid = el.getAttribute('data-face-id');
-    const p = (_avCallUpPool || []).find(x => String(x.id) === String(pid));
-    (async () => {
-      let url = '';
-      try { url = await window.cmPlayerPhotoUrlAsync({ id: pid, photo_url: src }); } catch (_) {}
-      if (!url || !el.isConnected || !el.matches(':hover')) return;   // se fue el mouse mientras firmaba
-      box.querySelector('.img').style.backgroundImage = `url('${String(url).replace(/'/g, "%27")}')`;
-      box.querySelector('.cap .n').textContent = p ? `${p.first_name || ''} ${p.last_name || ''}`.trim() : '';
-      box.querySelector('.cap .s').textContent = p
-        ? [p.number != null ? '#' + p.number : '', p.position || '', p.team_name || ''].filter(Boolean).join(' · ')
-        : '';
-      box.classList.add('is-on');
-      // Al costado del panel, del lado donde entre; si no entra a ninguno, encima del avatar.
-      const r = el.getBoundingClientRect();
-      const w = box.offsetWidth || 190, h = box.offsetHeight || 250;
-      const panel = document.getElementById('avCallUpPanel');
-      const pr = panel ? panel.getBoundingClientRect() : r;
-      let left = pr.left - w - 10;
-      if (left < 8) left = Math.min(pr.right + 10, window.innerWidth - w - 8);
-      box.style.left = Math.max(8, left) + 'px';
-      box.style.top  = Math.max(8, Math.min(r.top - 20, window.innerHeight - h - 8)) + 'px';
-    })();
-  }
-  function avHideFace() {
-    document.getElementById('avFaceZoom')?.classList.remove('is-on');
-  }
-  document.addEventListener('mouseover', e => {
-    const face = e.target.closest && e.target.closest('.av-cu-face.has-face');
-    clearTimeout(_avZoomTimer);
-    if (!face) { avHideFace(); return; }
-    // Un respiro antes de abrir: paseando el mouse por la lista, sin esto se prende y se apaga
-    // en cada fila.
-    _avZoomTimer = setTimeout(() => avShowFace(face), 180);
-  });
-
-  window.avPickCallUp = function (pid, on) {
-    if (on) _avCallUpPick.add(pid); else _avCallUpPick.delete(pid);
-    avUpdateCallUpFooter();
-  };
-
-  // ¿Cuántos de los elegidos hay que pedir (no son de una categoría mía)?
-  function avCallUpPendingPicked() {
-    const pool = _avCallUpPool || [];
-    return pool.filter(p => _avCallUpPick.has(p.id) && p._needsOk).length;
-  }
-
-  function avUpdateCallUpFooter() {
-    const n = _avCallUpPick.size;
-    const nAsk = avCallUpPendingPicked();
-    const selDates = avCallUpDates('selection');
-    const allDates = avCallUpDates('range');
-    const bSel = document.getElementById('avCallUpSel');
-    const bAll = document.getElementById('avCallUpAll');
-    const when = document.getElementById('avCallUpWhen');
-    if (!bSel || !bAll || !when) return;
-    // Con alguno que hay que pedir, el botón lo dice: "pedir" y "llamar" no son lo mismo y el
-    // resultado tampoco (uno entra al entrenamiento, el otro espera un sí).
-    const verbo = nAsk === n && n > 0 ? 'Ask' : (nAsk ? 'Mixed' : '');
-    bSel.textContent = verbo === 'Ask'
-      ? tt('availability.callUpAskForSelection', `Request · selected days (${selDates.length})`, { count: selDates.length })
-      : tt('availability.callUpForSelection', `Selected days (${selDates.length})`, { count: selDates.length });
-    bAll.textContent = verbo === 'Ask'
-      ? tt('availability.callUpAskForRange', `Request · whole range (${allDates.length})`, { count: allDates.length })
-      : tt('availability.callUpForRange', `Whole range (${allDates.length})`, { count: allDates.length });
-    bSel.disabled = !n || !selDates.length;
-    bAll.disabled = !n || !allDates.length;
-    // Aviso explícito cuando la selección mezcla: se llama a unos y se pide por otros.
-    if (n && nAsk) {
-      when.textContent = nAsk === n
-        ? tt('availability.callUpWhenAsk', `${nAsk} player(s) need their coach to approve`, { count: nAsk })
-        : tt('availability.callUpWhenMixed', `${n - nAsk} called up now · ${nAsk} need approval`, { direct: n - nAsk, ask: nAsk });
-      return;
-    }
-    when.textContent = !n
-      ? tt('availability.callUpPickSomeone', 'Pick at least one player.')
-      : (selDates.length
-          ? tt('availability.callUpWhenSel', `${n} player(s) · selected days: ${selDates[0]} → ${selDates[selDates.length-1]}`,
-               { count: n, from: selDates[0], to: selDates[selDates.length - 1] })
-          : tt('availability.callUpWhenNoSel', `${n} player(s) · select cells in the grid to call them for specific days`, { count: n }));
-  }
-
-  // Colocar el panel. Va aparte y se vuelve a llamar DESPUÉS de dibujar la lista porque al
-  // abrirlo el panel todavía está vacío: medirlo ahí da una altura chica, y cuando el contenido
-  // entra el panel crece hacia abajo y se va de la pantalla — con el footer (los botones de
-  // confirmar) fuera del viewport y sin forma de scrollear hasta él.
-  // El alto máximo sale del espacio REAL que queda, no de un 70vh fijo; si abajo no entra, se
-  // abre hacia arriba.
-  let _avCallUpAnchor = null;
-  function avPlaceCallUp(btn) {
-    const panel = document.getElementById('avCallUpPanel');
-    const a = btn || _avCallUpAnchor;
-    if (!panel || !a || !panel.classList.contains('is-open')) return;
-    _avCallUpAnchor = a;
-    const r = a.getBoundingClientRect();
-    const margen = 10;
-    const abajo  = window.innerHeight - r.bottom - margen;
-    const arriba = r.top - margen;
-    const haciaArriba = abajo < 280 && arriba > abajo;
-    const alto = Math.max(200, Math.min(520, (haciaArriba ? arriba : abajo) - 6));
-    panel.style.maxHeight = alto + 'px';
-    if (haciaArriba) { panel.style.top = 'auto'; panel.style.bottom = (window.innerHeight - r.top + 6) + 'px'; }
-    else             { panel.style.bottom = 'auto'; panel.style.top = (r.bottom + 6) + 'px'; }
-    // Alineado por el borde DERECHO del botón: el panel es más ancho que él y así no se va
-    // por el costado en pantallas angostas.
-    const w = panel.offsetWidth || 340;
-    panel.style.left = Math.max(8, Math.min(r.right - w, window.innerWidth - w - 8)) + 'px';
-  }
-
-  window.avOpenCallUp = async function (btn) {
-    const panel = document.getElementById('avCallUpPanel');
-    if (!panel) return;
-    if (panel.classList.contains('is-open')) return avCloseCallUp();
-    _avCallUpPick = new Set();
-    const sr = document.getElementById('avCallUpSearch'); if (sr) sr.value = '';
-    panel.classList.add('is-open');
-    avPlaceCallUp(btn);
-    document.getElementById('avCallUpList').innerHTML = `<div class="empty">${esc(tt('common.loading','Loading…'))}</div>`;
-    await avLoadCallUpPool();
-    avRenderCallUpList();
-    avPlaceCallUp(btn);           // ya con la lista dentro: acá es donde se decide el alto real
-    setTimeout(() => sr && sr.focus(), 30);
-  };
-
-  window.avCloseCallUp = function () {
-    document.getElementById('avCallUpPanel')?.classList.remove('is-open');
-    _avCallUpAnchor = null;
-    clearTimeout(_avZoomTimer);
-    avHideFace();
-  };
-  // La página scrollea con el panel abierto (la grilla es larga): el panel está anclado al
-  // botón, así que hay que reubicarlo o queda flotando lejos de su origen.
-  window.addEventListener('resize', () => avPlaceCallUp());
-  window.addEventListener('scroll', () => avPlaceCallUp(), { passive: true });
-  document.addEventListener('click', e => {
-    const panel = document.getElementById('avCallUpPanel');
-    if (!panel || !panel.classList.contains('is-open')) return;
-    if (panel.contains(e.target) || e.target.closest('#avCallUpBtn')) return;
-    avCloseCallUp();
-  });
-
-  window.avDoCallUp = async function (mode) {
-    const dates = avCallUpDates(mode);
-    const pids  = [..._avCallUpPick];
-    if (!pids.length || !dates.length) return;
-    const pool = _avCallUpPool || [];
-    // Los de una categoría que NO manejo se PIDEN: quedan a la espera y no entran a ningún
-    // roster. La base impone lo mismo (RLS), esto es solo para mandar el estado correcto y
-    // poder avisar a quien tiene que decidir.
-    const ask = new Set(pool.filter(p => _avCallUpPick.has(p.id) && p._needsOk).map(p => p.id));
-    const btn = document.getElementById(mode === 'selection' ? 'avCallUpSel' : 'avCallUpAll');
-    if (btn) { btn.disabled = true; btn.textContent = tt('common.saving','Saving…'); }
-    const res = await window.cmCallUpAdd(CLUB_ID, _avTeamId, pids, dates, ask);
-    avCloseCallUp();
-    if (!res.ok) { alert(tt('availability.callUpFailed','Could not call the players up: {err}', { err: res.error || '' })); return; }
-
-    // Avisos. Van después de guardar: si se grabó y el aviso falla, lo guardado sigue estando —
-    // al revés sería avisar de algo que no pasó.
-    // UNA notificación POR JUGADOR, no una por tanda: la del pedido se resuelve con un botón
-    // desde la campana, y para eso tiene que hablar de un jugador concreto.
-    const mine = _avTeamsById.get(_avTeamId)?.name || '';
-    const cuando = dates.length > 1 ? `${dates[0]} → ${dates[dates.length - 1]}` : dates[0];
-    const avisar = async (ids, tipo) => {
-      const lista = pool.filter(p => ids.has(p.id));
-      if (!lista.length) return;
-      const teams = [...new Set(lista.map(p => p._srcTeam))];
-      const who   = await window.cmCallUpDeciders(CLUB_ID, teams);
-      if (!who.length) return;
-      for (const p of lista) {
-        const nm = `${p.first_name || ''} ${p.last_name || ''}`.trim();
-        await window.cmNotifyCallUp(CLUB_ID, who,
-          tipo === 'call_up_request' ? `${mine} is asking for ${nm}` : `${mine} called up ${nm}`,
-          `${dates.length} day(s) · ${cuando}`,
-          tipo,
-          { kind: 'call_up', player_id: p.id, player: nm, team_id: _avTeamId, team: mine,
-            from: dates[0], to: dates[dates.length - 1], count: dates.length });
-      }
-    };
-    try {
-      if (ask.size) await avisar(ask, 'call_up_request');
-      // El llamado directo no se decide, pero el que tiene al jugador se tiene que enterar:
-      // mañana lo busca para su sesión y no está.
-      const direct = new Set(pids.filter(id => !ask.has(id)));
-      if (direct.size) await avisar(direct, 'call_up_direct');
-    } catch (e) { console.warn('[Availability] call-up notify:', e && e.message); }
-    if (ask.size) {
-      alert(res.called
-        ? tt('availability.callUpMixedDone', `${res.called} called up · ${res.requested} request(s) sent, waiting for their coach`, { direct: res.called, ask: res.requested })
-        : tt('availability.callUpAskDone', `${res.requested} request(s) sent. They won't show up here until their coach approves.`, { count: res.requested }));
-    }
-    // La llamada quedó, pero marcar su disponibilidad requiere ver también SU categoría. Si eso
-    // falló, el jugador aparece igual en la lista: lo que no pasa es que su equipo lo vea como
-    // "con otro equipo" ese día. Hay que decirlo — si no, los dos cuerpos técnicos lo cuentan.
-    if (res.availError) alert(tt('availability.callUpPartial','Called up, but their own squad was not updated ({err}). Ask an admin to check your access to that category.', { err: res.availError }));
-    _avCallUpPool = null;
-    if (typeof init === 'function') init();
   };
 
   // ══ Bandeja: me piden un jugador MÍO ═══════════════════════════════════════════════════
@@ -2811,9 +2503,12 @@
         const teams = _avPlayerTeams.get(String(r.player_id)) || [];
         if (teams.indexOf(_avTeamId) >= 0) _avPending.push(r);
       });
-      // Los jugadores pedidos son de otra categoría: sus nombres no están en el roster. El pool
-      // del picker es la única fuente que los tiene, así que se carga si hace falta.
-      if (_avSent.length) await avLoadCallUpPool();
+      // Los jugadores pedidos son de otra categoría: sus nombres no están en el roster. Los
+      // candidatos del panel son la única fuente que los tiene, así que se piden si hace falta
+      // (el módulo los cachea, así que abrir el panel después no vuelve a consultar).
+      if (_avSent.length && window.cmCallUpPanel) {
+        _avCallUpPool = await window.cmCallUpPanel.candidates(CLUB_ID, _avTeamId);
+      }
     } catch (e) { console.warn('[Availability] pending:', e && e.message); }
   }
 

@@ -672,6 +672,31 @@ async function _dpFetchSessParts(sessionId){
   } catch (_) {}
   return null;
 }
+// ── Llamar a un jugador de otra categoría, desde el día que estás planificando ─────────────
+// El panel es el mismo de Availability (assets/call-up-panel.js): el acto es idéntico y no
+// puede comportarse distinto según desde dónde se abra. Lo único propio de acá es la fecha —
+// no hay que elegirla, es el día que estás armando — y que al volver se recarga el día, así
+// el llamado aparece en el grupo sin que nadie refresque nada.
+function dpOpenCallUp(btn){
+  if (!window.cmCallUpPanel || !_dpTeamId || !_dpCurrentDate) return;
+  const teamName = (_dpTeams || []).find(t => t.id === _dpTeamId)?.name || '';
+  const bonito = _dpFmt(_dpCurrentDate);
+  window.cmCallUpPanel.open({
+    anchor: btn,
+    clubId: _dpClubId,
+    teamId: _dpTeamId,
+    teamName,
+    // Los del plantel ya están; los llamados de hoy siguen ofreciéndose, que es la vía para
+    // sumar a alguien más sin tocar lo que ya hay.
+    excludeIds:  new Set((_dpRoster || []).map(p => String(p.id))),
+    calledUpIds: _dpCalledUp,
+    hint: (n) => tt('daily_planning.call_up_hint', `${n} player(s) · for ${bonito}`, { count: n, date: bonito }),
+    actions: [{ key: 'day', kind: 'day', primary: true, dateLabel: bonito, dates: () => [_dpCurrentDate] }],
+    onDone: () => { loadDay(_dpCurrentDate); },
+  });
+}
+window.dpOpenCallUp = dpOpenCallUp;
+
 function dpOpenSessGroup(btn){
   const list = _dpGroupableSessions();
   if (!list.length) return;

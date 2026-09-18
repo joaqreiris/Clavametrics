@@ -154,15 +154,15 @@ test.describe('Availability — llamar jugadores de otra categoría', () => {
     await gotoGrid(page);
 
     await page.click('#avCallUpBtn');
-    const panel = page.locator('#avCallUpPanel');
+    const panel = page.locator('#cmCuPanel');
     await expect(panel).toHaveClass(/is-open/);
     // Agrupado por la categoría de origen, para que se vea de dónde sale el jugador.
-    await expect(panel.locator('.av-callup-list')).toContainText('Second Team');
-    const opt = panel.locator('.av-callup-opt input[value="p-9"]');
+    await expect(panel.locator('.cm-cu-list')).toContainText('Second Team');
+    const opt = panel.locator('.cm-cu-opt input[value="p-9"]');
     await expect(opt).toHaveCount(1);
 
     await opt.check();
-    const btnRange = page.locator('#avCallUpAll');
+    const btnRange = page.locator('#cmCuAct-range');
     await expect(btnRange).toBeEnabled();
     await btnRange.click();
 
@@ -185,17 +185,17 @@ test.describe('Availability — pedir un jugador a otra categoría', () => {
     await gotoGrid(page);
 
     await page.click('#avCallUpBtn');
-    const panel = page.locator('#avCallUpPanel');
+    const panel = page.locator('#cmCuPanel');
     // El aviso va en el grupo, antes de elegir a nadie.
-    await expect(panel.locator('.av-callup-list .grp .ask')).toHaveCount(1);
+    await expect(panel.locator('.cm-cu-list .grp .ask')).toHaveCount(1);
 
-    await panel.locator('.av-callup-opt input[value="p-9"]').check();
+    await panel.locator('.cm-cu-opt input[value="p-9"]').check();
     // El botón cambia de verbo: pedir y llamar no son lo mismo.
-    await expect(page.locator('#avCallUpAll')).toContainText(/Request|Pedir/i);
-    await expect(page.locator('#avCallUpWhen')).toContainText(/approve|aprob/i);
+    await expect(page.locator('#cmCuAct-range')).toContainText(/Request|Pedir/i);
+    await expect(page.locator('#cmCuWhen')).toContainText(/approve|aprob/i);
 
     page.on('dialog', d => d.accept());
-    await page.locator('#avCallUpAll').click();
+    await page.locator('#cmCuAct-range').click();
     await expect.poll(() => posted.length, { timeout: 10_000 }).toBeGreaterThan(0);
     const rows = posted.flat();
     expect(rows.every(r => r.status === 'pending')).toBe(true);
@@ -250,7 +250,7 @@ test.describe('Availability — el panel de llamada entra en la pantalla', () =>
     await gotoGrid(page);
 
     await page.click('#avCallUpBtn');
-    const panel = page.locator('#avCallUpPanel');
+    const panel = page.locator('#cmCuPanel');
     await expect(panel).toHaveClass(/is-open/);
 
     // El panel completo, dentro del viewport.
@@ -261,11 +261,11 @@ test.describe('Availability — el panel de llamada entra en la pantalla', () =>
     expect(caja.y + caja.height).toBeLessThanOrEqual(alto + 1);
 
     // Y el pie —donde están los botones que cierran la acción— alcanzable.
-    await expect(page.locator('#avCallUpAll')).toBeInViewport();
-    await expect(page.locator('#avCallUpSel')).toBeInViewport();
+    await expect(page.locator('#cmCuAct-range')).toBeInViewport();
+    await expect(page.locator('#cmCuAct-sel')).toBeInViewport();
 
     // La lista se hace cargo del sobrante con su propio scroll.
-    const scrollea = await page.locator('.av-callup-list').evaluate(el => el.scrollHeight > el.clientHeight + 2);
+    const scrollea = await page.locator('.cm-cu-list').evaluate(el => el.scrollHeight > el.clientHeight + 2);
     expect(scrollea).toBe(true);
   });
 });
@@ -360,16 +360,16 @@ test.describe('Availability — foto en el picker', () => {
     await gotoGrid(page);
     await page.click('#avCallUpBtn');
 
-    const face = page.locator('.av-callup-opt .av-cu-face').first();
+    const face = page.locator('.cm-cu-opt .cm-cu-face').first();
     await expect(face).toHaveCount(1);
     await expect(face).toHaveClass(/has-face/);
 
-    const zoom = page.locator('#avFaceZoom');
+    const zoom = page.locator('#cmCuZoom');
     await expect(zoom).toBeHidden();
     await face.hover();
     await expect(zoom).toBeVisible({ timeout: 5_000 });
     // El casillero NO se marcó: el avatar vive dentro del <label> y un click ahí lo tildaría.
-    await expect(page.locator('.av-callup-opt input[value="p-9"]')).not.toBeChecked();
+    await expect(page.locator('.cm-cu-opt input[value="p-9"]')).not.toBeChecked();
     // Y muestra de quién es la cara.
     await expect(zoom).toContainText('Zeta');
   });
@@ -378,10 +378,10 @@ test.describe('Availability — foto en el picker', () => {
     await mockAvail(page, { callUps: [], photo: null });
     await gotoGrid(page);
     await page.click('#avCallUpBtn');
-    const face = page.locator('.av-callup-opt .av-cu-face').first();
+    const face = page.locator('.cm-cu-opt .cm-cu-face').first();
     await expect(face).not.toHaveClass(/has-face/);
     await face.hover();
     await page.waitForTimeout(400);
-    await expect(page.locator('#avFaceZoom')).toBeHidden();
+    await expect(page.locator('#cmCuZoom')).toBeHidden();
   });
 });
