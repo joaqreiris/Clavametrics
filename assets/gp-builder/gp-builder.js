@@ -9912,13 +9912,28 @@
     radar:   { name:'Radar',   icon:'ti-chart-radar',  dimAx:'group (optional dim)',  metAx:'axes (metrics)' },
     ranking: { name:'Ranking', icon:'ti-list-numbers', dimAx:'entity (dim)',          metAx:'metric to rank' },
     table:   { name:'Table',   icon:'ti-table',        dimAx:'rows',                  metAx:'columns' },
-    heatmap: { name:'Heatmap', icon:'ti-layout-grid',  dimAx:'rows (dim)',            metAx:'columns (metrics)' },
+    heatmap: { name:'Heatmap', icon:'ti-grid-4x4',  dimAx:'rows (dim)',            metAx:'columns (metrics)' },
     box:     { name:'Box plot', icon:'ti-chart-candle', dimAx:'group (optional dim)',  metAx:'metric to spread' },
-    demand:  { name:'Match demand', icon:'ti-percentage', dimAx:'(no dimension)',        metAx:'metrics to compare vs the match' },
-    dumbbell: { name:'Before → after', icon:'ti-arrows-horizontal', dimAx:'one row per (dim)', metAx:'metric to compare between the two dates' },
-    diverging: { name:'Side by side', icon:'ti-arrow-bar-both', dimAx:'one row per (dim)', metAx:'the two metrics to face off' },
+    demand:  { name:'% match', icon:'ti-percentage', dimAx:'(no dimension)',        metAx:'metrics to compare vs the match' },
+    dumbbell: { name:'Change', icon:'ti-arrows-right-left', dimAx:'one row per (dim)', metAx:'metric to compare between the two dates' },
+    diverging: { name:'Facing', icon:'ti-arrow-bar-both', dimAx:'one row per (dim)', metAx:'the two metrics to face off' },
     acwr:    { name:'ACWR', icon:'ti-activity-heartbeat', dimAx:'(el eje es el tiempo)', metAx:'métrica base (1)' },
   };
+  // Los tipos se ofrecen AGRUPADOS por la pregunta que contestan, no en una grilla suelta.
+  // Cuando alguien va a armar una card no piensa «quiero un heatmap»: piensa «quiero ver quién se
+  // salió de lo normal». Y la familia de carga va aparte porque esos llevan umbrales y modelo
+  // detrás: no se eligen como se elige «unas barras».
+  // Un tipo que no figure acá NO desaparece: cae en «Otros» al final (ver ddToolbarHTML).
+  const DD_FAMILIAS = [
+    { id: 'comparar',   tipos: ['bars', 'ranking', 'table', 'diverging'] },
+    { id: 'reparto',    tipos: ['box', 'heatmap', 'scatter'] },
+    { id: 'evolucion',  tipos: ['line', 'dumbbell'] },
+    { id: 'referencia', tipos: ['kpi', 'gauge', 'demand', 'radar'] },
+    { id: 'carga',      tipos: ['acwr'] },
+  ];
+  const DD_FAM_NOMBRE = { comparar: 'Compare', reparto: 'Spread', evolucion: 'Over time',
+                          referencia: 'Vs reference', carga: 'Load', otros: 'Other' };
+
   let _bMode   = 'dd';       // el builder es SOLO Drag & drop (el Clásico fue eliminado); constante 'dd'
   let _ddQuery = '';         // texto del buscador del panel de campos
 
@@ -10186,11 +10201,20 @@
   // Toolbar: segmented de tipo (refleja S.type; cosmético por ahora).
   function ddToolbarHTML() {
     const cur = S && S.type;
-    return `<div class="bdd-bar">
-      <span class="lbl">${_tt('gps_analysis.builder_type_label', 'Type')}</span>
-      <div class="bdd-seg" id="gpbDDSeg">${Object.keys(DD_TYPES).filter(k => _typeAllowed(k, S?.source)).map(k =>
-        `<button data-type="${k}" class="${k === cur ? 'is-on' : ''}"><i class="ti ${DD_TYPES[k].icon}"></i>${_typeName(k)}</button>`).join('')}</div>
-    </div>`;
+    const libres = Object.keys(DD_TYPES).filter(k => _typeAllowed(k, S?.source));
+    const enFamilia = new Set(DD_FAMILIAS.flatMap(f => f.tipos));
+    // Red por si alguien agrega un tipo y se olvida de ponerlo en una familia: en vez de
+    // desaparecer del selector, aparece al final. Un tipo invisible ya pasó con el «antes → después».
+    const sueltos = libres.filter(k => !enFamilia.has(k));
+    const grupos = DD_FAMILIAS
+      .map(f => ({ id: f.id, tipos: f.tipos.filter(k => libres.includes(k)) }))
+      .filter(f => f.tipos.length)
+      .concat(sueltos.length ? [{ id: 'otros', tipos: sueltos }] : []);
+    const boton = (k) => `<button data-type="${k}" class="${k === cur ? 'is-on' : ''}" title="${esc(_typeName(k))}">`
+      + `<i class="ti ${DD_TYPES[k].icon}"></i><span>${esc(_typeName(k))}</span></button>`;
+    return `<div class="bdd-bar" id="gpbDDSeg">${grupos.map(f => `<div class="bdd-fam">`
+      + `<span class="bdd-fam-t">${esc(_tt('gps_analysis.builder_fam_' + f.id, DD_FAM_NOMBRE[f.id] || f.id))}</span>`
+      + `<div class="bdd-seg">${f.tipos.map(boton).join('')}</div></div>`).join('')}</div>`;
   }
 
   // Render del pane D&D — panel angosto (~380px) tipo Data Studio, apilado para que no tape

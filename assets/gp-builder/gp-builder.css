@@ -543,17 +543,30 @@ body.gpb-ddmode.gpb-open .gp-page { padding-right: min(380px, 96vw); }
 .bdd-dock .bdd-agg .car { right:4px; font-size:11px; }
 
 /* ── toolbar: tipo de gráfico + badge de config ── */
-.bdd-bar { display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+/* Los tipos van AGRUPADOS por la pregunta que contestan. Antes era una grilla suelta de 4
+   columnas: con catorce tipos la última fila quedaba coja, y los nombres largos («Side by side»)
+   partían en tres líneas dejando los botones de alturas distintas. */
+.bdd-bar { display:flex; flex-direction:column; gap:11px;
   background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-4);
-  box-shadow:var(--cm-shadow-1); padding:10px 12px; }
+  box-shadow:var(--cm-shadow-1); padding:11px 12px; }
 .bdd-bar .lbl { font:500 11px/1 var(--cm-font-sans); letter-spacing:0.08em; text-transform:uppercase; color:var(--cm-fg-faint); }
+.bdd-fam { display:flex; flex-direction:column; gap:6px; }
+.bdd-fam-t { font:600 9.5px/1 var(--cm-font-mono, var(--cm-font-sans)); letter-spacing:0.09em;
+  text-transform:uppercase; color:var(--cm-fg-faint); }
 /* 8 chart types → an even 4×2 grid (equal columns, consistent gaps) instead of a
    ragged wrapped flex row. */
-.bdd-seg { display:grid; grid-template-columns:repeat(4, 1fr); gap:4px; padding:4px; border:1px solid var(--cm-border); border-radius:var(--cm-r-3); background:var(--cm-bg-soft); }
-.bdd-seg button { display:inline-flex; align-items:center; justify-content:center; gap:7px; height:30px; padding:0 10px; min-width:0; border:0; border-radius:var(--cm-r-2);
-  background:transparent; color:var(--cm-fg-muted); font:500 12.5px/1 var(--cm-font-sans); cursor:pointer;
+.bdd-seg { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:4px; padding:4px;
+  border:1px solid var(--cm-border); border-radius:var(--cm-r-3); background:var(--cm-bg-soft); }
+/* Vertical y de ALTURA FIJA: el icono manda a la vista y el nombre queda en una sola línea,
+   recortado con puntos suspensivos si hiciera falta (el title lo dice entero). Así ningún botón
+   crece de más y la grilla mantiene el renglón. */
+.bdd-seg button { display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:5px; height:52px; padding:5px 3px; min-width:0; border:0; border-radius:var(--cm-r-2);
+  background:transparent; color:var(--cm-fg-muted); cursor:pointer;
   transition:background var(--cm-dur-1) var(--cm-ease), color var(--cm-dur-1) var(--cm-ease); }
-.bdd-seg button .ti { font-size:15px; }
+.bdd-seg button .ti { font-size:18px; line-height:1; }
+.bdd-seg button span { max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  font:500 10.5px/1.2 var(--cm-font-sans); }
 .bdd-seg button:hover { color:var(--cm-fg); }
 .bdd-seg button.is-on { background:var(--cm-surface); color:var(--cm-fg-strong); box-shadow:var(--cm-shadow-1); font-weight:600; }
 
