@@ -3556,6 +3556,26 @@
           _tt('gps_analysis.builder_resolver_missing', 'Chart engine failed to load. Reload the page.'), config);
         return;
       }
+      /** Lleva la serie del jugador a la MISMA escala que su referencia.
+       *
+       *  Las referencias de puesto, plantel y MD están normalizadas por exposición: un acumulado
+       *  mezcla cuánto jugó cada uno con cómo rindió, así que los volúmenes se comparan como
+       *  media POR SESIÓN. El valor de la celda, en cambio, sale de la agregación que eligió el
+       *  usuario — y con 'total' es la SUMA del rango entero. Comparar una suma de 24 sesiones
+       *  contra la media de una daba porcentajes absurdos y, con el z-score, desviaciones de
+       *  +20σ que sólo medían cuántas sesiones había jugado cada jugador. El radar ya hacía
+       *  esta conversión; kpi, gauge y heatmap no.
+       *  @returns {boolean} true si hubo que reescalar (la card lo avisa en el subtítulo). */
+      const _mismaEscalaQueLaReferencia = () => {
+        if (!(config.metrics || []).some(m => m.agg === 'total')) return false;
+        try {
+          const _avgCfg = { ...config, metrics: config.metrics.map(m => ({ ...m, agg: m.agg === 'total' ? 'avg' : m.agg })) };
+          const _avg = aggregateSeries(rows, eavMap, _avgCfg, catalogMap);
+          if (_avg && _avg.length) { series = _avg; return true; }
+        } catch (e) { console.warn('gpb reescalado por exposición:', e); }
+        return false;
+      };
+
       /** Mapa de referencia por métrica para kpi / gauge / heatmap: metricId → valor, con la
        *  dispersión del conjunto colgada en __sd (metricId → σ). Antes cada uno de los tres
        *  armaba su propio Map copiando SOLO los valores, con lo que la σ que el resolver ya
@@ -4060,6 +4080,7 @@
           let bmap = new Map();
           try { bmap = await _bmapDeComparacion(cmp); }
           catch (e) { console.warn('gpb kpi baseline:', e); }
+          if (bmap.size && _mismaEscalaQueLaReferencia()) drawOpts.porSesion = true;
           if (bmap.size) drawOpts.baselineMap = bmap;
         }
         if (stale()) return;
@@ -4082,6 +4103,7 @@
           let bmap = new Map();
           try { bmap = await _bmapDeComparacion(cmp); }
           catch (e) { console.warn('gpb gauge baseline:', e); }
+          if (bmap.size && _mismaEscalaQueLaReferencia()) drawOpts.porSesion = true;
           if (bmap.size) drawOpts.baselineMap = bmap;
         }
         if (stale()) return;
@@ -4115,6 +4137,7 @@
           let bmap = new Map();
           try { bmap = await _bmapDeComparacion(cmp); }
           catch (e) { console.warn('gpb heatmap baseline:', e); }
+          if (bmap.size && _mismaEscalaQueLaReferencia()) drawOpts.porSesion = true;
           if (bmap.size) drawOpts.baselineMap = bmap;
         }
         if (stale()) return;
@@ -4123,6 +4146,7 @@
       if (stale()) return;
       _renderCardInto(body, config, series, drawOpts);
       _taskDurationNote(body, config, rows);
+      _porSesionNote(body, drawOpts.porSesion);
       _delta2Note(body, _d2info, config, cardEl);
       cardEl.classList.remove('is-draft');
       clearTimeout(cardEl.__loadWatchdog);   // render completo: guardián de baja
@@ -4178,6 +4202,28 @@
             { lo: lo.toFixed(0), hi: hi.toFixed(0) })}`;
       // La nota se ancla al pie, así que el cuerpo tiene que ser su referencia: fuera del
       // tablero puede no serlo todavía.
+      if (!body.style.position) body.style.position = 'relative';
+      body.appendChild(note);
+      _noteRoom(body, note);
+    } catch (e) { /* un aviso nunca puede romper una card */ }
+  }
+
+  /** Aviso de que los volúmenes se están leyendo POR SESIÓN.
+   *
+   *  Cuando la card compara contra una referencia normalizada por exposición, las métricas
+   *  acumuladas dejan de ser la suma del rango para poder compararse (ver
+   *  _mismaEscalaQueLaReferencia). El número que ve el usuario cambia, así que se dice — si no,
+   *  la próxima pregunta es por qué «Total Distance · sum» muestra 4.000 y no 100.000. */
+  function _porSesionNote(body, activo) {
+    try {
+      if (!body || !activo) return;
+      if (body.querySelector(':scope > .gp-por-sesion-note')) return;
+      const note = document.createElement('div');
+      note.className = 'gp-por-sesion-note';
+      note.style.cssText = 'text-align:center;margin-top:2px;font:500 10.5px/1.3 var(--cm-font-sans);color:var(--cm-fg-muted)';
+      note.innerHTML = `<i class="ti ti-scale" style="font-size:11px;vertical-align:-1px"></i> ${
+        _tt('gps_analysis.gpb_por_sesion',
+            'Totals shown per session, to match the reference')}`;
       if (!body.style.position) body.style.position = 'relative';
       body.appendChild(note);
       _noteRoom(body, note);

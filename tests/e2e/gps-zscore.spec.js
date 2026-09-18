@@ -14,6 +14,9 @@ const PROFILE = { id: 'user-1', club_id: CLUB_ID, first_name: 'Test', last_name:
 const CLUB = { id: CLUB_ID, name: 'Test FC', primary_color: '#3B82F6', logo_url: null };
 const daysAgo = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); };
 const SESSIONS = [{ id: 's-a', club_id: CLUB_ID, session_date: daysAgo(3), session_type: 'training', team_id: null, microcycle_id: 'mc-a', is_historical: false }];
+// Tres sesiones: con métricas acumuladas ('sum') la celda pasa a ser la SUMA del rango, que es
+// donde el z se iba a +20σ porque la referencia venía normalizada por sesión.
+const SESIONES_3 = [1, 2, 3].map(n => ({ id: 's-' + n, club_id: CLUB_ID, session_date: daysAgo(n + 2), session_type: 'training', team_id: null, microcycle_id: 'mc-a', is_historical: false }));
 const MCS = [{ id: 'mc-a', club_id: CLUB_ID, name: 'MC 03', start_date: daysAgo(8), end_date: daysAgo(2), match_date: daysAgo(2), rival: 'A', home_away: 'home' }];
 
 // Cinco jugadores en progresión aritmética: μ = 1400 y σ muestral = 316,23 exactos.
@@ -23,21 +26,21 @@ const mk = (vals) => vals.map((v, i) => ({
   id: 'p' + i, club_id: CLUB_ID, first_name: 'Jug', last_name: 'Uno' + i,
   number: 10 + i, position: 'CB', positions: ['CB'], status: 'active', _v: v,
 }));
-const repDe = (players) => players.map(p => ({
-  player_id: p.id, session_id: 's-a', club_id: CLUB_ID, is_invalid: false, work_context: 'team',
+const repDe = (players, sesiones = SESSIONS) => sesiones.flatMap(ses => players.map(p => ({
+  player_id: p.id, session_id: ses.id, club_id: CLUB_ID, is_invalid: false, work_context: 'team',
   total_distance: p._v, high_speed_distance: 200, very_high_speed_distance: 80, sprint_distance: 10,
   sprint_count: 4, accelerations: 20, decelerations: 18, max_speed: 28, avg_speed: 6,
   player_load: 300, hmld: 400, time_played: 90, distance_per_minute: 60,
   players: { first_name: p.first_name, last_name: p.last_name, number: p.number, position: p.position, positions: p.positions },
-  training_sessions: { session_date: SESSIONS[0].session_date, session_attributes: null, microcycle_id: 'mc-a', team_id: null, session_type: 'training', match_day_offset: null, season_id: null },
-}));
+  training_sessions: { session_date: ses.session_date, session_attributes: null, microcycle_id: 'mc-a', team_id: null, session_type: 'training', match_day_offset: null, season_id: null },
+})));
 
-const card = (comparison) => ([{ id: 'card-z', position: 0, source: 'builder', size: 'lg', config: {
+const card = (comparison, agg = 'avg') => ([{ id: 'card-z', position: 0, source: 'builder', size: 'lg', config: {
   schema: 'gp.card/v1', title: 'Matriz', viz: 'heatmap', scope: { level: 'squad' },
-  metrics: [{ id: 'total_distance', agg: 'avg' }], range: { type: 'last30' },
+  metrics: [{ id: 'total_distance', agg }], range: { type: 'last30' },
   style: { color: '#15803D' }, comparison } }]);
 
-async function open(page, comparison, players = mk(VALORES)) {
+async function open(page, comparison, players = mk(VALORES), { agg = 'avg', sesiones = SESSIONS } = {}) {
   await page.route(`${SB}/rest/v1/**`, r => r.fulfill({ json: [], headers: { 'Content-Range': '0-0/0', 'Content-Type': 'application/json' } }));
   await page.route(`${SB}/auth/v1/**`, r => r.fulfill({ json: { access_token: 'test-token', user: { id: 'user-1', email: 'test@test.com' } } }));
   await page.route(`${SB}/rest/v1/profiles**`, r => r.fulfill({ json: [PROFILE] }));
@@ -47,14 +50,14 @@ async function open(page, comparison, players = mk(VALORES)) {
     { key: 'total_distance', label: 'Total Distance', unit: 'm', kind: 'accum', category: 'distance', is_core: true, decimals: 0, display_order: 1, squad_rollup: true },
   ] }));
   await page.route(`${SB}/rest/v1/microcycles**`, r => r.fulfill({ json: MCS }));
-  await page.route(`${SB}/rest/v1/training_sessions**`, r => r.fulfill({ json: SESSIONS }));
+  await page.route(`${SB}/rest/v1/training_sessions**`, r => r.fulfill({ json: sesiones }));
   await page.route(`${SB}/rest/v1/players**`, r => r.fulfill({ json: players }));
-  await page.route(`${SB}/rest/v1/gps_reports**`, r => r.fulfill({ json: repDe(players) }));
+  await page.route(`${SB}/rest/v1/gps_reports**`, r => r.fulfill({ json: repDe(players, sesiones) }));
   await page.route(`${SB}/rest/v1/dashboards**`, r => {
     const acc = r.request().headers()['accept'] || '';
     return r.fulfill({ json: acc.includes('object') ? DASH : [DASH] });
   });
-  await page.route(`${SB}/rest/v1/dashboard_cards**`, r => r.fulfill({ json: card(comparison) }));
+  await page.route(`${SB}/rest/v1/dashboard_cards**`, r => r.fulfill({ json: card(comparison, agg) }));
   await injectSession(page);
   await seedGpIds(page, CLUB_ID, 'user-1');
   await page.goto('/GPS Analysis.html');
@@ -99,5 +102,38 @@ test.describe('GPS · z-score contra el plantel', () => {
     const txt = await celdas(page);
     expect(txt.some(t => t.endsWith('σ'))).toBe(false);
     expect(txt.some(t => t.endsWith('%'))).toBe(true);
+  });
+
+  test('con métricas acumuladas el z NO se dispara: los dos lados van a la misma escala', async ({ page }) => {
+    // El bug que vio Joaquín en su club: columnas en «sum» sobre 24 sesiones daban +21σ, +22σ,
+    // +18σ… todos positivos. La celda era la SUMA del rango y la referencia venía normalizada
+    // POR SESIÓN, así que el z medía cuántas sesiones había jugado, no cómo había rendido.
+    await open(page, { baseline: 'squad', method: 'zscore' }, mk(VALORES), { agg: 'total', sesiones: SESIONES_3 });
+    const txt = await celdas(page);
+    const zs = txt.filter(t => t.endsWith('σ')).map(t => parseFloat(t));
+    expect(zs.length).toBeGreaterThan(0);
+    // Un z real vive en unidades de un dígito. Con el desajuste, el más chico ya pasaba de 10.
+    expect(Math.max(...zs.map(Math.abs))).toBeLessThan(4);
+    // Y sigue habiendo signo en los dos sentidos: no es que se haya aplanado todo a cero.
+    expect(zs.some(z => z > 0)).toBe(true);
+    expect(zs.some(z => z < 0)).toBe(true);
+  });
+
+  test('el porcentaje sufría el mismo desajuste, y también queda arreglado', async ({ page }) => {
+    // No es un problema del z-score: comparar una suma de N sesiones contra una referencia por
+    // sesión ya daba porcentajes de varios cientos en heatmap, kpi y gauge. El z sólo lo hizo
+    // visible. Con tres sesiones, lo correcto ronda ±30%, no ±300%.
+    await open(page, { baseline: 'squad', method: 'avg' }, mk(VALORES), { agg: 'total', sesiones: SESIONES_3 });
+    const txt = await celdas(page);
+    const pcts = txt.filter(t => t.endsWith('%')).map(t => parseFloat(t));
+    expect(pcts.length).toBeGreaterThan(0);
+    expect(Math.max(...pcts.map(Math.abs))).toBeLessThan(100);
+  });
+
+  test('avisa de que los totales se están leyendo por sesión', async ({ page }) => {
+    // El número que ve el usuario cambia (deja de ser la suma del rango): si no se dice, la
+    // pregunta siguiente es por qué «sum» muestra un valor mucho más chico del esperado.
+    await open(page, { baseline: 'squad', method: 'zscore' }, mk(VALORES), { agg: 'total', sesiones: SESIONES_3 });
+    await expect(page.locator('.gp-c[data-card-id="card-z"] .gp-por-sesion-note')).toBeVisible();
   });
 });

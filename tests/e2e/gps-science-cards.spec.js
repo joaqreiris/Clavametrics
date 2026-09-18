@@ -125,13 +125,15 @@ test('al llegar a la card, los datos históricos se piden', async ({ page }) => 
 test('si la card nace fuera de pantalla, sus datos no se piden hasta llegar a ella', async ({ page }) => {
   const { pedidos } = await montar(page);
   await expect(page.locator('#card-acwr')).toHaveCount(1, { timeout: 20_000 });
-  // Esperar a que la card esté DE VERDAD fuera del alcance del observador (su margen de precarga
-  // es de 800 px). Sin esto había una carrera: mientras el layout guardado se aplica, la card pasa
-  // un instante por una posición visible, el observador dispara y el test fallaba de a ratos.
+  // Esperar a que estén fuera de alcance TODAS las cards que el observador vigila, no sólo la
+  // del ACWR: el bloque histórico es uno solo para las cuatro, así que basta que cualquiera
+  // asome para que el pedido salga — y eso sería correcto. Mirando una sola, el test fallaba
+  // de a ratos por culpa de la de al lado (el layout del fixture monta también la de TSB).
   await expect.poll(() => page.evaluate(() => {
-    const c = document.querySelector('#card-acwr');
-    if (!c) return null;
-    return c.getBoundingClientRect().top > window.innerHeight + 900;
+    const ids = ['card-acwr', 'card-tsb', 'card-mc-heat', 'card-match-vs-train'];
+    const els = ids.map(i => document.getElementById(i)).filter(Boolean);
+    if (!els.length) return null;
+    return els.every(c => c.getBoundingClientRect().top > window.innerHeight + 900);
   }), { timeout: 20_000 }).toBe(true);
   // Y recién ahí, margen para que el pedido llegue si fuera a llegar.
   await page.waitForTimeout(3_000);
