@@ -41,11 +41,17 @@ async function mockAvail(page, opts = {}) {
     // `/rest/v1/rpc/**` propio, que quedaría muerto y devolviendo la lista vacía del final.
     // Y son dos distintas: my_team_ids devuelve ids sueltos, call_up_candidates fichas.
     if (url.includes('/rpc/')) {
-      if (url.includes('call_up_candidates')) return route.fulfill({ json: [{
-        id: 'p-9', first_name: GUEST.first_name, last_name: GUEST.last_name,
-        number: GUEST.number, position: GUEST.position,
-        team_id: 'team-2', team_name: 'Second Team', can_call: canCall,
-      }] });
+      if (url.includes('call_up_candidates')) {
+        const base = { team_id: 'team-2', team_name: 'Second Team', can_call: canCall };
+        const many = Array.from({ length: opts.extraCandidates || 0 }, (_, i) => ({
+          ...base, id: `x-${i}`, first_name: 'Extra', last_name: `Player ${String(i).padStart(2, '0')}`,
+          number: 40 + i, position: 'MF',
+        }));
+        return route.fulfill({ json: [{
+          id: 'p-9', first_name: GUEST.first_name, last_name: GUEST.last_name,
+          number: GUEST.number, position: GUEST.position, ...base,
+        }, ...many] });
+      }
       return route.fulfill({ json: ['team-1', 'team-2'] });
     }
 
@@ -79,7 +85,10 @@ async function mockAvail(page, opts = {}) {
       if (/status=eq\.pending/.test(url)) return route.fulfill({ json: pending });
       return route.fulfill({ json: callUps });
     }
-    if (url.includes('/notifications')) return route.fulfill({ status: 201, json: [] });
+    if (url.includes('/notifications')) {
+      if (method === 'GET') return route.fulfill({ json: opts.notifs || [] });
+      return route.fulfill({ status: 201, json: [] });
+    }
     if (url.includes('/member_teams'))  return route.fulfill({ json: [{ profile_id: 'user-1', team_id: 'team-2' }] });
 
     if (url.includes('/players')) {
@@ -221,5 +230,87 @@ test.describe('Availability — pedir un jugador a otra categoría', () => {
     });
     await gotoGrid(page);
     await expect(page.locator('#avCallUpInbox')).toBeHidden();
+  });
+});
+
+// ── El panel tiene que entrar en la pantalla ─────────────────────────────────
+// Se posicionaba al abrirlo, cuando todavía estaba vacío: medía poco, se anclaba debajo del
+// botón y después el contenido lo estiraba fuera del viewport. Los botones de confirmar
+// quedaban abajo de todo, invisibles, y la lista no scrolleaba hasta ellos.
+test.describe('Availability — el panel de llamada entra en la pantalla', () => {
+  test('con muchos candidatos y poca altura, el pie sigue visible y la lista scrollea', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 700 });
+    await mockAvail(page, { callUps: [], extraCandidates: 40 });
+    await gotoGrid(page);
+
+    await page.click('#avCallUpBtn');
+    const panel = page.locator('#avCallUpPanel');
+    await expect(panel).toHaveClass(/is-open/);
+
+    // El panel completo, dentro del viewport.
+    const caja = await panel.boundingBox();
+    const alto = await page.evaluate(() => window.innerHeight);
+    expect(caja).not.toBeNull();
+    expect(caja.y).toBeGreaterThanOrEqual(0);
+    expect(caja.y + caja.height).toBeLessThanOrEqual(alto + 1);
+
+    // Y el pie —donde están los botones que cierran la acción— alcanzable.
+    await expect(page.locator('#avCallUpAll')).toBeInViewport();
+    await expect(page.locator('#avCallUpSel')).toBeInViewport();
+
+    // La lista se hace cargo del sobrante con su propio scroll.
+    const scrollea = await page.locator('.av-callup-list').evaluate(el => el.scrollHeight > el.clientHeight + 2);
+    expect(scrollea).toBe(true);
+  });
+});
+
+// ── Resolver el pedido desde la campana ──────────────────────────────────────
+// El DT del filial recibe el aviso mientras hace otra cosa. Mandarlo a abrir Availability para
+// apretar un botón es fricción sobre alguien que no pidió nada: se resuelve desde el aviso.
+test.describe('Campana — aceptar el pedido sin salir de donde estás', () => {
+  const NOTIF = {
+    id: 'n-1', user_id: 'user-1', club_id: 'club-1', type: 'call_up_request',
+    title: 'First Team is asking for Nico Zeta', body: '1 day(s) · 2026-05-18',
+    read: false, link: '/Availability.html', created_at: new Date().toISOString(),
+    data: { kind: 'call_up', player_id: 'p-9', player: 'Nico Zeta', team_id: 'team-1',
+            team: 'First Team', from: CALL_DAY, to: CALL_DAY, count: 1 },
+  };
+
+  test('el aviso trae botones y aceptar manda la decisión', async ({ page }) => {
+    const { patched } = await mockAvail(page, {
+      callUps: [],
+      notifs: [NOTIF],
+      pending: [{ id: 'cu-9', player_id: 'p-9', team_id: 'team-1', date: CALL_DAY, created_by: 'user-9' }],
+    });
+    await gotoGrid(page);
+
+    // El botón de la campana es el que lleva el icono: hay varios .cm-icon-btn en la barra.
+    await page.locator('.cm-icon-btn:has(.ti-bell)').first().click();
+    const item = page.locator('.cm-ni[data-nid="n-1"]');
+    await expect(item).toBeVisible();
+    // El texto se compone en el cliente desde `data`, no se usa el title inglés de la base.
+    await expect(item).toContainText('Nico Zeta');
+    await expect(item.locator('[data-cu-act="yes"]')).toHaveCount(1);
+
+    await item.locator('[data-cu-act="yes"]').click();
+    await expect.poll(() => patched.length, { timeout: 10_000 }).toBeGreaterThan(0);
+    expect(patched[0].body.status).toBe('approved');
+    expect(patched[0].url).toContain('cu-9');
+    // Y el aviso queda resuelto en el lugar, sin botones para apretar dos veces.
+    await expect(item.locator('.cm-ni-done')).toHaveCount(1);
+    await expect(item.locator('[data-cu-act="yes"]')).toHaveCount(0);
+  });
+
+  test('un aviso de llamada DIRECTA no trae botones: es solo para enterarse', async ({ page }) => {
+    await mockAvail(page, {
+      callUps: [],
+      notifs: [{ ...NOTIF, id: 'n-2', type: 'call_up_direct', title: 'First Team called up Nico Zeta' }],
+    });
+    await gotoGrid(page);
+    await page.locator('.cm-icon-btn:has(.ti-bell)').first().click();
+    const item = page.locator('.cm-ni[data-nid="n-2"]');
+    await expect(item).toBeVisible();
+    await expect(item).toContainText('Nico Zeta');
+    await expect(item.locator('[data-cu-act]')).toHaveCount(0);
   });
 });

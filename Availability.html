@@ -417,7 +417,9 @@
   .av-callup-panel .sub { padding:8px 12px 0; color:var(--cm-fg-muted); font:500 11.5px/1.45 var(--cm-font-sans); }
   .av-callup-panel .srch { padding:8px 12px; }
   .av-callup-panel .srch input { width:100%; height:30px; padding:0 9px; border:1px solid var(--cm-border); border-radius:7px; background:var(--cm-bg-soft); color:var(--cm-fg-strong); font:500 12px var(--cm-font-sans); }
-  .av-callup-list { flex:1; overflow-y:auto; padding:0 6px 6px; }
+  /* min-height:0 — sin eso el flex item no se deja encoger y el scroll interno no aparece:
+     la lista empuja el footer (los botones de confirmar) fuera del panel. */
+  .av-callup-list { flex:1; min-height:0; overflow-y:auto; padding:0 6px 6px; }
   .av-callup-list .grp { padding:8px 6px 4px; color:var(--cm-fg-faint); font:600 9.5px/1 var(--cm-font-mono); letter-spacing:.06em; text-transform:uppercase; display:flex; align-items:center; gap:6px; }
   .av-callup-list .grp .ask { color:#C2410C; background:rgba(234,88,12,0.12); border-radius:3px; padding:2px 5px; letter-spacing:.02em; }
   .av-callup-opt { display:flex; align-items:center; gap:8px; padding:5px 6px; border-radius:6px; cursor:pointer; font:500 12px var(--cm-font-sans); color:var(--cm-fg-strong); }
@@ -2552,6 +2554,7 @@
     });
     box.innerHTML = html;
     avUpdateCallUpFooter();
+    avPlaceCallUp();   // filtrar cambia el alto del contenido
   }
   window.avRenderCallUpList = avRenderCallUpList;
 
@@ -2601,6 +2604,33 @@
           : tt('availability.callUpWhenNoSel', `${n} player(s) · select cells in the grid to call them for specific days`, { count: n }));
   }
 
+  // Colocar el panel. Va aparte y se vuelve a llamar DESPUÉS de dibujar la lista porque al
+  // abrirlo el panel todavía está vacío: medirlo ahí da una altura chica, y cuando el contenido
+  // entra el panel crece hacia abajo y se va de la pantalla — con el footer (los botones de
+  // confirmar) fuera del viewport y sin forma de scrollear hasta él.
+  // El alto máximo sale del espacio REAL que queda, no de un 70vh fijo; si abajo no entra, se
+  // abre hacia arriba.
+  let _avCallUpAnchor = null;
+  function avPlaceCallUp(btn) {
+    const panel = document.getElementById('avCallUpPanel');
+    const a = btn || _avCallUpAnchor;
+    if (!panel || !a || !panel.classList.contains('is-open')) return;
+    _avCallUpAnchor = a;
+    const r = a.getBoundingClientRect();
+    const margen = 10;
+    const abajo  = window.innerHeight - r.bottom - margen;
+    const arriba = r.top - margen;
+    const haciaArriba = abajo < 280 && arriba > abajo;
+    const alto = Math.max(200, Math.min(520, (haciaArriba ? arriba : abajo) - 6));
+    panel.style.maxHeight = alto + 'px';
+    if (haciaArriba) { panel.style.top = 'auto'; panel.style.bottom = (window.innerHeight - r.top + 6) + 'px'; }
+    else             { panel.style.bottom = 'auto'; panel.style.top = (r.bottom + 6) + 'px'; }
+    // Alineado por el borde DERECHO del botón: el panel es más ancho que él y así no se va
+    // por el costado en pantallas angostas.
+    const w = panel.offsetWidth || 340;
+    panel.style.left = Math.max(8, Math.min(r.right - w, window.innerWidth - w - 8)) + 'px';
+  }
+
   window.avOpenCallUp = async function (btn) {
     const panel = document.getElementById('avCallUpPanel');
     if (!panel) return;
@@ -2608,18 +2638,22 @@
     _avCallUpPick = new Set();
     const sr = document.getElementById('avCallUpSearch'); if (sr) sr.value = '';
     panel.classList.add('is-open');
-    const r = btn.getBoundingClientRect();
-    panel.style.top  = Math.max(8, Math.min(r.bottom + 6, window.innerHeight - panel.offsetHeight - 8)) + 'px';
-    panel.style.left = Math.max(8, Math.min(r.left - 200, window.innerWidth - panel.offsetWidth - 8)) + 'px';
+    avPlaceCallUp(btn);
     document.getElementById('avCallUpList').innerHTML = `<div class="empty">${esc(tt('common.loading','Loading…'))}</div>`;
     await avLoadCallUpPool();
     avRenderCallUpList();
+    avPlaceCallUp(btn);           // ya con la lista dentro: acá es donde se decide el alto real
     setTimeout(() => sr && sr.focus(), 30);
   };
 
   window.avCloseCallUp = function () {
     document.getElementById('avCallUpPanel')?.classList.remove('is-open');
+    _avCallUpAnchor = null;
   };
+  // La página scrollea con el panel abierto (la grilla es larga): el panel está anclado al
+  // botón, así que hay que reubicarlo o queda flotando lejos de su origen.
+  window.addEventListener('resize', () => avPlaceCallUp());
+  window.addEventListener('scroll', () => avPlaceCallUp(), { passive: true });
   document.addEventListener('click', e => {
     const panel = document.getElementById('avCallUpPanel');
     if (!panel || !panel.classList.contains('is-open')) return;
@@ -2642,20 +2676,36 @@
     avCloseCallUp();
     if (!res.ok) { alert(tt('availability.callUpFailed','Could not call the players up: {err}', { err: res.error || '' })); return; }
 
-    // Aviso a quien decide. Va después de guardar: si el pedido se grabó y el aviso falla, el
-    // pedido sigue estando — al revés sería un aviso de algo que no pasó.
-    if (ask.size) {
-      try {
-        const teams = [...new Set(pool.filter(p => ask.has(p.id)).map(p => p._srcTeam))];
-        const who   = await window.cmCallUpDeciders(CLUB_ID, teams);
-        const mine  = _avTeamsById.get(_avTeamId)?.name || '';
-        const names = pool.filter(p => ask.has(p.id))
-          .map(p => `${p.first_name || ''} ${p.last_name || ''}`.trim()).join(', ');
+    // Avisos. Van después de guardar: si se grabó y el aviso falla, lo guardado sigue estando —
+    // al revés sería avisar de algo que no pasó.
+    // UNA notificación POR JUGADOR, no una por tanda: la del pedido se resuelve con un botón
+    // desde la campana, y para eso tiene que hablar de un jugador concreto.
+    const mine = _avTeamsById.get(_avTeamId)?.name || '';
+    const cuando = dates.length > 1 ? `${dates[0]} → ${dates[dates.length - 1]}` : dates[0];
+    const avisar = async (ids, tipo) => {
+      const lista = pool.filter(p => ids.has(p.id));
+      if (!lista.length) return;
+      const teams = [...new Set(lista.map(p => p._srcTeam))];
+      const who   = await window.cmCallUpDeciders(CLUB_ID, teams);
+      if (!who.length) return;
+      for (const p of lista) {
+        const nm = `${p.first_name || ''} ${p.last_name || ''}`.trim();
         await window.cmNotifyCallUp(CLUB_ID, who,
-          tt('availability.callUpNotifyTitle', `${mine} is asking for ${ask.size} player(s)`, { team: mine, count: ask.size }),
-          tt('availability.callUpNotifyBody', `${names} · ${dates[0]}${dates.length > 1 ? ` → ${dates[dates.length-1]}` : ''}`,
-             { names: names, from: dates[0], to: dates[dates.length - 1] }));
-      } catch (e) { console.warn('[Availability] call-up notify:', e && e.message); }
+          tipo === 'call_up_request' ? `${mine} is asking for ${nm}` : `${mine} called up ${nm}`,
+          `${dates.length} day(s) · ${cuando}`,
+          tipo,
+          { kind: 'call_up', player_id: p.id, player: nm, team_id: _avTeamId, team: mine,
+            from: dates[0], to: dates[dates.length - 1], count: dates.length });
+      }
+    };
+    try {
+      if (ask.size) await avisar(ask, 'call_up_request');
+      // El llamado directo no se decide, pero el que tiene al jugador se tiene que enterar:
+      // mañana lo busca para su sesión y no está.
+      const direct = new Set(pids.filter(id => !ask.has(id)));
+      if (direct.size) await avisar(direct, 'call_up_direct');
+    } catch (e) { console.warn('[Availability] call-up notify:', e && e.message); }
+    if (ask.size) {
       alert(res.called
         ? tt('availability.callUpMixedDone', `${res.called} called up · ${res.requested} request(s) sent, waiting for their coach`, { direct: res.called, ask: res.requested })
         : tt('availability.callUpAskDone', `${res.requested} request(s) sent. They won't show up here until their coach approves.`, { count: res.requested }));
@@ -2736,12 +2786,16 @@
       const asker = [...new Set(rows.map(r => r.created_by).filter(Boolean))];
       const mine  = _avTeamsById.get(_avTeamId)?.name || '';
       await window.cmNotifyCallUp(CLUB_ID, asker,
-        yes ? tt('availability.inboxNotifyYes', `${mine} approved ${nm}`, { team: mine, name: nm })
-            : tt('availability.inboxNotifyNo',  `${mine} declined ${nm}`, { team: mine, name: nm }),
-        null);
+        yes ? `${mine} approved ${nm}` : `${mine} declined ${nm}`, null,
+        'call_up_decided',
+        { kind: 'call_up', accepted: !!yes, player: nm, player_id: playerId, team: mine, team_id: _avTeamId });
     } catch (e) { console.warn('[Availability] decide notify:', e && e.message); }
     if (typeof init === 'function') init();
   };
+
+  // Gancho para la campana: si el pedido se resolvió desde ahí estando en esta pantalla, la
+  // grilla y la bandeja tienen que reflejarlo sin que nadie recargue a mano.
+  window.avReloadAfterDecision = function () { if (typeof init === 'function') init(); };
 
   // Soltar al llamado: se va de la lista y su categoría lo recupera. Solo afecta al rango
   // visible — los días llamados fuera de la ventana no se tocan (no se ven, no se deciden).

@@ -1329,13 +1329,18 @@
   // Aviso en la campana. El pedido no puede depender de que alguien mire la pantalla de
   // disponibilidad justo ese día: el DT del filial se entera igual que con una lesión.
   // Best-effort — si falla, el pedido ya está guardado y se ve en la bandeja igual.
-  window.cmNotifyCallUp = async function (clubId, userIds, title, body) {
+  // `type` manda: 'call_up_request' es el único que la campana dibuja con botones para aceptar
+  // o negar ahí mismo; 'call_up_direct' y 'call_up_decided' son avisos y nada más.
+  // `data` lleva lo que hace falta para resolverlo sin abrir la pantalla (jugador, equipo que
+  // pide, rango) y para componer el texto en el idioma de QUIEN LO LEE — title/body van en
+  // inglés fijo porque la base no sabe en qué idioma se va a leer (ver _notifText en sidebar.js).
+  window.cmNotifyCallUp = async function (clubId, userIds, title, body, type, data) {
     const ids = [...new Set((userIds || []).filter(Boolean).map(String))];
     if (!clubId || !ids.length) return;
     try {
       const rows = ids.map(uid => ({
-        user_id: uid, club_id: clubId, type: 'call_up', title: title, body: body || null,
-        link: '/Availability.html',
+        user_id: uid, club_id: clubId, type: type || 'call_up', title: title, body: body || null,
+        link: '/Availability.html', data: data || null,
       }));
       const { error } = await window.sb.from('notifications').insert(rows);
       if (error) console.warn('[call-ups] notify:', error.message);

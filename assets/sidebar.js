@@ -60,6 +60,27 @@
         body: (zonas ? _ttx('shell.notif.discomfort_areas', 'Areas: {areas}', { areas: zonas }) : '') + nota + post,
       };
     }
+    // Llamadas entre categorías (migraciones 185/187). El cuándo se arma igual para los tres
+    // tipos: un día suelto se dice por su fecha, varios como rango con el total.
+    if (n && d && d.kind === 'call_up') {
+      const cuando = (d.count > 1 && d.from && d.to)
+        ? _ttx('shell.notif.callup_when', '{count} days · {from} → {to}', { count: d.count, from: d.from, to: d.to })
+        : (d.from || '');
+      if (n.type === 'call_up_request') return {
+        title: _ttx('shell.notif.callup_request', '{team} is asking for {player}', { team: d.team, player: d.player }),
+        body: cuando,
+      };
+      if (n.type === 'call_up_direct') return {
+        title: _ttx('shell.notif.callup_direct', '{team} called up {player}', { team: d.team, player: d.player }),
+        body: cuando,
+      };
+      if (n.type === 'call_up_decided') return {
+        title: d.accepted
+          ? _ttx('shell.notif.callup_yes', '{team} approved {player}', { team: d.team, player: d.player })
+          : _ttx('shell.notif.callup_no',  '{team} declined {player}', { team: d.team, player: d.player }),
+        body: cuando,
+      };
+    }
     return { title: (n && n.title) || '', body: (n && n.body) || '' };
   }
 
@@ -155,6 +176,11 @@ html.cm-rail .hub-nav-grip{display:none}
 .cm-ni-desc{font:500 11.5px/1.4 var(--cm-font-sans,sans-serif);color:var(--cm-fg-muted,#6b7280);margin-top:2px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
 .cm-ni-time{font:500 10.5px/1 var(--cm-font-mono,monospace);color:var(--cm-fg-faint,#9ca3af);margin-top:4px}
 .cm-ni-dot{width:7px;height:7px;border-radius:50%;background:#DC2626;flex-shrink:0;margin-top:3px;align-self:flex-start}
+.cm-ni-act{display:flex;gap:6px;margin-top:7px}
+.cm-ni-act button{height:26px;padding:0 10px;border-radius:6px;border:1px solid var(--cm-border,#e5e7eb);background:var(--cm-surface,#fff);color:var(--cm-fg-strong,#111827);font:600 11.5px var(--cm-font-sans);cursor:pointer}
+.cm-ni-act button.yes{background:#16A34A;border-color:#16A34A;color:#fff}
+.cm-ni-act button:disabled{opacity:.55;cursor:not-allowed}
+.cm-ni-done{margin-top:6px;font:600 11px var(--cm-font-sans);color:var(--cm-fg-muted,#6b7280)}
 .cm-np-foot{padding:10px 14px;border-top:1px solid var(--cm-border,#e5e7eb);display:flex;justify-content:center;flex-shrink:0}
 .cm-np-foot a{font:600 12px/1 var(--cm-font-sans,sans-serif);color:var(--cm-accent,#6366f1);text-decoration:none;padding:6px 12px;border-radius:6px}
 .cm-np-foot a:hover{background:var(--cm-bg-soft,#f4f4f5)}
@@ -754,7 +780,7 @@ html.cm-rail .hub-nav-grip{display:none}
   function _visibleNotifs() { return _notifData.filter(_passesTeamFilter); }
 
   function _notifIcon(type) {
-    const map = { physio: ['physio','ti-stethoscope'], task: ['task','ti-checkbox'], task_assigned: ['task','ti-checkbox'], task_completed: ['task','ti-checkbox'], injury: ['injury','ti-bandage'], session: ['session','ti-soccer-field'], player_birthday: ['birthday','ti-cake'], staff_birthday: ['birthday','ti-cake'], sanction_accumulation: ['injury','ti-cards'] };
+    const map = { physio: ['physio','ti-stethoscope'], task: ['task','ti-checkbox'], task_assigned: ['task','ti-checkbox'], task_completed: ['task','ti-checkbox'], injury: ['injury','ti-bandage'], session: ['session','ti-soccer-field'], player_birthday: ['birthday','ti-cake'], staff_birthday: ['birthday','ti-cake'], sanction_accumulation: ['injury','ti-cards'], call_up_request: ['session','ti-user-plus'], call_up_direct: ['session','ti-user-plus'], call_up_decided: ['session','ti-user-check'] };
     const [cls, icon] = map[type] || ['def','ti-bell'];
     return `<div class="cm-ni-ico ${cls}"><i class="ti ${icon}"></i></div>`;
   }
@@ -779,6 +805,58 @@ html.cm-rail .hub-nav-grip{display:none}
     badge.style.display = unread > 0 ? 'block' : 'none';
   }
 
+  // Pedidos ya resueltos DESDE la campana, por id de notificación: 'yes' | 'no' | 'gone'
+  // (gone = alguien lo resolvió antes, en la pantalla o desde otra campana).
+  const _cuResolved = {};
+  function _cuDoneText(v) {
+    if (v === 'yes')  return _ttx('shell.notif.callup_done_yes', 'Approved');
+    if (v === 'no')   return _ttx('shell.notif.callup_done_no', 'Declined');
+    return _ttx('shell.notif.callup_gone', 'Already resolved');
+  }
+
+  // Acepta o niega el pedido sin salir de donde estás. Las filas NO vienen en la notificación:
+  // se buscan ahora, pendientes, en el rango que avisó. Así una decisión ya tomada (o un pedido
+  // cancelado) no se puede aplicar dos veces ni reviven días que ya no están.
+  async function _decideCallUpFromNotif(btn) {
+    const nid = btn.dataset.cuNid, yes = btn.dataset.cuAct === 'yes';
+    const n = _notifData.find(x => String(x.id) === String(nid));
+    const d = n && n.data;
+    if (!d || !d.player_id || !d.team_id) return;
+    const box = btn.closest('.cm-ni-act');
+    box && box.querySelectorAll('button').forEach(b => { b.disabled = true; });
+    try {
+      const { data: rows, error } = await window.sb.from('player_call_ups')
+        .select('id, player_id, team_id, date')
+        .eq('club_id', n.club_id).eq('player_id', d.player_id).eq('team_id', d.team_id)
+        .eq('status', 'pending').gte('date', d.from).lte('date', d.to || d.from);
+      if (error) throw error;
+      if (!rows || !rows.length) { _cuResolved[nid] = 'gone'; _renderNotifList(); return; }
+      const res = await window.cmCallUpDecide(n.club_id, rows, yes ? 'approved' : 'rejected');
+      if (!res || !res.ok) throw new Error((res && res.error) || 'error');
+      _cuResolved[nid] = yes ? 'yes' : 'no';
+      // Avisar al que pidió, que está esperando para armar su semana.
+      try {
+        const asker = [...new Set(rows.map(r => r.created_by).filter(Boolean))];
+        if (asker.length && window.cmNotifyCallUp) {
+          await window.cmNotifyCallUp(n.club_id, asker,
+            `${d.team} ${yes ? 'approved' : 'declined'} ${d.player}`, null, 'call_up_decided',
+            { kind: 'call_up', accepted: yes, player: d.player, player_id: d.player_id, team: d.team, team_id: d.team_id });
+        }
+      } catch (_) {}
+      if (!n.read) {
+        n.read = true;
+        _updateNotifBadge();
+        try { await window.sb.from('notifications').update({ read: true }).eq('id', nid); } catch (_) {}
+      }
+      _renderNotifList();
+      // Si justo estás en Availability, la grilla y la bandeja tienen que reflejarlo ya.
+      if (typeof window.avReloadAfterDecision === 'function') { try { window.avReloadAfterDecision(); } catch (_) {} }
+    } catch (e) {
+      console.warn('[call-ups] decide from bell:', e && e.message);
+      box && box.querySelectorAll('button').forEach(b => { b.disabled = false; });
+    }
+  }
+
   function _renderNotifList() {
     const list = document.getElementById('cm-np-list');
     if (!list) return;
@@ -790,6 +868,17 @@ html.cm-rail .hub-nav-grip{display:none}
     }
     list.innerHTML = visible.map(n => {
       const txt = _notifText(n);
+      // El pedido de un jugador se resuelve DESDE ACÁ. Abrir Availability para apretar un botón
+      // es fricción sobre alguien que no pidió nada: el DT del filial recibe el aviso mientras
+      // hace otra cosa, y lo que necesita es decir que sí o que no.
+      const acciones = (n.type === 'call_up_request' && n.data && n.data.player_id)
+        ? (_cuResolved[n.id]
+            ? `<div class="cm-ni-done">${_escHtml(_cuDoneText(_cuResolved[n.id]))}</div>`
+            : `<div class="cm-ni-act">
+                 <button type="button" data-cu-act="no"  data-cu-nid="${_escHtml(n.id)}">${_escHtml(_ttx('shell.notif.callup_decline','Decline'))}</button>
+                 <button type="button" class="yes" data-cu-act="yes" data-cu-nid="${_escHtml(n.id)}">${_escHtml(_ttx('shell.notif.callup_accept','Approve'))}</button>
+               </div>`)
+        : '';
       return `
       <a class="cm-ni${n.read ? '' : ' unread'}" data-nid="${_escHtml(n.id)}" href="${_escHtml(_safeLink(n.link))}">
         ${_notifIcon(n.type)}
@@ -797,6 +886,7 @@ html.cm-rail .hub-nav-grip{display:none}
           <div class="cm-ni-title">${_escHtml(txt.title)}</div>
           ${txt.body ? `<div class="cm-ni-desc">${_escHtml(txt.body)}</div>` : ''}
           <div class="cm-ni-time">${_relTime(n.created_at)}</div>
+          ${acciones}
         </div>
         ${n.read ? '' : '<div class="cm-ni-dot"></div>'}
       </a>`;
@@ -913,6 +1003,10 @@ html.cm-rail .hub-nav-grip{display:none}
 
     // Notification item click → mark read, then navigate
     panel.addEventListener('click', async e => {
+      // Los botones de aceptar/negar viven DENTRO del <a> de la notificación: sin frenar acá,
+      // el click burbujea, marca leído y navega a Availability antes de resolver nada.
+      const act = e.target.closest('[data-cu-act]');
+      if (act) { e.preventDefault(); e.stopPropagation(); return _decideCallUpFromNotif(act); }
       const item = e.target.closest('.cm-ni[data-nid]');
       if (!item) return;
       const nid = item.dataset.nid;
