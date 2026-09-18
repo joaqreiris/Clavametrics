@@ -225,3 +225,35 @@ test('el selector de tipo se despliega, filtra y se cierra al elegir', async ({ 
   await page.locator('#gpbDDSeg .bdd-tit[data-type="table"]').click();
   await expect(page.locator('#gpbTypePop')).toBeHidden();
 });
+
+// Soltar un campo SOBRE el gráfico: antes había que apuntar a la zona correcta del panel, lo que
+// obliga a saber de antemano dónde va cada cosa. El campo tiene que acomodarse solo: una métrica
+// al eje de valores, una dimensión a agrupar.
+test('un campo soltado sobre el gráfico va solo a donde corresponde', async ({ page }) => {
+  await open(page);
+  await elegirTipo(page, 'bars');
+
+  const antes = await page.evaluate(() => {
+    const c = window.GpBuilder?.currentConfig?.() || {};
+    return { m: (c.metrics || []).length, d: (c.dimensions || []).length };
+  });
+
+  // Se simula el arrastre a mano: Playwright no encadena dragstart→drop entre elementos sueltos
+  // de forma fiable, y lo que se está probando es el destino, no el gesto del navegador.
+  const ok = await page.evaluate(() => {
+    const campo = document.querySelector('.bdd-field[data-id][data-kind]');
+    const card  = document.querySelector('.gp-c.is-draft, .gp-c.is-editing');
+    if (!campo || !card) return false;
+    const dt = new DataTransfer();
+    campo.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: dt }));
+    card.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: dt }));
+    card.dispatchEvent(new DragEvent('drop',     { bubbles: true, cancelable: true, dataTransfer: dt }));
+    return true;
+  });
+  expect(ok, 'no se encontró un campo o la card del borrador').toBe(true);
+
+  await expect.poll(async () => page.evaluate(() => {
+    const c = window.GpBuilder?.currentConfig?.() || {};
+    return (c.metrics || []).length + (c.dimensions || []).length;
+  }), { timeout: 10_000 }).toBeGreaterThan(antes.m + antes.d);
+});

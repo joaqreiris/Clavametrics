@@ -125,7 +125,15 @@ test('al llegar a la card, los datos históricos se piden', async ({ page }) => 
 test('si la card nace fuera de pantalla, sus datos no se piden hasta llegar a ella', async ({ page }) => {
   const { pedidos } = await montar(page);
   await expect(page.locator('#card-acwr')).toHaveCount(1, { timeout: 20_000 });
-  // Margen para que, si el pedido fuera a hacerse igual, dé tiempo a aparecer.
+  // Esperar a que la card esté DE VERDAD fuera del alcance del observador (su margen de precarga
+  // es de 800 px). Sin esto había una carrera: mientras el layout guardado se aplica, la card pasa
+  // un instante por una posición visible, el observador dispara y el test fallaba de a ratos.
+  await expect.poll(() => page.evaluate(() => {
+    const c = document.querySelector('#card-acwr');
+    if (!c) return null;
+    return c.getBoundingClientRect().top > window.innerHeight + 900;
+  }), { timeout: 20_000 }).toBe(true);
+  // Y recién ahí, margen para que el pedido llegue si fuera a llegar.
   await page.waitForTimeout(3_000);
   expect(pidioHistorico(pedidos)).toBe(false);
 

@@ -2266,6 +2266,49 @@
         ddSyncFromS();
       });
 
+      // ── Soltar un campo SOBRE EL GRÁFICO ──────────────────────────────────────────────────
+      // Hasta acá había que apuntar a la zona correcta del panel («Metrics» o «Dimensions»), que
+      // obliga a saber de antemano dónde va cada cosa. Soltándolo encima del dibujo, el campo va
+      // solo donde corresponde: una métrica al eje de valores, una dimensión a agrupar.
+      // No se decide nada acá: se llama a ddAddField, que es la misma que usa el panel y la que
+      // ya sabe de cupos, de roles (el scatter pide X e Y) y de la agregación por defecto.
+      const _cardBorrador = (el) => el && el.closest && el.closest('.gp-c.is-draft, .gp-c.is-editing');
+      document.addEventListener('dragover', (e) => {
+        const card = _cardBorrador(e.target);
+        if (!card || !_ddDrag) return;
+        e.preventDefault();                       // sin esto el navegador no deja soltar
+        e.dataTransfer.dropEffect = 'copy';
+        card.classList.add('gpb-drop-ok');
+      });
+      document.addEventListener('dragleave', (e) => {
+        const card = _cardBorrador(e.target);
+        // Sólo al salir de la card de verdad, no al pasar de un hijo a otro.
+        if (card && !card.contains(e.relatedTarget)) card.classList.remove('gpb-drop-ok');
+      });
+      document.addEventListener('drop', (e) => {
+        const card = _cardBorrador(e.target);
+        if (!card) return;
+        card.classList.remove('gpb-drop-ok');
+        if (!_ddDrag) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const { kind, id } = _ddDrag;
+        _ddDrag = null;
+        // Si el tipo no admite lo que se soltó (un KPI no lleva dimensiones), ddAddField no hace
+        // nada: mejor avisar que dejar al usuario mirando una card que no cambió.
+        const antes = JSON.stringify({ m: S?.metrics || [], d: S?.dimensions || [] });
+        ddAddField(kind, id);
+        const despues = JSON.stringify({ m: S?.metrics || [], d: S?.dimensions || [] });
+        if (antes === despues) {
+          const t = VIZ_TYPES[S?.type];
+          showToast(kind === 'dim' && t && t.dimMax === 0
+            ? _tt('gps_analysis.gpb_sin_dimensiones', 'This chart type takes no dimensions')
+            : _tt('gps_analysis.gpb_cupo_lleno', 'No room left for another field here'));
+          return;
+        }
+        ddSyncFromS();
+      });
+
       // quitar chip (×) + cambiar tipo (segmented) + métrica calculada (crear/editar/borrar)
       ddPane.addEventListener('click', e => {
         if (e.target.closest('[data-calc-add]')) { openCalcEditor(); return; }
