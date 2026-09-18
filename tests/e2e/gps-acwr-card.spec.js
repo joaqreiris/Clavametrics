@@ -23,6 +23,10 @@ const CARD_TSB = { id: 'c-tsb', position: 1, source: 'builder', size: 'md', conf
   schema: 'gp.card/v1', title: 'Forma', viz: 'tsb', scope: { level: 'squad' },
   metrics: [{ id: 'player_load', agg: 'avg' }], dimensions: [],
   range: { type: 'last30' }, style: {} } };
+const CARD_MONO = { id: 'c-mono', position: 2, source: 'builder', size: 'md', config: {
+  schema: 'gp.card/v1', title: 'Monotonía', viz: 'monotonia', scope: { level: 'squad' },
+  metrics: [{ id: 'player_load', agg: 'avg' }], dimensions: [],
+  range: { type: 'last30' }, style: {} } };
 
 const CLUB_ID = '11111111-1111-4111-8111-111111111111';
 const PROFILE = { id: 'user-1', club_id: CLUB_ID, first_name: 'T', last_name: 'U', full_name: 'T U', role: 'admin', club_role: 'admin' };
@@ -77,7 +81,7 @@ async function montar(page, layoutInd, layoutGrp) {
     return r.fulfill({ json: acc ? ord[0] : SES });
   });
   await page.route(`${SB}/rest/v1/players**`, r => r.fulfill({ json: PL }));
-  await page.route(`${SB}/rest/v1/dashboard_cards**`, r => r.fulfill({ json: [CARD_ACWR, CARD_TSB] }));
+  await page.route(`${SB}/rest/v1/dashboard_cards**`, r => r.fulfill({ json: [CARD_ACWR, CARD_TSB, CARD_MONO] }));
   await page.route(`${SB}/rest/v1/dashboards**`, r => {
     const acc = (r.request().headers()['accept'] || '').includes('object');
     const D = { id: 'd-ind', club_id: CLUB_ID, report_type: 'ind', name: 'Player Week', scope: 'squad', is_shared: true, created_by: null };
@@ -183,4 +187,28 @@ test('la card Fitness/Fatiga/Forma dibuja sus tres curvas', async ({ page }) => 
     if (!ch) return -1;
     return (ch.data?.datasets || []).filter(d => (d.data || []).some(v => v != null)).length;
   }), { timeout: 60_000 }).toBe(3);
+});
+
+test('la card Monotonía dibuja una barra por semana', async ({ page }) => {
+  // Lo que se protege: que agrupe por SEMANA (no por día ni por sesión) y que descarte las semanas
+  // sin nada que medir. Con 40 sesiones repartidas en 80 días tienen que salir varias barras, y
+  // todas con un valor razonable — la monotonía es media÷desvío, nunca negativa.
+  await montar(page);
+  await expect(page.locator('.gp-view.is-on .gp-c[data-card-id="c-mono"]')).toHaveCount(1, { timeout: 25_000 });
+  const vals = await (async () => {
+    await expect.poll(() => page.evaluate(() => {
+      const c = document.querySelector('.gp-c[data-card-id="c-mono"] canvas');
+      const ch = c && window.Chart?.getChart?.(c);
+      return (ch?.data?.datasets?.[0]?.data || []).length;
+    }), { timeout: 60_000 }).toBeGreaterThan(1);
+    return page.evaluate(() => {
+      const c = document.querySelector('.gp-c[data-card-id="c-mono"] canvas');
+      const ch = window.Chart.getChart(c);
+      return { datos: ch.data.datasets[0].data, etiquetas: ch.data.labels };
+    });
+  })();
+  expect(vals.datos.every(v => v > 0), 'la monotonía no puede ser cero ni negativa').toBe(true);
+  // Las etiquetas son lunes: agrupa por semana de verdad.
+  const lunes = vals.etiquetas.every(e => new Date(e + 'T00:00:00').getDay() === 1);
+  expect(lunes, `las barras no caen todas en lunes: ${vals.etiquetas.join(', ')}`).toBe(true);
 });

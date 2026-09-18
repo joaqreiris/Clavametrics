@@ -95,6 +95,8 @@
     // Fitness / Fatiga / Forma: lo que venís acumulando contra el cansancio reciente, y la resta.
     // Como el ACWR: el eje X es el tiempo, se elige la métrica base y el cálculo lo hace gpScience.
     tsb: { name: 'Form', icon: 'ti-chart-area-line', min: 1, max: 1, dimMax: 0, sessionOnly: true },
+    // Monotonía (Foster): media ÷ desvío de las cargas diarias, una barra por semana.
+    monotonia: { name: 'Monotony', icon: 'ti-wave-sine', min: 1, max: 1, dimMax: 0, sessionOnly: true },
   };
 
   // DIMENSIONS — fields you group / label / filter by (no aggregation).
@@ -1131,6 +1133,24 @@
     // The project has no server-side aggregates enabled, so we probe existence per column/key with
     // a limit-1 query instead of one count() aggregate. Bounded (~13 core + N custom), run fully
     // concurrently, once per club (cached below).
+    // El RPE y el s-RPE no viven en gps_reports ni en gps_report_metrics: tienen su propia tabla.
+    // En el catálogo figuran como métricas de columna (is_core), así que los chequeos de abajo no
+    // los encontraban nunca y el builder los ofrecía BLOQUEADOS, «sin datos», aunque el club cargue
+    // RPE todos los días. Ojo que la columna no se llama igual que la métrica: srpe vive en rpe.load.
+    const _RPE_COLS = { rpe: 'rpe', srpe: 'load' };
+    const rpeChecks = rows.filter(r => _RPE_COLS[r.key]).map(async (r) => {
+      try {
+        const { data, error } = await window.sb.from('rpe')
+          .select('id').eq('club_id', clubId).not(_RPE_COLS[r.key], 'is', null).limit(1);
+        if (error) throw error;
+        if (data && data.length) has.add(r.key);
+      } catch (e) {
+        // Mismo fail-open que el resto: no poder comprobarlo no es lo mismo que no tener datos.
+        console.warn(`[gp-builder] no se pudo comprobar "${r.key}" → se ofrece igual:`, e?.message || e);
+        has.add(r.key);
+      }
+    });
+
     const coreChecks = _CORE_DATA_COLS.map(async (col) => {
       try {
         const { data, error } = await window.sb.from('gps_reports')
@@ -1158,7 +1178,7 @@
         has.add(key);
       }
     });
-    await Promise.all([...coreChecks, ...customChecks]);
+    await Promise.all([...coreChecks, ...customChecks, ...rpeChecks]);
     _hasDataCache.set(clubId, has);
     return has;
   }
@@ -3302,6 +3322,7 @@
       case 'diverging': mountDivergingCard(container, config, series, { example: opts.example }); break;
       case 'acwr':    mountAcwrCard(container, config, { acwr: opts.acwr || null, example: opts.example }); break;
       case 'tsb':     mountTsbCard(container, config, { tsb: opts.tsb || null, example: opts.example }); break;
+      case 'monotonia': mountMonotoniaCard(container, config, { monotonia: opts.monotonia || null, example: opts.example }); break;
       default:        destroyBodyChart(container); container.innerHTML = renderTypeFromDataset(config, series, opts);
     }
   }
@@ -3551,14 +3572,16 @@
       // (los 28 días de crónica) y se la pide por su lado, trayendo sólo la columna de la métrica
       // base y sin joins. Sin este atajo la card pagaba ADEMÁS el fetch del período, que después
       // no miraba nadie. Sale por acá, con el mismo cierre que el flujo normal.
-      if (config.viz === 'acwr' || config.viz === 'tsb') {
+      // Los tipos de CARGA no se dibujan con las filas del período elegido: cada uno necesita su
+      // propia ventana larga y la pide por su lado. Sin este atajo pagarían ADEMÁS el fetch del
+      // período, que después no mira nadie.
+      if (config.viz === 'acwr' || config.viz === 'tsb' || config.viz === 'monotonia') {
+        const _constructor = { acwr: _buildAcwrData, tsb: _buildTsbData, monotonia: _buildMonotoniaData };
         let _datos = null;
-        try {
-          _datos = config.viz === 'acwr' ? await _buildAcwrData(config, ctx)
-                                         : await _buildTsbData(config, ctx);
-        } catch (e) { console.warn('gpb ' + config.viz + ':', e); }
+        try { _datos = await _constructor[config.viz](config, ctx); }
+        catch (e) { console.warn('gpb ' + config.viz + ':', e); }
         if (stale()) return;
-        _renderCardInto(body, config, [], config.viz === 'acwr' ? { acwr: _datos } : { tsb: _datos });
+        _renderCardInto(body, config, [], { [config.viz]: _datos });
         cardEl.classList.remove('is-draft');
         clearTimeout(cardEl.__loadWatchdog);
         return;
@@ -7945,6 +7968,72 @@
     return { serie: S.trainingStressBalance(daily), jugadores: ids.length };
   }
 
+  // ── Monotonía y strain (Foster) ─────────────────────────────────────────────────────────────
+  // monotonía = media ÷ desvío de las cargas diarias de la semana. Si entrenás parecido todos los
+  // días la monotonía sube, y eso se asocia a lesión aunque el volumen total esté bien.
+  // strain = carga total × monotonía.
+  // A diferencia de la card fija —que daba UN número del microciclo actual— acá va una barra por
+  // semana: lo que importa de la monotonía es si viene subiendo, no cuánto vale hoy.
+  const MONOTONIA_UMBRAL = 2;   // Foster: por encima de 2 se considera semana monótona
+  /** Lunes de la semana de una fecha ISO, como clave de agrupación.
+   *  Se formatea con cmYMD (fecha LOCAL) y no con toISOString: ese convierte a UTC, y en cualquier
+   *  huso al este de Greenwich la medianoche local cae el día anterior en UTC — las semanas salían
+   *  etiquetadas en domingo. */
+  function _lunesDe(iso) {
+    const d = new Date(iso + 'T00:00:00');
+    if (isNaN(d)) return iso;
+    const dia = (d.getDay() + 6) % 7;          // lunes = 0
+    d.setDate(d.getDate() - dia);
+    return window.cmYMD ? window.cmYMD(d)
+      : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+  async function _buildMonotoniaData(config, ctx) {
+    const A = window.gpsACWR;
+    const club = ctx?.clubId || _clubId;
+    if (!A || !club) return null;
+    const metricKey = config?.metrics?.[0]?.id || 'player_load';
+    const dias  = Math.max(28, Number(config?.style?.monoDays) || 84);
+    const hasta = cmToday();
+    const desde = _acwrDiasAtras(hasta, dias);
+    const byPlayer = await A.fetchByPlayer({ clubId: club, metricKey, from: desde, to: hasta });
+    const permitidos = _acwrIds(config, ctx);
+    const usados = permitidos
+      ? Object.fromEntries(Object.entries(byPlayer || {}).filter(([pid]) => permitidos.has(String(pid))))
+      : (byPlayer || {});
+    const ids = Object.keys(usados);
+    if (!ids.length) return null;
+
+    // Carga diaria del plantel (o del jugador, según el alcance de la card).
+    const porJugador = ids.map(pid => A.dailyFill(usados[pid], desde, hasta));
+    const base = porJugador[0] || [];
+    const diaria = base.map((d, i) => ({
+      date: d.date,
+      load: porJugador.reduce((acc, serie) => acc + (serie[i]?.load || 0), 0) / porJugador.length,
+    }));
+
+    const porSemana = new Map();
+    diaria.forEach(d => {
+      const k = _lunesDe(d.date);
+      if (!porSemana.has(k)) porSemana.set(k, []);
+      porSemana.get(k).push(d.load);
+    });
+
+    const filas = [];
+    for (const [semana, cargas] of [...porSemana.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+      // Los días de descanso (carga 0) CUENTAN: son justamente los que bajan la monotonía. Lo que
+      // se descarta es una semana sin ningún entrenamiento, que no tiene nada que medir.
+      if (!cargas.some(v => v > 0) || cargas.length < 2) continue;
+      const n = cargas.length;
+      const media = cargas.reduce((a, b) => a + b, 0) / n;
+      const sd = Math.sqrt(cargas.reduce((acc, v) => acc + (v - media) ** 2, 0) / n);
+      if (!(sd > 0)) continue;                  // todos los días iguales: la monotonía sería infinita
+      const mono = media / sd;
+      const total = cargas.reduce((a, b) => a + b, 0);
+      filas.push({ semana, mono: +mono.toFixed(2), strain: Math.round(total * mono), total: Math.round(total) });
+    }
+    return filas.length ? { filas, jugadores: ids.length } : null;
+  }
+
   async function _buildDemandData(config, series) {
     const opts = _demandOpts(config);
     const out = [];
@@ -8458,6 +8547,87 @@
             labels: { boxWidth: 20, boxHeight: 0, padding: 12, usePointStyle: true,
                       pointStyle: 'line', font: { size: 11 } } },
           tooltip: { callbacks: { title: (it) => corta(it[0]?.label || '') } },
+        },
+      },
+    });
+  }
+
+  function mountMonotoniaCard(body, config, opts = {}) {
+    destroyBodyChart(body);
+    const d = opts.monotonia;
+    if (!d || !d.filas?.length) {
+      body.innerHTML = '';
+      showEmptyBody(body, _tt('gps_analysis.mono_sin_datos',
+        'Not enough sessions yet: a week needs at least two days with data.'), config);
+      return;
+    }
+    if (typeof Chart === 'undefined') { body.innerHTML = renderTypeFromDataset(config, []); return; }
+
+    const umbral = Number(config?.style?.monoUmbral) > 0
+      ? Number(config.style.monoUmbral) : MONOTONIA_UMBRAL;
+    const OK    = config.style?.color || '#22C55E';
+    const ALTO  = '#F59E0B';
+    const corta = (iso) => {
+      const dt = new Date(iso + 'T00:00:00');
+      if (isNaN(dt)) return iso;
+      try { return dt.toLocaleDateString(document.documentElement.lang || 'es',
+              { day: 'numeric', month: 'short' }); } catch (_) { return iso.slice(5); }
+    };
+
+    const filas = d.filas;
+    const canvas = _lienzoAlto(body, 210);
+    const maxY = Math.max(umbral + 0.6, ...filas.map(f => f.mono)) + 0.2;
+
+    // La línea del umbral se pinta con un plugin y no con un dataset: así no aparece en la
+    // leyenda ni en el tooltip, que es ruido — es una referencia, no una serie.
+    const lineaUmbral = {
+      id: 'monoUmbral',
+      afterDatasetsDraw(chart) {
+        const { ctx, chartArea: a, scales } = chart;
+        if (!a || !scales?.y) return;
+        const y = scales.y.getPixelForValue(umbral);
+        if (y < a.top || y > a.bottom) return;
+        ctx.save();
+        ctx.strokeStyle = ALTO; ctx.lineWidth = 1.2; ctx.setLineDash([4, 4]);
+        ctx.beginPath(); ctx.moveTo(a.left, y); ctx.lineTo(a.right, y); ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = ALTO; ctx.font = '600 9.5px var(--cm-font-sans, sans-serif)';
+        ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
+        ctx.fillText(String(umbral), a.right - 2, y - 2);
+        ctx.restore();
+      },
+    };
+
+    body.__chart = _newChart(body, canvas, {
+      type: 'bar',
+      data: {
+        labels: filas.map(f => f.semana),
+        datasets: [{
+          label: _tt('gps_analysis.mono_label', 'Monotony'),
+          data: filas.map(f => f.mono),
+          backgroundColor: filas.map(f => (f.mono >= umbral ? ALTO : OK)),
+          borderRadius: 3, borderSkipped: false, maxBarThickness: 26,
+        }],
+      },
+      plugins: [lineaUmbral],
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        layout: { padding: { top: 6, right: 8 } },
+        scales: _ejesGpb(
+          { ticks: { maxTicksLimit: 8, callback(v) { return corta(this.getLabelForValue(v)); } } },
+          { beginAtZero: true, max: maxY, ticks: { stepSize: 0.5 } }),
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              title: (it) => corta(it[0]?.label || ''),
+              label: (i) => {
+                const f = filas[i.dataIndex] || {};
+                return [`${_tt('gps_analysis.mono_label', 'Monotony')} ${f.mono}`,
+                        `${_tt('gps_analysis.mono_strain', 'Strain')} ${kfmt(f.strain)}`];
+              },
+            },
+          },
         },
       },
     });
@@ -10025,6 +10195,7 @@
     diverging: { name:'Facing', icon:'ti-arrow-bar-both', dimAx:'one row per (dim)', metAx:'the two metrics to face off' },
     acwr:    { name:'ACWR', icon:'ti-activity-heartbeat', dimAx:'(el eje es el tiempo)', metAx:'métrica base (1)' },
     tsb:     { name:'Form', icon:'ti-chart-area-line', dimAx:'(el eje es el tiempo)', metAx:'métrica base (1)' },
+    monotonia: { name:'Monotony', icon:'ti-wave-sine', dimAx:'(una barra por semana)', metAx:'métrica base (1)' },
   };
   // Los tipos se ofrecen AGRUPADOS por la pregunta que contestan, no en una grilla suelta.
   // Cuando alguien va a armar una card no piensa «quiero un heatmap»: piensa «quiero ver quién se
@@ -10036,7 +10207,7 @@
     { id: 'reparto',    tipos: ['box', 'heatmap', 'scatter'] },
     { id: 'evolucion',  tipos: ['line', 'dumbbell'] },
     { id: 'referencia', tipos: ['kpi', 'gauge', 'demand', 'radar'] },
-    { id: 'carga',      tipos: ['acwr', 'tsb'] },
+    { id: 'carga',      tipos: ['acwr', 'tsb', 'monotonia'] },
   ];
   const DD_FAM_NOMBRE = { comparar: 'Compare', reparto: 'Spread', evolucion: 'Over time',
                           referencia: 'Vs reference', carga: 'Load', otros: 'Other' };

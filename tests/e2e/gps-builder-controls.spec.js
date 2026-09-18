@@ -181,7 +181,7 @@ test.describe('GPS · el selector ofrece todos los tipos', () => {
       // Los tipos que el builder sabe dibujar salen del propio selector más el que esté activo;
       // se comparan contra los botones visibles.
       const esperados = ['kpi', 'gauge', 'bars', 'line', 'scatter', 'radar', 'ranking',
-                         'table', 'heatmap', 'box', 'demand', 'dumbbell', 'diverging', 'acwr', 'tsb'];
+                         'table', 'heatmap', 'box', 'demand', 'dumbbell', 'diverging', 'acwr', 'tsb', 'monotonia'];
       return esperados.filter(t => !botones.has(t));
     });
     expect(faltan, 'hay tipos sin botón en el selector').toEqual([]);
