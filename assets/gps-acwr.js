@@ -270,11 +270,63 @@
     return byPlayer;
   }
 
+  // Caché compartido de la consulta de carga.
+  //
+  // Cada card de carga (ACWR, Forma, Monotonía, y el monitor) llamaba a fetchByPlayer por su
+  // cuenta, y cada llamada hace un par training_sessions + gps_reports del CLUB ENTERO sobre
+  // 42-84 días. Tres cards pedían tres veces exactamente los mismos datos. El servidor contesta
+  // esa consulta en ~180 ms (medido con RLS puesta), pero lanzadas todas juntas se pasan
+  // segundos EN COLA en el navegador: en un dashboard real se veían dos de 70 kB tardando
+  // 9,1 s y 7,6 s, que es casi todo espera.
+  //
+  // Se cachea la PROMESA, no el resultado, para que las llamadas simultáneas —que es el caso,
+  // porque las cards arrancan a la vez— compartan el viaje en lugar de sumar uno cada una.
+  const _cacheCarga = new Map();          // clave → { p, t, clubId, metricKey, from, to }
+  const CACHE_TTL_MS = 30_000;            // cubre la ráfaga de carga sin servir datos viejos
+
+  function limpiarCacheCarga() { _cacheCarga.clear(); }
+
+  /** Entrada viva cuyo rango CONTIENE al pedido (misma métrica y club).
+   *  Cada tipo de card mira su propia ventana hacia atrás, así que las claves no siempre
+   *  coinciden exactas aunque los datos se solapen casi del todo. Reutilizar la consulta más
+   *  amplia y recortar por fecha convierte una consulta por card en una sola para todas. */
+  function _contenedorVivo(clubId, metricKey, from, to, ahora) {
+    for (const e of _cacheCarga.values()) {
+      if (ahora - e.t > CACHE_TTL_MS) continue;
+      if (e.clubId !== clubId || e.metricKey !== metricKey) continue;
+      if (e.from <= from && e.to >= to) return e;
+    }
+    return null;
+  }
+
   async function fetchByPlayer({ clubId, metricKey, from, to }) {
     const metric = getMetric(metricKey);
-    return metric.source === 'rpe'
-      ? _fetchRpe(clubId, metric, from, to)
-      : _fetchGps(clubId, metric, from, to);
+    const clave = [clubId, metric.key, from, to].join('|');
+    const ahora = Date.now();
+    let e = _cacheCarga.get(clave);
+    if (e && ahora - e.t > CACHE_TTL_MS) { _cacheCarga.delete(clave); e = null; }
+    if (!e) e = _contenedorVivo(clubId, metric.key, from, to, ahora);
+    if (!e) {
+      const p = metric.source === 'rpe'
+        ? _fetchRpe(clubId, metric, from, to)
+        : _fetchGps(clubId, metric, from, to);
+      e = { p, t: ahora, clubId, metricKey: metric.key, from, to };
+      _cacheCarga.set(clave, e);
+      // Un fallo no puede quedar cacheado: el siguiente intento tiene que volver a pedir.
+      p.catch(() => { if (_cacheCarga.get(clave) === e) _cacheCarga.delete(clave); });
+    }
+    const byPlayer = await e.p;
+    // Copia por jugador, recortada al rango PEDIDO (la entrada reutilizada puede ser más ancha).
+    // El resultado se comparte y algún consumidor podría ordenar o recortar su lista; copiar los
+    // arrays cuesta microsegundos contra los segundos de la consulta que evitamos.
+    const out = {};
+    for (const k in byPlayer) {
+      const arr = byPlayer[k];
+      if (!Array.isArray(arr)) { out[k] = arr; continue; }
+      const rec = arr.filter(x => x && x.date >= from && x.date <= to);
+      if (rec.length) out[k] = rec;
+    }
+    return out;
   }
 
   // Raw fetch of ALL columns once, so multi-metric callers (player/team cards)
@@ -471,7 +523,7 @@
     // pure core
     dailyFill, acwrFromDaily, acwrForRecords, squadTimeline,
     // data + high level
-    fetchByPlayer, calculateSquad, calculateSquadTimeline,
+    fetchByPlayer, limpiarCacheCarga, calculateSquad, calculateSquadTimeline,
     // legacy
     ACWR_METRICS: METRICS, ACWR_ZONES: ZONES, calculateTeamACWR, calculatePlayerACWR,
   };

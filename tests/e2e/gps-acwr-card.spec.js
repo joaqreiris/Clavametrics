@@ -233,3 +233,32 @@ test('la curva de Forma no arranca con el tramo plano en cero', async ({ page })
   expect(primeros.largo, 'la curva quedó vacía').toBeGreaterThan(5);
   expect(primeros.primero, 'el primer punto de fitness sigue siendo cero').toBeGreaterThan(0);
 });
+
+// Las tres cards de carga (ACWR, Forma, Monotonía) usan el MISMO motor y, en este dashboard, la
+// MISMA métrica y el mismo rango. Cada una pedía su propio par training_sessions + gps_reports
+// del club entero: tres veces exactamente los mismos datos. En el club de Joaquín eso se veía
+// como dos consultas de 70 kB casi idénticas tardando 9,1 s y 7,6 s, y una tercera detrás —
+// tiempo que es casi todo COLA en el navegador, porque el servidor contesta esa consulta en
+// ~180 ms medido con RLS puesta.
+test('tres cards de carga con la misma métrica comparten la consulta, no la repiten', async ({ page }) => {
+  const { pedidos } = await montar(page);
+  // Esperar a que las tres hayan resuelto: la última en dibujar es la que cerraría el ciclo.
+  for (const id of ['c-acwr', 'c-tsb', 'c-mono']) {
+    await expect(page.locator(`.gp-view.is-on .gp-c[data-card-id="${id}"]`)).toHaveCount(1, { timeout: 25_000 });
+  }
+  await expect.poll(() => page.evaluate(() =>
+    ['c-acwr', 'c-tsb', 'c-mono'].filter(id =>
+      document.querySelector(`.gp-c[data-card-id="${id}"] canvas`)).length
+  ), { timeout: 60_000 }).toBe(3);
+  // Margen para que, si hubiera consultas repetidas en camino, lleguen a aparecer.
+  await page.waitForTimeout(1_500);
+
+  // Contar por la ETIQUETA del propio motor ('acwr.gps'), no por el aspecto de la URL: hay otros
+  // bloques de la página que piden gps_reports con columnas parecidas, y mezclarlos hacía que
+  // este test midiera cosas que no son suyas.
+  const viajesMotor = await viajes(page, 'acwr.gps');
+  expect(viajesMotor).toBe(1);
+  // Y que el ahorro no sea "no pedir nunca": las tres cards tienen que haber dibujado, cosa que
+  // ya se exigió arriba.
+  expect(pedidos.some(u => u.includes('gps_reports'))).toBe(true);
+});

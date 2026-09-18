@@ -183,3 +183,28 @@ test('un partido todavía no jugado no viaja en la consulta', async ({ page }) =
   expect(conFechas.some(u => u.includes(futuro)),
     `la fecha futura ${futuro} viajó en la consulta`).toBe(false);
 });
+
+// Las fechas de partido las pregunta CADA card al dibujarse. Había caché, pero se rellenaba
+// cuando la consulta ya había vuelto: como las cards arrancan todas a la vez, todas lo
+// encontraban vacío y todas pedían lo mismo. En un dashboard real se veía calendar_events
+// repetido cinco veces con la misma URL, y ese tráfico es el que pone en cola al resto.
+test('varias cards preguntando a la vez por los partidos comparten una sola consulta', async ({ page }) => {
+  const urls = [];
+  page.on('request', r => { const u = r.url(); if (u.includes('calendar_events')) urls.push(u); });
+  await open(page);
+  await page.waitForTimeout(400);
+  const antes = urls.length;
+
+  const resueltas = await page.evaluate(async (cid) => {
+    window.invalidateMatchDatesCache?.();
+    // Cinco cards preguntando en el mismo tick, que es lo que pasa al cargar el dashboard.
+    const sets = await Promise.all(Array.from({ length: 5 }, () => window.gpsGetMatchDates(cid)));
+    return sets.filter(s => s && typeof s.has === 'function').length;
+  }, CLUB_ID);
+
+  await page.waitForTimeout(400);
+  // Las cinco reciben su respuesta…
+  expect(resueltas).toBe(5);
+  // …con un solo viaje.
+  expect(urls.length - antes).toBe(1);
+});

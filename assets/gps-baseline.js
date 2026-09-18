@@ -84,20 +84,31 @@
   // session_type='match' (Assign rivals, GPS import) OR a calendar_events row with
   // type='match' (the Planner). Baselines, match reports and filters should all read
   // matchness from here so a match is never invisible depending on where it came from.
+  // Se guarda la PROMESA, no sólo el resultado. El caché se llenaba al final, cuando la consulta
+  // ya había vuelto: como las cards arrancan todas juntas, las cinco encontraban el caché vacío
+  // y las cinco lanzaban el mismo par de consultas. En un dashboard real se veía calendar_events
+  // pedido cinco veces seguidas con la misma URL. Guardando la promesa, la primera pide y las
+  // demás se cuelgan de ese viaje.
   async function _loadMatchDates(clubId) {
     const cached = _matchDatesCache[clubId];
-    if (cached && Date.now() - cached.ts < CACHE_TTL_MS) return cached.set;
-    const set = new Set();
-    try {
-      const [ce, ms] = await Promise.all([
-        window.sb.from('calendar_events').select('date').eq('club_id', clubId).eq('type', 'match'),
-        window.sb.from('training_sessions').select('session_date').eq('club_id', clubId).eq('session_type', 'match'),
-      ]);
-      (ce.data || []).forEach(r => { if (r.date)          set.add(r.date); });
-      (ms.data || []).forEach(r => { if (r.session_date)  set.add(r.session_date); });
-    } catch { /* degrade: empty set → treated as "no matches" (insufficient) */ }
-    _matchDatesCache[clubId] = { set, ts: Date.now() };
-    return set;
+    if (cached && Date.now() - cached.ts < CACHE_TTL_MS) return cached.p;
+    const p = (async () => {
+      const set = new Set();
+      try {
+        const [ce, ms] = await Promise.all([
+          window.sb.from('calendar_events').select('date').eq('club_id', clubId).eq('type', 'match'),
+          window.sb.from('training_sessions').select('session_date').eq('club_id', clubId).eq('session_type', 'match'),
+        ]);
+        (ce.data || []).forEach(r => { if (r.date)          set.add(r.date); });
+        (ms.data || []).forEach(r => { if (r.session_date)  set.add(r.session_date); });
+      } catch { /* degrade: empty set → treated as "no matches" (insufficient) */ }
+      return set;
+    })();
+    const entrada = { p, ts: Date.now() };
+    _matchDatesCache[clubId] = entrada;
+    // Si falla, que no quede cacheada una promesa rota.
+    p.catch(() => { if (_matchDatesCache[clubId] === entrada) delete _matchDatesCache[clubId]; });
+    return p;
   }
   // Public helpers so any consumer resolves matchness the SAME way.
   window.gpsGetMatchDates = _loadMatchDates;                                  // → Promise<Set>
