@@ -281,6 +281,11 @@
   .av-matrix thead th.day.is-today .md-tag { color:var(--cm-accent); }
   .av-matrix thead th.day.is-match .md-tag { color:var(--cm-danger); }
   .av-matrix thead th.day.is-dayoff .md-tag { color:var(--cm-fg-muted); }
+  /* El encabezado del día es clickeable: selecciona la columna entera. El realce va en un
+     box-shadow y no en el background porque today/match ya pintan el suyo y se pisarían. */
+  .av-matrix thead th.day.is-pickable { cursor:pointer; user-select:none; }
+  .av-matrix thead th.day.is-pickable:hover { box-shadow: inset 0 -2.5px 0 0 var(--cm-fg-faint); }
+  .av-matrix thead th.day.is-colsel { box-shadow: inset 0 -2.5px 0 0 var(--cm-accent); }
 
   /* Sticky left columns */
   .av-matrix th.col-player,
@@ -687,7 +692,7 @@
         <span class="it"><span style="width:14px;height:11px;border-radius:3px;background:color-mix(in srgb, var(--cm-accent) 22%, var(--cm-surface));border:1px solid color-mix(in srgb, var(--cm-accent) 35%, transparent)"></span><span data-i18n="availability.legendPlanned">Planned ahead (editable)</span></span>
         <span style="margin-left:auto;display:inline-flex;align-items:center;gap:4px"><span style="display:inline-block;width:20px;height:20px;border-radius:4px;background:rgba(34,197,94,0.06);display:inline-flex;align-items:center;justify-content:center;font:700 11px/1 var(--cm-font-mono);color:var(--cm-success)">90</span><span data-i18n="availability.matchMinutes">official match minutes</span></span>
         <span style="display:inline-flex;align-items:center;gap:4px"><span style="display:inline-block;width:20px;height:20px;border-radius:4px;background:rgba(217,119,6,0.07);display:inline-flex;align-items:center;justify-content:center;font:700 11px/1 var(--cm-font-mono);color:var(--cm-warning,#D97706)">90</span><span data-i18n="availability.matchMinutesFriendly">friendly minutes</span></span>
-        <span class="it" data-i18n="availability.matrixHint">Click cell to edit · shift+click for a range · drag or ⌘+click to add · ⌘+A all · double-click for reason</span>
+        <span class="it" data-i18n="availability.matrixHint">Click cell to edit · click the day for its column · shift+click for a range · drag or ⌘+click to add · ⌘+A all · double-click for reason</span>
       </div>
 
       <!-- VIEWS -->
@@ -1083,7 +1088,12 @@
         const title = isMatch ? ` title="vs ${esc(matchDates[date])}${kindTxt}"` : '';
         tag = `<span class="md-tag"${title}>${tagText}</span>`;
       }
-      h += `<th class="${cls}"><b>${letter}</b>${num}${tag}</th>`;
+      // data-date: el encabezado también se clickea, para agarrar la columna entera.
+      // Los días bloqueados (libre del equipo) no tienen ninguna celda editable: sin la
+      // clase no muestran el cursor y el click no hace nada.
+      const pick = isOff ? '' : ' is-pickable';
+      const colTitle = isOff ? '' : ` title="${avEscAttr(tt('availability.colSelectDay','Click to select this whole day · shift to extend'))}"`;
+      h += `<th class="${cls}${pick}" data-date="${date}"${colTitle}><b>${letter}</b>${num}${tag}</th>`;
     });
     h += `<th class="col-sum">${tt('availability.colSummary','Summary · match min')}</th>`;
     tr.innerHTML = h;
@@ -1829,6 +1839,7 @@
 
   function updateBulk() {
     const sel = matrix.querySelectorAll('td.cell.is-selected');
+    avPaintColSel();
     bulk.classList.toggle('is-on', sel.length > 0);
     if (sel.length > 0) bulk.querySelector('.cnt').textContent = tt('availability.bulkCellsSelected', `${sel.length} cell${sel.length > 1 ? 's' : ''} selected`, { count: sel.length });
   }
@@ -1945,6 +1956,68 @@
     }
     updateBulk();
   });
+
+  // ── Click en el encabezado del día: toda la columna ──
+  // Poner al plantel entero disponible UN día era arrastrar de arriba abajo: ⌘+A agarra la
+  // grilla completa (todos los días) y no había forma de decir «este». El encabezado es el
+  // único lugar que ya nombra al día, así que es donde se espera poder agarrarlo.
+  let _avColAnchor = null;   // último día clickeado en el encabezado (ancla del shift+click)
+
+  function avColCells(dates) {
+    const out = [];
+    dates.forEach(d => {
+      matrix.querySelectorAll(`#avBody td.cell[data-date="${d}"]`).forEach(td => {
+        if (!isBlockedCell(td)) out.push(td);
+      });
+    });
+    return out;
+  }
+
+  matrix.addEventListener('click', e => {
+    const th = e.target.closest('th.day');
+    if (!th || !th.dataset.date || !th.classList.contains('is-pickable')) return;
+    const date = th.dataset.date;
+    // shift = de un día al otro (la semana de trabajo, el bloque antes del partido).
+    // ⌘/Ctrl = sumar un día suelto a lo que ya tenías marcado.
+    let dates = [date];
+    if (e.shiftKey && _avColAnchor) {
+      const a = MC_DATES.indexOf(_avColAnchor), b = MC_DATES.indexOf(date);
+      if (a >= 0 && b >= 0) dates = MC_DATES.slice(Math.min(a, b), Math.max(a, b) + 1);
+    }
+    const cells = avColCells(dates);
+    // Un día sin una sola celda editable (futuro sin planificar) no hace nada: borrarle la
+    // selección al entrenador por un click que no puede marcar nada sería un castigo.
+    if (!cells.length) return;
+    const keep  = e.shiftKey || e.metaKey || e.ctrlKey;
+    // Volver a clickear un día ya marcado lo suelta: si no, la única salida era «Clear».
+    const on = !(cells.length && cells.every(td => td.classList.contains('is-selected')));
+    if (!keep) matrix.querySelectorAll('td.cell.is-selected').forEach(c => c.classList.remove('is-selected'));
+    cells.forEach(td => td.classList.toggle('is-selected', on));
+    if (!e.shiftKey) _avColAnchor = date;
+    // El ancla de celdas se mueve al primer día de la columna: así un shift+click posterior
+    // sobre la grilla extiende desde acá y no desde donde estuviste hace diez minutos.
+    _avAnchor = cells.length ? { pid: cells[0].dataset.pid, date: cells[0].dataset.date } : _avAnchor;
+    updateBulk();
+  });
+
+  // El encabezado se subraya cuando su columna está entera marcada — incluso si la marcaste
+  // arrastrando por la grilla, que es la misma información. Cuenta en UNA pasada: esto corre
+  // en cada updateBulk(), o sea por cada celda que cruzás arrastrando.
+  function avPaintColSel() {
+    const tally = new Map();   // día → [editables, marcadas]
+    matrix.querySelectorAll('#avBody td.cell').forEach(td => {
+      const d = td.dataset.date;
+      if (!d || isBlockedCell(td)) return;
+      const t = tally.get(d) || [0, 0];
+      t[0]++;
+      if (td.classList.contains('is-selected')) t[1]++;
+      tally.set(d, t);
+    });
+    matrix.querySelectorAll('thead th.day.is-pickable').forEach(th => {
+      const t = tally.get(th.dataset.date);
+      th.classList.toggle('is-colsel', !!t && t[0] > 0 && t[0] === t[1]);
+    });
+  }
 
   // ── Double-click: edit match minutes inline ──
   matrix.addEventListener('dblclick', e => {
@@ -2445,16 +2518,38 @@
   let _avPending    = [];        // pedidos de otras categorías por MIS jugadores (a decidir)
   let _avSent       = [];        // pedidos que MANDÉ y siguen sin respuesta (a cancelar)
 
-  // 'selection' = las celdas marcadas en la grilla (sirve para "el martes y el jueves");
-  // 'range' = los días del rango visible que TIENEN actividad planificada — llamar a alguien
-  // un día sin sesión ni partido no significa nada.
-  function avCallUpDates(mode) {
-    if (mode === 'selection') {
-      const out = new Set();
-      document.querySelectorAll('#avMatrix td.cell.is-selected').forEach(td => { if (td.dataset.date) out.add(td.dataset.date); });
-      return [...out].sort();
-    }
-    return MC_DATES.filter(dayCountable);
+  // Los días se eligen DENTRO del panel (una tira de botones, click o shift+click para un
+  // rango). Antes salían de las celdas marcadas en la grilla, y de esas celdas se usaba solo
+  // la fecha: para decir "el martes y el jueves" había que clickear la fila de otro jugador.
+  // La selección de la grilla sigue valiendo, pero como punto de partida: el panel abre con
+  // esos días puestos.
+  function avCallUpDates() {
+    const out = new Set();
+    document.querySelectorAll('#avMatrix td.cell.is-selected').forEach(td => { if (td.dataset.date) out.add(td.dataset.date); });
+    return [...out].sort();
+  }
+
+  // Un día sin sesión ni partido va apagado: llamar a alguien ahí no significa nada.
+  function avCallUpDayList() {
+    const lang = (window.CM_I18N && CM_I18N.current) || 'en';
+    const corto = new Intl.DateTimeFormat(lang, { weekday: 'narrow', timeZone: 'UTC' });
+    const largo = new Intl.DateTimeFormat(lang, { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
+    return MC_DATES.map(date => {
+      const d = new Date(date + 'T00:00:00Z');
+      return {
+        date,
+        label: corto.format(d).toUpperCase() + d.getUTCDate(),
+        title: largo.format(d),
+        off: !dayCountable(date),
+      };
+    });
+  }
+
+  function avCallUpWhen(dates) {
+    if (!dates.length) return '';
+    const days = avCallUpDayList();
+    const ttl = dd => (days.find(x => x.date === dd) || {}).title || dd;
+    return dates.length === 1 ? ttl(dates[0]) : `${ttl(dates[0])} → ${ttl(dates[dates.length - 1])}`;
   }
 
   window.avOpenCallUp = function (btn) {
@@ -2468,16 +2563,13 @@
       // día sin soltar los que ya tienen.
       excludeIds:  new Set(players.filter(p => !_avCalledUp.has(p.id)).map(p => p.id)),
       calledUpIds: _avCalledUp,
-      hint: (n) => {
-        const sel = avCallUpDates('selection');
-        return sel.length
-          ? tt('availability.callUpWhenSel', `${n} player(s) · selected days: ${sel[0]} → ${sel[sel.length-1]}`,
-               { count: n, from: sel[0], to: sel[sel.length - 1] })
-          : tt('availability.callUpWhenNoSel', `${n} player(s) · select cells in the grid to call them for specific days`, { count: n });
-      },
+      days:          avCallUpDayList,
+      preselectDays: avCallUpDates,
+      hint: (n, dias) => dias.length
+        ? tt('availability.callUpWhenDays', `${n} player(s) · ${avCallUpWhen(dias)}`, { count: n, when: avCallUpWhen(dias) })
+        : tt('availability.callUpPickDays', 'Pick the days below.'),
       actions: [
-        { key: 'sel',   kind: 'selection', dates: () => avCallUpDates('selection') },
-        { key: 'range', kind: 'range', primary: true, dates: () => avCallUpDates('range') },
+        { key: 'days', kind: 'days', primary: true },
       ],
       onDone: () => { if (typeof init === 'function') init(); },
     });

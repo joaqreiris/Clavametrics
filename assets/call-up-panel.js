@@ -11,14 +11,17 @@
        clubId, teamId, teamName,  // equipo que LLAMA
        excludeIds,                // ids que ya son de este plantel (no se ofrecen)
        calledUpIds,               // ids ya llamados (se ofrecen, marcados: sirve para sumar días)
+       days,                      // OPCIONAL: [{date,label,off}] → tira de días DENTRO del panel
+       preselectDays,             // días ya marcados al abrir (los que traiga la pantalla)
        actions: [                 // uno o más botones de confirmación
          { key:'day', kind:'day', primary:true, dates: () => ['2026-05-18'] },
        ],
        onDone: (res) => {}        // después de escribir, para que la pantalla se refresque
      });
 
-   `kind` decide el texto del botón ('selection' | 'range' | 'day') y si el verbo es "llamar"
-   o "pedir" lo resuelve el panel según a quién hayas marcado.
+   `kind` decide el texto del botón ('days' | 'day') y si el verbo es
+   "llamar" o "pedir" lo resuelve el panel según a quién hayas marcado. Con `kind:'days'` las
+   fechas salen de la tira del panel y la acción no necesita su propio `dates`.
 ──────────────────────────────────────────────────────────────────────────── */
 (function () {
   'use strict';
@@ -63,6 +66,13 @@
 .cm-cu-panel .ft{border-top:1px solid var(--cm-border);padding:9px 12px;display:flex;flex-direction:column;gap:7px}
 .cm-cu-panel .ft .when{color:var(--cm-fg-muted);font:500 11px/1.4 var(--cm-font-sans)}
 .cm-cu-panel .ft .row{display:flex;gap:6px}
+/* Tira de días. Va dentro del pie, así que pisa el estilo de los botones de confirmar
+   (flex:1 y 30px de alto los estiraría a lo ancho del panel, uno por fila). */
+.cm-cu-panel .ft .cm-cu-days{display:flex;flex-wrap:wrap;gap:4px;align-items:center}
+.cm-cu-panel .ft .cm-cu-days button.d{flex:0 0 auto;min-width:31px;height:26px;padding:0 6px;border:1px solid var(--cm-border);border-radius:7px;background:var(--cm-bg-soft);color:var(--cm-fg-strong);font:600 10.5px/1 var(--cm-font-sans);cursor:pointer;user-select:none}
+.cm-cu-panel .ft .cm-cu-days button.d.on{background:var(--cm-accent);border-color:var(--cm-accent);color:#fff}
+.cm-cu-panel .ft .cm-cu-days button.d:disabled{opacity:.32;cursor:not-allowed}
+.cm-cu-panel .ft .cm-cu-days button.all{flex:0 0 auto;margin-left:auto;height:26px;padding:0 4px;border:0;background:transparent;color:var(--cm-accent);font:600 10.5px var(--cm-font-sans);cursor:pointer}
 .cm-cu-panel .ft button{flex:1;height:30px;border-radius:7px;border:1px solid var(--cm-border);background:var(--cm-bg-soft);color:var(--cm-fg-strong);font:600 11.5px var(--cm-font-sans);cursor:pointer}
 .cm-cu-panel .ft button.primary{background:var(--cm-accent);border-color:var(--cm-accent);color:#fff}
 .cm-cu-panel .ft button:disabled{opacity:.5;cursor:not-allowed}
@@ -80,6 +90,7 @@
   var _panel = null, _zoom = null;
   var _cfg = null;                 // configuración de la apertura en curso
   var _pool = null, _poolKey = '', _pick = new Set(), _anchor = null, _zoomTimer = null;
+  var _days = [], _dayPick = new Set(), _dayAnchor = null;   // tira de días (si la pantalla la usa)
 
   function _dom() {
     if (_panel) return;
@@ -91,7 +102,7 @@
       '<div class="sub"></div>' +
       '<div class="srch"><input id="cmCuSearch" type="search"></div>' +
       '<div class="cm-cu-list" id="cmCuList"></div>' +
-      '<div class="ft"><div class="when" id="cmCuWhen"></div><div class="row" id="cmCuActions"></div></div>';
+      '<div class="ft"><div class="cm-cu-days" id="cmCuDays" style="display:none"></div><div class="when" id="cmCuWhen"></div><div class="row" id="cmCuActions"></div></div>';
     document.body.appendChild(_panel);
     _zoom = document.createElement('div');
     _zoom.className = 'cm-cu-zoom';
@@ -218,18 +229,94 @@
     place();   // filtrar cambia el alto del contenido
   }
 
+  // ── Tira de días ─────────────────────────────────────────────────────────────
+  // Antes las fechas salían de las celdas marcadas en la grilla de Availability, y de esas
+  // celdas se usaba SOLO la fecha: había que clickear la fila de otro jugador para decir
+  // «estos días». El gesto significaba una cosa y hacía otra. Acá el día se elige donde se
+  // decide, al lado del botón que llama.
+  function pickedDays() {
+    return _days.filter(function (d) { return _dayPick.has(d.date); }).map(function (d) { return d.date; });
+  }
+
+  // Pintar, NO redibujar. Rehacer el innerHTML en cada click desengancha el botón que
+  // acabás de apretar, y el cierre-al-clickear-afuera (que corre después, en document) ve un
+  // target que ya no está dentro del panel: se cierra solo, en la cara del entrenador.
+  function paintDays() {
+    var box = _panel && _panel.querySelector('#cmCuDays');
+    if (!box) return;
+    box.querySelectorAll('button.d').forEach(function (b) {
+      b.classList.toggle('on', _dayPick.has(b.dataset.date));
+    });
+    var libres = _days.filter(function (d) { return !d.off; });
+    var todos  = libres.length && libres.every(function (d) { return _dayPick.has(d.date); });
+    var all = box.querySelector('button.all');
+    if (all) {
+      all.dataset.all = todos ? '1' : '';
+      all.textContent = todos ? tt('availability.callUpDaysNone', 'None') : tt('availability.callUpDaysAll', 'All');
+    }
+  }
+
+  function renderDays() {
+    var box = _panel && _panel.querySelector('#cmCuDays');
+    if (!box) return;
+    if (!_days.length) { box.style.display = 'none'; box.innerHTML = ''; return; }
+    box.style.display = 'flex';
+    var html = '';
+    _days.forEach(function (d) {
+      html += '<button type="button" class="d" data-date="' + esc(d.date) + '"' +
+        (d.off ? ' disabled' : '') + ' title="' + esc(d.title || d.date) + '">' + esc(d.label || d.date) + '</button>';
+    });
+    html += '<button type="button" class="all"></button>';
+    box.innerHTML = html;
+    box.querySelectorAll('button.d').forEach(function (b) {
+      b.addEventListener('click', function (e) {
+        var date = b.dataset.date;
+        // shift = de un día al otro (la semana de trabajo, el bloque antes del partido).
+        if (e.shiftKey && _dayAnchor) {
+          var a = _days.findIndex(function (x) { return x.date === _dayAnchor; });
+          var z = _days.findIndex(function (x) { return x.date === date; });
+          if (a >= 0 && z >= 0) {
+            _days.slice(Math.min(a, z), Math.max(a, z) + 1).forEach(function (x) {
+              if (!x.off) _dayPick.add(x.date);
+            });
+          }
+        } else {
+          if (_dayPick.has(date)) _dayPick.delete(date); else _dayPick.add(date);
+          _dayAnchor = date;
+        }
+        paintDays();
+        updateFooter();
+      });
+    });
+    var all = box.querySelector('button.all');
+    if (all) all.addEventListener('click', function () {
+      if (all.dataset.all) _dayPick.clear();
+      else _days.forEach(function (d) { if (!d.off) _dayPick.add(d.date); });
+      paintDays();
+      updateFooter();
+    });
+    paintDays();
+  }
+
   function askCount() {
     return visible().filter(function (p) { return _pick.has(p.id) && p._needsOk; }).length;
   }
 
   function actionLabel(a, dates, soloPedidos) {
     var n = dates.length;
-    if (a.kind === 'selection') return soloPedidos
-      ? tt('availability.callUpAskForSelection', 'Request · selected days (' + n + ')', { count: n })
-      : tt('availability.callUpForSelection', 'Selected days (' + n + ')', { count: n });
-    if (a.kind === 'range') return soloPedidos
-      ? tt('availability.callUpAskForRange', 'Request · whole range (' + n + ')', { count: n })
-      : tt('availability.callUpForRange', 'Whole range (' + n + ')', { count: n });
+    if (a.kind === 'days') {
+      // Un día solo se nombra ("Llamar para el jue 24"); varios se cuentan, porque escribir
+      // catorce fechas en un botón no lo lee nadie.
+      if (n === 1) {
+        var uno = (_days.find(function (d) { return d.date === dates[0]; }) || {}).title || dates[0];
+        return soloPedidos
+          ? tt('availability.callUpAskForDay', 'Request for {date}', { date: uno })
+          : tt('availability.callUpForDay', 'Call up for {date}', { date: uno });
+      }
+      return soloPedidos
+        ? tt('availability.callUpAskForSelection', 'Request · selected days (' + n + ')', { count: n })
+        : tt('availability.callUpForSelection', 'Selected days (' + n + ')', { count: n });
+    }
     // `dateLabel` deja poner la fecha como la escribe la pantalla ("jue 24 sep") en vez del
     // 2026-09-24 crudo: el botón lo lee un entrenador, no un sistema.
     var d = a.dateLabel || dates[0] || '';
@@ -238,13 +325,20 @@
       : tt('availability.callUpForDay', 'Call up for {date}', { date: d });
   }
 
+  // Las fechas de una acción: con `kind:'days'` las pone la tira del panel; en el resto, la
+  // pantalla (la grilla de Availability, el día abierto de Daily Planning).
+  function actionDates(a) {
+    if (a.kind === 'days' && typeof a.dates !== 'function') return pickedDays();
+    return (typeof a.dates === 'function' ? a.dates() : a.dates) || [];
+  }
+
   function updateFooter() {
     if (!_panel || !_cfg) return;
     var n = _pick.size, nAsk = askCount();
     var row = _panel.querySelector('#cmCuActions');
     row.innerHTML = '';
     (_cfg.actions || []).forEach(function (a) {
-      var dates = a.dates() || [];
+      var dates = actionDates(a);
       var b = document.createElement('button');
       b.type = 'button';
       b.id = 'cmCuAct-' + a.key;
@@ -266,11 +360,11 @@
     }
     // El pie lo termina de escribir la pantalla: en Availability depende de qué celdas marcaste,
     // en Daily Planning el día ya está decidido y basta con nombrarlo.
-    when.textContent = (typeof _cfg.hint === 'function' ? _cfg.hint(n) : _cfg.hint) || '';
+    when.textContent = (typeof _cfg.hint === 'function' ? _cfg.hint(n, pickedDays()) : _cfg.hint) || '';
   }
 
   async function submit(action, btn) {
-    var dates = action.dates() || [];
+    var dates = actionDates(action);
     var pids = Array.from(_pick);
     if (!pids.length || !dates.length) return;
     var pool = visible();
@@ -367,12 +461,22 @@
     _cfg = cfg || {};
     _pick = new Set();
     _anchor = _cfg.anchor || null;
+    // Días: los que la pantalla ofrezca, ya marcados con lo que ella traiga (en Availability,
+    // las celdas que venías marcando en la grilla — el hábito de siempre sigue sirviendo).
+    _days = (typeof _cfg.days === 'function' ? _cfg.days() : _cfg.days) || [];
+    _dayPick = new Set();
+    _dayAnchor = null;
+    var pre = (typeof _cfg.preselectDays === 'function' ? _cfg.preselectDays() : _cfg.preselectDays) || [];
+    pre.forEach(function (d) {
+      if (_days.some(function (x) { return x.date === d && !x.off; })) _dayPick.add(d);
+    });
     _panel.querySelector('.hd .ttl').textContent = tt('availability.callUpTitle', 'Call up players');
     _panel.querySelector('.sub').textContent = _cfg.sub || tt('availability.callUpSub', "From other squads, for the days you choose only. They don't join this squad.");
     var sr = _panel.querySelector('#cmCuSearch');
     sr.value = '';
     sr.placeholder = tt('availability.callUpSearch', 'Search player…');
     _panel.querySelector('#cmCuList').innerHTML = '<div class="empty">' + esc(tt('common.loading', 'Loading…')) + '</div>';
+    renderDays();
     _panel.classList.add('is-open');
     place(_cfg.anchor);
     await candidates(_cfg.clubId, _cfg.teamId);

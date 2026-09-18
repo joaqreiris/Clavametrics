@@ -33,6 +33,7 @@ async function mockAvail(page, opts = {}) {
   const posted = [];
   const patched = [];
   const deleted = [];
+  const avail   = [];          // lo que se escribe en availability (pintar estados)
   await mockBase(page);
 
   await page.route(`${SB}/rest/v1/**`, async route => {
@@ -109,11 +110,12 @@ async function mockAvail(page, opts = {}) {
 
     if (url.includes('/availability')) {
       if (method === 'GET') return route.fulfill({ json: [] });
+      avail.push(...[].concat(JSON.parse(route.request().postData() || '[]')));
       return route.fulfill({ status: 201, json: [] });
     }
     return route.fulfill({ json: [] });
   });
-  return { posted, patched, deleted };
+  return { posted, patched, deleted, avail };
 }
 
 async function gotoGrid(page) {
@@ -162,9 +164,13 @@ test.describe('Availability — llamar jugadores de otra categoría', () => {
     await expect(opt).toHaveCount(1);
 
     await opt.check();
-    const btnRange = page.locator('#cmCuAct-range');
-    await expect(btnRange).toBeEnabled();
-    await btnRange.click();
+    // Los días se eligen en la tira del panel. Sin ninguno marcado el botón no habilita: la
+    // llamada sin fecha no existe.
+    const btn = page.locator('#cmCuAct-days');
+    await expect(btn).toBeDisabled();
+    await page.locator('#cmCuDays button.all').click();
+    await expect(btn).toBeEnabled();
+    await btn.click();
 
     await expect.poll(() => posted.length, { timeout: 10_000 }).toBeGreaterThan(0);
     const rows = posted.flat();
@@ -190,12 +196,13 @@ test.describe('Availability — pedir un jugador a otra categoría', () => {
     await expect(panel.locator('.cm-cu-list .grp .ask')).toHaveCount(1);
 
     await panel.locator('.cm-cu-opt input[value="p-9"]').check();
+    await page.locator('#cmCuDays button.all').click();
     // El botón cambia de verbo: pedir y llamar no son lo mismo.
-    await expect(page.locator('#cmCuAct-range')).toContainText(/Request|Pedir/i);
+    await expect(page.locator('#cmCuAct-days')).toContainText(/Request|Pedir/i);
     await expect(page.locator('#cmCuWhen')).toContainText(/approve|aprob/i);
 
     page.on('dialog', d => d.accept());
-    await page.locator('#cmCuAct-range').click();
+    await page.locator('#cmCuAct-days').click();
     await expect.poll(() => posted.length, { timeout: 10_000 }).toBeGreaterThan(0);
     const rows = posted.flat();
     expect(rows.every(r => r.status === 'pending')).toBe(true);
@@ -260,9 +267,9 @@ test.describe('Availability — el panel de llamada entra en la pantalla', () =>
     expect(caja.y).toBeGreaterThanOrEqual(0);
     expect(caja.y + caja.height).toBeLessThanOrEqual(alto + 1);
 
-    // Y el pie —donde están los botones que cierran la acción— alcanzable.
-    await expect(page.locator('#cmCuAct-range')).toBeInViewport();
-    await expect(page.locator('#cmCuAct-sel')).toBeInViewport();
+    // Y el pie —donde están la tira de días y el botón que cierra la acción— alcanzable.
+    await expect(page.locator('#cmCuAct-days')).toBeInViewport();
+    await expect(page.locator('#cmCuDays')).toBeInViewport();
 
     // La lista se hace cargo del sobrante con su propio scroll.
     const scrollea = await page.locator('.cm-cu-list').evaluate(el => el.scrollHeight > el.clientHeight + 2);
@@ -383,5 +390,73 @@ test.describe('Availability — foto en el picker', () => {
     await face.hover();
     await page.waitForTimeout(400);
     await expect(page.locator('#cmCuZoom')).toBeHidden();
+  });
+});
+
+
+// ── Elegir el día sin pelearse con la grilla ─────────────────────────────────
+// Dos gestos que antes no existían y que comparten el mock de arriba (por eso viven acá):
+// el encabezado del día selecciona su columna entera, y el panel de llamada trae su propia
+// tira de días en vez de leer las celdas que marcaste en la fila de otro jugador.
+test.describe('Availability — el día se elige desde el encabezado', () => {
+  test('click en el encabezado marca la columna, y la letra la pinta entera', async ({ page }) => {
+    const { avail } = await mockAvail(page, { callUps: [] });
+    await gotoGrid(page);
+
+    await page.locator(`#avHead th.day[data-date="${CALL_DAY}"]`).click();
+
+    // Toda la columna del día, y nada del día de al lado.
+    await expect(page.locator(`#avBody td.cell[data-date="${CALL_DAY}"].is-selected`)).toHaveCount(2);
+    await expect(page.locator('#avBody td.cell[data-date="2026-05-19"].is-selected')).toHaveCount(0);
+    await expect(page.locator(`#avHead th.day[data-date="${CALL_DAY}"]`)).toHaveClass(/is-colsel/);
+    await expect(page.locator('#bulkBar')).toHaveClass(/is-on/);
+
+    // Y de ahí, el atajo de siempre: A = todos disponibles ESE día.
+    await page.keyboard.press('a');
+    // Una escritura POR JUGADOR: hay que esperar las dos. Con `> 0` el test leía la primera
+    // y comparaba contra una lista a medio llegar.
+    await expect.poll(() => avail.length, { timeout: 10_000 }).toBe(2);
+    expect(avail.every(r => r.date === CALL_DAY && r.status === 'available')).toBe(true);
+    expect(avail.map(r => r.player_id).sort()).toEqual(['p-1', 'p-2']);
+  });
+
+  test('volver a clickear el mismo día lo suelta', async ({ page }) => {
+    await mockAvail(page, { callUps: [] });
+    await gotoGrid(page);
+    const th = page.locator(`#avHead th.day[data-date="${CALL_DAY}"]`);
+    await th.click();
+    await expect(page.locator('#avBody td.cell.is-selected')).toHaveCount(2);
+    await th.click();
+    await expect(page.locator('#avBody td.cell.is-selected')).toHaveCount(0);
+  });
+
+  test('shift+click toma de un día al otro', async ({ page }) => {
+    await mockAvail(page, { callUps: [] });
+    await gotoGrid(page);
+    await page.locator(`#avHead th.day[data-date="${CALL_DAY}"]`).click();
+    await page.locator('#avHead th.day[data-date="2026-05-21"]').click({ modifiers: ['Shift'] });
+    // 18, 19 y 21 por dos jugadores. El 20 no tiene nada planificado: sus celdas no son
+    // editables y quedan afuera, como con cualquier otra selección.
+    await expect(page.locator('#avBody td.cell.is-selected')).toHaveCount(6);
+  });
+
+  test('el panel de llamada trae su tira de días, y respeta lo que ya marcaste en la grilla', async ({ page }) => {
+    const { posted } = await mockAvail(page, { callUps: [] });
+    await gotoGrid(page);
+
+    // Marcado previo en la grilla → el panel abre con ese día puesto.
+    await page.locator(`#avHead th.day[data-date="${CALL_DAY}"]`).click();
+    await page.click('#avCallUpBtn');
+    await expect(page.locator(`#cmCuDays button.d[data-date="${CALL_DAY}"]`)).toHaveClass(/on/);
+    // Los días sin sesión ni partido no se pueden elegir: llamar a alguien ahí no significa nada.
+    await expect(page.locator('#cmCuDays button.d[data-date="2026-05-20"]')).toBeDisabled();
+
+    await page.locator('.cm-cu-opt input[value="p-9"]').check();
+    // Sumar el partido, sin volver a la grilla.
+    await page.locator('#cmCuDays button.d[data-date="2026-05-21"]').click();
+    await page.locator('#cmCuAct-days').click();
+
+    await expect.poll(() => posted.length, { timeout: 10_000 }).toBeGreaterThan(0);
+    expect(posted.flat().map(r => r.date).sort()).toEqual([CALL_DAY, '2026-05-21']);
   });
 });
