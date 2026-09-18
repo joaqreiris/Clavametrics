@@ -943,6 +943,10 @@
       const C = window.gpsACWR?.CONFIG || {};
       return `${viz} · ${C.acuteDays || 7}d/${C.chronicDays || 28}d · ${S.scope}${cmpBadge(S)}`;
     }
+    // Ni el fitness/fatiga/forma ni la monotonía agregan una métrica: la transforman. Un «sum» ahí
+    // no quiere decir nada, así que en su lugar va la ventana con la que trabaja cada uno.
+    if (S.type === 'tsb')       return `${viz} · 42d/7d · ${S.scope}${cmpBadge(S)}`;
+    if (S.type === 'monotonia') return `${viz} · ${_tt('gps_analysis.mono_por_semana', 'weekly')} · ${S.scope}${cmpBadge(S)}`;
     return `${viz}${agg0 ? ' · ' + agg0 : ''} · ${S.scope}${cmpBadge(S)}`;
   }
 
@@ -7965,7 +7969,15 @@
       date: d.date,
       load: porJugador.reduce((acc, serie) => acc + (serie[i]?.load || 0), 0) / porJugador.length,
     }));
-    return { serie: S.trainingStressBalance(daily), jugadores: ids.length };
+    const serie = S.trainingStressBalance(daily);
+    // La ventana que se PIDE arranca antes a propósito (el fitness usa 42 días), pero dibujar el
+    // tramo sin una sola sesión no dice nada: son curvas planas en cero hasta el primer registro.
+    // Se recorta hasta el primer día con carga real; el cálculo ya pasó por esos días, así que el
+    // primer punto dibujado no arranca frío.
+    let a = 0;
+    while (a < daily.length && !(daily[a].load > 0)) a++;
+    if (a >= daily.length) return null;          // no hubo ni una sesión en toda la ventana
+    return { serie: serie.slice(a), jugadores: ids.length };
   }
 
   // ── Monotonía y strain (Foster) ─────────────────────────────────────────────────────────────

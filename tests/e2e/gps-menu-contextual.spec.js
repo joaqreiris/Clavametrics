@@ -16,14 +16,14 @@ test.describe.configure({ timeout: 120_000 });
 // la card fija); acá sólo se comprueba que la card exista, dibuje y no arrastre el fetch del
 // período, que para este tipo no lo mira nadie.
 const CARD_ACWR = { id: 'c-acwr', position: 0, source: 'builder', size: 'md', config: {
-  schema: 'gp.card/v1', title: 'ACWR', viz: 'acwr', scope: { level: 'squad' },
-  metrics: [{ id: 'player_load', agg: 'avg' }], dimensions: [],
+  schema: 'gp.card/v1', title: 'Barras', viz: 'bars', scope: { level: 'squad' },
+  metrics: [{ id: 'player_load', agg: 'avg' }], dimensions: [{ id: 'player' }],
   range: { type: 'last30' }, style: { color: '#2563EB' } } };
-const CARD_TSB = { id: 'c-tsb', position: 1, source: 'builder', size: 'md', config: {
+const _NO_USADA_TSB = { id: 'c-tsb', position: 1, source: 'builder', size: 'md', config: {
   schema: 'gp.card/v1', title: 'Forma', viz: 'tsb', scope: { level: 'squad' },
   metrics: [{ id: 'player_load', agg: 'avg' }], dimensions: [],
   range: { type: 'last30' }, style: {} } };
-const CARD_MONO = { id: 'c-mono', position: 2, source: 'builder', size: 'md', config: {
+const _NO_USADA_MONO = { id: 'c-mono', position: 2, source: 'builder', size: 'md', config: {
   schema: 'gp.card/v1', title: 'Monotonía', viz: 'monotonia', scope: { level: 'squad' },
   metrics: [{ id: 'player_load', agg: 'avg' }], dimensions: [],
   range: { type: 'last30' }, style: {} } };
@@ -81,7 +81,7 @@ async function montar(page, layoutInd, layoutGrp) {
     return r.fulfill({ json: acc ? ord[0] : SES });
   });
   await page.route(`${SB}/rest/v1/players**`, r => r.fulfill({ json: PL }));
-  await page.route(`${SB}/rest/v1/dashboard_cards**`, r => r.fulfill({ json: [CARD_ACWR, CARD_TSB, CARD_MONO] }));
+  await page.route(`${SB}/rest/v1/dashboard_cards**`, r => r.fulfill({ json: [CARD_ACWR] }));
   await page.route(`${SB}/rest/v1/dashboards**`, r => {
     const acc = (r.request().headers()['accept'] || '').includes('object');
     const D = { id: 'd-ind', club_id: CLUB_ID, report_type: 'ind', name: 'Player Week', scope: 'squad', is_shared: true, created_by: null };
@@ -127,109 +127,66 @@ async function montar(page, layoutInd, layoutGrp) {
 }
 
 
-const viajes = (page, etq) =>
-  page.evaluate((e) => window.__cmFetchStats?.[e]?.calls || 0, etq);
 
-test('la card ACWR dibuja su serie', async ({ page }) => {
+/** Abre el menú con click derecho sobre un punto de la pantalla. */
+async function ctxSobre(page, loc) {
+  const caja = await loc.boundingBox();
+  await page.mouse.click(caja.x + caja.width / 2, caja.y + caja.height / 2, { button: 'right' });
+  return page.locator('.gp-ctx');
+}
+
+/** Click derecho sobre el GRID mismo (el hueco). Se dispara el evento sobre el elemento en vez de
+ *  apuntar píxeles: el grid no siempre llega hasta donde uno cree y el click caía afuera. */
+async function ctxSobreHueco(page) {
+  await page.evaluate(() => {
+    const g = document.querySelector('.gp-view.is-on .gp-grid');
+    const r = g.getBoundingClientRect();
+    g.dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true, cancelable: true, clientX: Math.round(r.left + 8), clientY: Math.round(r.top + 8) }));
+  });
+  return page.locator('.gp-ctx');
+}
+
+test('sobre una card, el menú ofrece las acciones de la card', async ({ page }) => {
   await montar(page);
   const card = page.locator('.gp-view.is-on .gp-c[data-card-id="c-acwr"]');
   await expect(card).toHaveCount(1, { timeout: 25_000 });
-  // Un canvas no alcanza: se exige que el gráfico tenga puntos de ACWR de verdad.
-  await expect.poll(() => page.evaluate(() => {
-    const c = document.querySelector('.gp-c[data-card-id="c-acwr"] canvas');
-    if (!c || !window.Chart?.getChart) return -1;
-    const ch = window.Chart.getChart(c);
-    if (!ch) return -2;
-    const linea = (ch.data?.datasets || []).find(d => d.label === 'ACWR');
-    return (linea?.data || []).filter(v => v != null).length;
-  }), { timeout: 60_000 }).toBeGreaterThan(0);
+  const menu = await ctxSobre(page, card);
+  await expect(menu).toBeVisible({ timeout: 10_000 });
+  const actos = await menu.locator('.gp-ctx-it').evaluateAll(els => els.map(e => e.dataset.act));
+  expect(actos).toEqual(['editar', 'duplicar', 'copiar', 'cortar', 'borrar']);
 });
 
-test('la card ACWR no arrastra el fetch del período', async ({ page }) => {
+test('sobre el hueco, ofrece crear y pegar — y pegar arranca deshabilitado', async ({ page }) => {
   await montar(page);
   await expect(page.locator('.gp-view.is-on .gp-c[data-card-id="c-acwr"]')).toHaveCount(1, { timeout: 25_000 });
-  // Pide lo suyo (sólo la columna de la métrica base, sin joins)…
-  await expect.poll(() => viajes(page, 'acwr.gps'), { timeout: 60_000 }).toBeGreaterThan(0);
-  // …y NO el bloque del resolver, que para este tipo no se usa para nada.
-  expect(await viajes(page, 'resolver.fetchReports')).toBe(0);
+  const menu = await ctxSobreHueco(page);
+  await expect(menu).toBeVisible({ timeout: 10_000 });
+  const actos = await menu.locator('.gp-ctx-it').evaluateAll(els => els.map(e => e.dataset.act));
+  expect(actos).toEqual(['nueva', 'pegar']);
+  // Sin nada copiado, pegar no se puede: ofrecerlo activo sería mentir.
+  await expect(menu.locator('.gp-ctx-it[data-act="pegar"]')).toBeDisabled();
 });
 
-test('el eje no arranca antes del primer dato', async ({ page }) => {
-  // La ventana que se pide es larga a propósito (28 días de crónica antes del primer punto), pero
-  // dibujar ese tramo en blanco estira el eje sin decir nada: en un club, datos desde agosto y el
-  // eje arrancando en junio.
+test('copiar una card habilita pegar', async ({ page }) => {
   await montar(page);
-  await expect(page.locator('.gp-view.is-on .gp-c[data-card-id="c-acwr"]')).toHaveCount(1, { timeout: 25_000 });
-  await expect.poll(() => page.evaluate(() => {
-    const c = document.querySelector('.gp-c[data-card-id="c-acwr"] canvas');
-    const ch = c && window.Chart?.getChart?.(c);
-    const d = ch?.data?.datasets?.[0]?.data;
-    if (!d?.length) return null;
-    return { primero: d[0], ultimo: d[d.length - 1], total: d.length };
-  }), { timeout: 60_000 }).not.toBeNull();
-  const s = await page.evaluate(() => {
-    const c = document.querySelector('.gp-c[data-card-id="c-acwr"] canvas');
-    const d = window.Chart.getChart(c).data.datasets[0].data;
-    return { primero: d[0], ultimo: d[d.length - 1] };
-  });
-  expect(s.primero, 'el primer punto del eje no puede estar vacío').not.toBeNull();
-  expect(s.ultimo, 'el último punto del eje no puede estar vacío').not.toBeNull();
+  const card = page.locator('.gp-view.is-on .gp-c[data-card-id="c-acwr"]');
+  await expect(card).toHaveCount(1, { timeout: 25_000 });
+  const menu = await ctxSobre(page, card);
+  await expect(menu).toBeVisible({ timeout: 10_000 });
+  await menu.locator('.gp-ctx-it[data-act="copiar"]').click();
+  await expect(page.locator('.gp-ctx')).toHaveCount(0);
+
+  await ctxSobreHueco(page);
+  await expect(page.locator('.gp-ctx-it[data-act="pegar"]')).toBeEnabled({ timeout: 10_000 });
 });
 
-test('la card Fitness/Fatiga/Forma dibuja sus tres curvas', async ({ page }) => {
-  // El cálculo es el de siempre (gpScience.trainingStressBalance); acá se comprueba que la card
-  // del builder lo enchufa bien y dibuja las TRES series, no una.
+test('Escape cierra el menú', async ({ page }) => {
   await montar(page);
-  await expect(page.locator('.gp-view.is-on .gp-c[data-card-id="c-tsb"]')).toHaveCount(1, { timeout: 25_000 });
-  await expect.poll(() => page.evaluate(() => {
-    const c = document.querySelector('.gp-c[data-card-id="c-tsb"] canvas');
-    const ch = c && window.Chart?.getChart?.(c);
-    if (!ch) return -1;
-    return (ch.data?.datasets || []).filter(d => (d.data || []).some(v => v != null)).length;
-  }), { timeout: 60_000 }).toBe(3);
-});
-
-test('la card Monotonía dibuja una barra por semana', async ({ page }) => {
-  // Lo que se protege: que agrupe por SEMANA (no por día ni por sesión) y que descarte las semanas
-  // sin nada que medir. Con 40 sesiones repartidas en 80 días tienen que salir varias barras, y
-  // todas con un valor razonable — la monotonía es media÷desvío, nunca negativa.
-  await montar(page);
-  await expect(page.locator('.gp-view.is-on .gp-c[data-card-id="c-mono"]')).toHaveCount(1, { timeout: 25_000 });
-  const vals = await (async () => {
-    await expect.poll(() => page.evaluate(() => {
-      const c = document.querySelector('.gp-c[data-card-id="c-mono"] canvas');
-      const ch = c && window.Chart?.getChart?.(c);
-      return (ch?.data?.datasets?.[0]?.data || []).length;
-    }), { timeout: 60_000 }).toBeGreaterThan(1);
-    return page.evaluate(() => {
-      const c = document.querySelector('.gp-c[data-card-id="c-mono"] canvas');
-      const ch = window.Chart.getChart(c);
-      return { datos: ch.data.datasets[0].data, etiquetas: ch.data.labels };
-    });
-  })();
-  expect(vals.datos.every(v => v > 0), 'la monotonía no puede ser cero ni negativa').toBe(true);
-  // Las etiquetas son lunes: agrupa por semana de verdad.
-  const lunes = vals.etiquetas.every(e => new Date(e + 'T00:00:00').getDay() === 1);
-  expect(lunes, `las barras no caen todas en lunes: ${vals.etiquetas.join(', ')}`).toBe(true);
-});
-
-test('la curva de Forma no arranca con el tramo plano en cero', async ({ page }) => {
-  // La ventana que se pide arranca antes a propósito (el fitness usa 42 días), pero dibujar los
-  // días previos al primer registro son curvas planas en cero que no dicen nada — en un club se
-  // veía un mes entero de línea recta antes de que empezaran los datos.
-  await montar(page);
-  await expect(page.locator('.gp-view.is-on .gp-c[data-card-id="c-tsb"]')).toHaveCount(1, { timeout: 25_000 });
-  await expect.poll(() => page.evaluate(() => {
-    const c = document.querySelector('.gp-c[data-card-id="c-tsb"] canvas');
-    const ch = c && window.Chart?.getChart?.(c);
-    return (ch?.data?.datasets || []).length;
-  }), { timeout: 60_000 }).toBe(3);
-  const primeros = await page.evaluate(() => {
-    const c = document.querySelector('.gp-c[data-card-id="c-tsb"] canvas');
-    const ch = window.Chart.getChart(c);
-    const fit = ch.data.datasets.find(d => /fitness/i.test(d.label || ''));
-    return { primero: fit?.data?.[0] ?? null, largo: fit?.data?.length ?? 0 };
-  });
-  expect(primeros.largo, 'la curva quedó vacía').toBeGreaterThan(5);
-  expect(primeros.primero, 'el primer punto de fitness sigue siendo cero').toBeGreaterThan(0);
+  const card = page.locator('.gp-view.is-on .gp-c[data-card-id="c-acwr"]');
+  await expect(card).toHaveCount(1, { timeout: 25_000 });
+  await ctxSobre(page, card);
+  await expect(page.locator('.gp-ctx')).toBeVisible({ timeout: 10_000 });
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.gp-ctx')).toHaveCount(0);
 });

@@ -892,3 +892,21 @@ body.gpb-ddmode.gpb-open .gp-page { padding-right: min(380px, 96vw); }
 .cmf-rowacts button.del:hover { background:var(--cm-danger-bg); color:var(--cm-danger); }
 .cmf-rowacts button .ti { font-size:12px; }
 .bdd-field .ic.is-calc, .es-fly-row .ic.is-calc { background:color-mix(in oklab, var(--cm-info) 16%, transparent); color:var(--cm-info); }
+
+/* ── Menú contextual del dashboard ──────────────────────────────────────────────────────────────
+   Se abre con click derecho (o ⌥+click en Mac) sobre el grid. Sale del flujo con position:fixed
+   porque las cards tienen overflow propio: dentro del grid quedaría recortado. */
+.gp-ctx { position:fixed; z-index:9999; min-width:186px; padding:5px;
+  background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-3);
+  box-shadow:var(--cm-shadow-pop, 0 10px 30px rgba(0,0,0,.14)); display:flex; flex-direction:column; gap:1px; }
+.gp-ctx-it { display:flex; align-items:center; gap:9px; width:100%; padding:7px 9px; border:0;
+  border-radius:var(--cm-r-2); background:transparent; color:var(--cm-fg); cursor:pointer;
+  font:500 12.5px/1 var(--cm-font-sans); text-align:left; }
+.gp-ctx-it .ti { font-size:15px; color:var(--cm-fg-muted); flex:none; }
+.gp-ctx-it span { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.gp-ctx-it kbd { font:500 10px/1 var(--cm-font-mono, monospace); color:var(--cm-fg-faint);
+  background:var(--cm-bg-soft); border:1px solid var(--cm-border-soft); border-radius:4px; padding:2px 5px; }
+.gp-ctx-it:hover:not([disabled]), .gp-ctx-it:focus-visible:not([disabled]) {
+  background:var(--cm-bg-soft); outline:none; }
+.gp-ctx-it[disabled] { opacity:.42; cursor:default; }
+.gp-ctx-sep { height:1px; margin:3px 6px; background:var(--cm-border-soft); }

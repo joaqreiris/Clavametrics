@@ -3821,6 +3821,124 @@ document.addEventListener('lostpointercapture', _gpMultiPointerUp, true);
 // are not gp.card/v1 → excluded. The active target is the last card clicked/hovered.
 window.__gpCardClipboard = window.__gpCardClipboard || null;
 window.__gpSelectedCardId = window.__gpSelectedCardId || null;
+// ── Menú contextual del dashboard ───────────────────────────────────────────────────────────────
+// Copiar, pegar, duplicar y borrar ya existían, pero sólo por teclado (Cmd+C/V/D) o dentro del
+// menú de tres puntos de cada card: había que saberlos. Con el click derecho quedan a mano donde
+// uno está mirando, y «Nueva card» aparece sobre el hueco donde la querés, no arriba de todo.
+// En Mac, ⌥+click hace lo mismo (los trackpads sin botón derecho son la norma).
+let _gpCtxEl = null;
+function _gpCerrarCtx() { if (_gpCtxEl) { try { _gpCtxEl.remove(); } catch (_) {} _gpCtxEl = null; } }
+
+function _gpAbrirCtx(x, y, items) {
+  _gpCerrarCtx();
+  const m = document.createElement('div');
+  m.className = 'gp-ctx';
+  m.setAttribute('role', 'menu');
+  m.innerHTML = items.map(it => it.sep
+    ? '<div class="gp-ctx-sep"></div>'
+    : `<button class="gp-ctx-it" data-act="${_gpEsc(it.act)}"${it.dis ? ' disabled' : ''} role="menuitem">`
+      + `<i class="ti ${_gpEsc(it.icon)}"></i><span>${_gpEsc(it.label)}</span>`
+      + (it.hint ? `<kbd>${_gpEsc(it.hint)}</kbd>` : '') + '</button>').join('');
+  document.body.appendChild(m);
+  // Que no se salga de la pantalla: si no entra a la derecha o abajo, se acomoda.
+  const r = m.getBoundingClientRect();
+  m.style.left = Math.max(6, Math.min(x, window.innerWidth  - r.width  - 8)) + 'px';
+  m.style.top  = Math.max(6, Math.min(y, window.innerHeight - r.height - 8)) + 'px';
+  _gpCtxEl = m;
+  m.querySelector('.gp-ctx-it:not([disabled])')?.focus();
+  return m;
+}
+
+/** Lo que se ofrece depende de dónde se hizo click: sobre una card del builder, o sobre el hueco. */
+function _gpItemsCtx(card) {
+  const hayCopia = !!window.__gpCardClipboard;
+  if (card) {
+    return [
+      { act: 'editar',   icon: 'ti-pencil',   label: _gpT('gps_analysis.ctx_edit', 'Edit') },
+      { act: 'duplicar', icon: 'ti-copy',     label: _gpT('gps_analysis.ctx_duplicate', 'Duplicate'), hint: '⌘D' },
+      { sep: true },
+      { act: 'copiar',   icon: 'ti-clipboard', label: _gpT('gps_analysis.ctx_copy', 'Copy'), hint: '⌘C' },
+      { act: 'cortar',   icon: 'ti-cut',      label: _gpT('gps_analysis.ctx_cut', 'Cut'),  hint: '⌘X' },
+      { sep: true },
+      { act: 'borrar',   icon: 'ti-trash',    label: _gpT('gps_analysis.ctx_delete', 'Delete') },
+    ];
+  }
+  return [
+    { act: 'nueva', icon: 'ti-plus',      label: _gpT('gps_analysis.ctx_new', 'New card here') },
+    { act: 'pegar', icon: 'ti-clipboard', label: _gpT('gps_analysis.ctx_paste', 'Paste'), hint: '⌘V', dis: !hayCopia },
+  ];
+}
+
+/** Traducción con respaldo, sin depender de que el módulo de i18n esté listo. */
+function _gpT(clave, fallback) {
+  try { return (window.tt || window.cmT)?.(clave, fallback) || fallback; } catch (_) { return fallback; }
+}
+
+async function _gpEjecutarCtx(act, card) {
+  const view = document.querySelector('.gp-view.is-on')?.dataset.view;
+  const grid = document.querySelector('.gp-view.is-on .gp-grid');
+  switch (act) {
+    case 'editar':
+      card?.querySelector('[data-edit]')?.click();
+      break;
+    case 'duplicar': {
+      if (!_gpIsBuilderCard(card) || !view || !grid) break;
+      const el = await _gpInsertConfigIntoView(card.__config, view, grid, _gpCardSize(card));
+      if (el) showToast(_gpT('gps_analysis.card_duplicated', 'Card duplicated'));
+      break;
+    }
+    case 'copiar':
+      if (_gpCopyCard(card)) showToast(_gpT('gps_analysis.card_copied', 'Card copied'));
+      break;
+    case 'cortar':
+      if (_gpCopyCard(card)) { _gpRemoveCardCoherent(card, { silent: true }); showToast(_gpT('gps_analysis.card_cut', 'Card cut')); }
+      break;
+    case 'borrar':
+      // Por el camino de siempre (el mismo del menú de tres puntos), que es el que además lo
+      // saca del layout guardado y ofrece deshacer.
+      (card?.querySelector('[data-del]') || null)?.click();
+      break;
+    case 'pegar':
+      await _gpPasteCard();
+      break;
+    case 'nueva':
+      document.getElementById('gpbOpenBtn')?.click();
+      break;
+  }
+}
+
+function _gpCtxDesdeEvento(e) {
+  const grid = e.target.closest?.('.gp-view.is-on .gp-grid');
+  if (!grid) return false;                       // fuera del dashboard: el menú del navegador
+  const card = e.target.closest('.gp-c[data-card-id]');
+  const deBuilder = _gpIsBuilderCard(card);
+  e.preventDefault();
+  if (card && deBuilder) { _gpSelectedCard = card; window.__gpSelectedCardId = card.id || null; }
+  const m = _gpAbrirCtx(e.clientX, e.clientY, _gpItemsCtx(deBuilder ? card : null));
+  m.addEventListener('click', async (ev) => {
+    const b = ev.target.closest('.gp-ctx-it');
+    if (!b || b.disabled) return;
+    _gpCerrarCtx();
+    try { await _gpEjecutarCtx(b.dataset.act, deBuilder ? card : null); }
+    catch (err) { console.warn('menú contextual:', err); }
+  });
+  return true;
+}
+
+document.addEventListener('contextmenu', (e) => { _gpCtxDesdeEvento(e); });
+// ⌥+click: en Mac muchos trabajan con trackpad sin botón derecho. Sólo con Alt, para no pisar el
+// click normal (que selecciona) ni el arrastre (que mueve la card).
+document.addEventListener('click', (e) => {
+  if (!e.altKey || e.metaKey || e.ctrlKey || e.shiftKey) return;
+  if (_gpCtxDesdeEvento(e)) e.stopPropagation();
+}, true);
+document.addEventListener('scroll', _gpCerrarCtx, true);
+window.addEventListener('blur', _gpCerrarCtx);
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') _gpCerrarCtx(); });
+document.addEventListener('mousedown', (e) => {
+  if (_gpCtxEl && !e.target.closest('.gp-ctx')) _gpCerrarCtx();
+}, true);
+
 // Copy/cut/paste/duplicate operate on the SELECTED card (single click), held as a live
 // element ref (pasted cards may lack an id attribute), with an id fallback.
 function _gpActiveCard() {
