@@ -396,6 +396,18 @@
   .av-pl-drop { border:0; background:transparent; color:var(--cm-fg-faint); cursor:pointer; padding:0 2px; line-height:1; border-radius:4px; }
   .av-pl-drop:hover { color:var(--cm-danger); background:rgba(239,68,68,0.10); }
 
+  /* Bandeja de pedidos: otro cuerpo técnico pide a un jugador MÍO */
+  .av-callup-inbox { margin:0 0 10px; border:1px solid rgba(234,88,12,0.35); background:rgba(234,88,12,0.06); border-radius:10px; padding:9px 12px; display:flex; flex-direction:column; gap:7px; }
+  .av-callup-inbox .hd { display:flex; align-items:center; gap:7px; font:600 12px/1 var(--cm-font-sans); color:#C2410C; }
+  .av-callup-req { display:flex; align-items:center; gap:9px; flex-wrap:wrap; padding:5px 0; border-top:1px solid rgba(234,88,12,0.18); }
+  .av-callup-req:first-of-type { border-top:0; }
+  .av-callup-req .who { font:600 12.5px/1.3 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .av-callup-req .meta { font:500 11.5px/1.3 var(--cm-font-sans); color:var(--cm-fg-muted); }
+  .av-callup-req .sp { flex:1; }
+  .av-callup-req button { height:27px; padding:0 11px; border-radius:7px; font:600 11.5px var(--cm-font-sans); cursor:pointer; border:1px solid var(--cm-border); background:var(--cm-surface); color:var(--cm-fg-strong); }
+  .av-callup-req button.yes { background:var(--cm-success,#16A34A); border-color:var(--cm-success,#16A34A); color:#fff; }
+  .av-callup-req button:disabled { opacity:.55; cursor:not-allowed; }
+
   /* Panel «Llamar jugadores» */
   .av-callup-panel { position:fixed; z-index:60; width:340px; max-height:min(70vh,520px); display:none; flex-direction:column;
     background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:12px; box-shadow:var(--cm-shadow-lg,0 18px 40px rgba(15,23,42,.18)); overflow:hidden; }
@@ -406,7 +418,8 @@
   .av-callup-panel .srch { padding:8px 12px; }
   .av-callup-panel .srch input { width:100%; height:30px; padding:0 9px; border:1px solid var(--cm-border); border-radius:7px; background:var(--cm-bg-soft); color:var(--cm-fg-strong); font:500 12px var(--cm-font-sans); }
   .av-callup-list { flex:1; overflow-y:auto; padding:0 6px 6px; }
-  .av-callup-list .grp { padding:8px 6px 4px; color:var(--cm-fg-faint); font:600 9.5px/1 var(--cm-font-mono); letter-spacing:.06em; text-transform:uppercase; }
+  .av-callup-list .grp { padding:8px 6px 4px; color:var(--cm-fg-faint); font:600 9.5px/1 var(--cm-font-mono); letter-spacing:.06em; text-transform:uppercase; display:flex; align-items:center; gap:6px; }
+  .av-callup-list .grp .ask { color:#C2410C; background:rgba(234,88,12,0.12); border-radius:3px; padding:2px 5px; letter-spacing:.02em; }
   .av-callup-opt { display:flex; align-items:center; gap:8px; padding:5px 6px; border-radius:6px; cursor:pointer; font:500 12px var(--cm-font-sans); color:var(--cm-fg-strong); }
   .av-callup-opt:hover { background:var(--cm-bg-soft); }
   .av-callup-opt .num { width:20px; text-align:center; color:var(--cm-fg-faint); font:600 11px var(--cm-font-mono); }
@@ -678,7 +691,7 @@
       </div>
 
       <!-- Panel «Llamar jugadores»: jugadores de otra categoría, solo por los días elegidos.
-           No crea membresía (player_teams no se toca) — ver migración 182. -->
+           No crea membresía (player_teams no se toca) — ver migración 185. -->
       <div class="av-callup-panel" id="avCallUpPanel">
         <div class="hd"><i class="ti ti-user-plus" style="font-size:14px"></i><span data-i18n="availability.callUpTitle">Call up players</span><button class="x" onclick="avCloseCallUp()"><i class="ti ti-x"></i></button></div>
         <div class="sub" data-i18n="availability.callUpSub">From other squads, for the days you choose only. They don't join this squad.</div>
@@ -713,6 +726,10 @@
 
       <!-- VIEWS -->
       <div id="viewMatrix">
+      <!-- Pedidos de otras categorías por MIS jugadores: aparece solo si hay algo que decidir
+           (migración 187). Va arriba de la grilla a propósito: es una decisión que frena la
+           planificación del otro, no una notificación más para revisar cuando haya tiempo. -->
+      <div class="av-callup-inbox" id="avCallUpInbox" style="display:none"></div>
       <!-- Matrix -->
       <div class="av-matrix-wrap">
         <div class="av-matrix-scroll">
@@ -803,7 +820,7 @@
   let injuredIds        = new Set(); // player IDs with active injury
   let _avGuestTeam      = new Map(); // guest player id → their primary team name (viewing another squad here)
   let _avPlayerTeams    = new Map(); // player id → [team_id, …] todas sus membresías (para «otro equipo»)
-  // ── Llamadas puntuales (player_call_ups, migración 182) ──
+  // ── Llamadas puntuales (player_call_ups, migración 185) ──
   // Un jugador de otra categoría que sube SOLO algunos días: no tiene membresía en este equipo
   // (por eso no está en el plantel) pero sí una llamada por día. Aparece en la grilla con sus
   // días llamados editables y el resto en blanco y bloqueado — está con su equipo, no acá.
@@ -1681,7 +1698,7 @@
           return data || [];
         } catch (e) { console.warn('[Availability] calendar events skipped:', e?.message); return []; }
       })(),
-      // Llamadas puntuales a ESTE equipo en el rango visible (player_call_ups, migración 182):
+      // Llamadas puntuales a ESTE equipo en el rango visible (player_call_ups, migración 185):
       // jugadores de otra categoría que suben solo algunos días, sin membresía permanente.
       window.cmCallUps(CLUB_ID, _avTeamId, mcStart, mcEnd),
     ]);
@@ -1747,6 +1764,8 @@
       extra.forEach(p => { _avCalledUp.add(p.id); players.push(p); });
       players.sort((a, b) => String(a.last_name || '').localeCompare(String(b.last_name || '')));
     } catch (e) { console.warn('[Availability] call-ups:', e && e.message); }
+    // Y al revés: los pedidos que OTRA categoría hace por jugadores de esta.
+    await avLoadPending(mcStart, mcEnd);
     // Guests: players whose PRIMARY team isn't the one we're viewing. They default to
     // "training with their own squad" instead of "available" here (derived, not stored).
     _avGuestTeam = new Map();
@@ -1782,6 +1801,7 @@
     el('avFooterCount') && (el('avFooterCount').innerHTML = tt('availability.footShowing', `Showing ${players.length} players`, { count: `<strong style="color:var(--cm-fg)">${players.length}</strong>` }));
     el('avMcPickerDates') && (el('avMcPickerDates').textContent = ` ${mcStart} → ${mcEnd}`);
 
+    avRenderPending();
     renderMatrix(players, avMap, injuredIds);
     // Si la pestaña Stats está activa, re-renderizar con el nuevo rango
     const _statsVisible = document.getElementById('viewStats') && document.getElementById('viewStats').style.display !== 'none';
@@ -2363,6 +2383,7 @@
   let _avStatScope = (() => { try { return sessionStorage.getItem('av_stat_scope') || 'primary'; } catch { return 'primary'; } })();
   let _avTeamsById = new Map();   // team_id → { name } for cross-team badges
   let _avMyTeams   = [];          // equipos visibles para este usuario (origen de las llamadas)
+  let _avCanDecide = false;       // ¿puede aceptar/negar pedidos por sus jugadores? (DT o dirección)
   async function avInitTeamSwitch() {
     const clubId = CLUB_ID || await window.getClubId();
     // getProfile and getTeams are independent → fetch together.
@@ -2379,6 +2400,12 @@
     // se registraría, pero marcar la disponibilidad del jugador choca con la RLS de availability
     // (my_player_ids) y quedaría a medias, sin que el filial se entere de nada.
     _avMyTeams = teams;
+    // Espejo en el cliente de can_decide_call_up() (migración 187): DT de la categoría, o
+    // dirección/admin del club. Solo decide qué se DIBUJA — quien manda es la RLS.
+    const _b = window.cmRoleBuckets ? window.cmRoleBuckets(prof) : new Set();
+    _avCanDecide = full || _b.has('admin') || _b.has('direction')
+      || String(prof?.role || '').toLowerCase() === 'coach'
+      || String(prof?.club_role || '').toLowerCase() === 'coach';
     const sel = document.getElementById('avTeamSelect');
     if (!teams.length) { sel.innerHTML=`<option value="">${tt('availability.noTeams','No teams')}</option>`; return; }
     const saved = sessionStorage.getItem('cal_active_team');
@@ -2442,13 +2469,14 @@
   function avOnTeamChange(){ _avTeamId=document.getElementById('avTeamSelect').value; sessionStorage.setItem('cal_active_team',_avTeamId); location.reload(); }
   window.avOnTeamChange = avOnTeamChange;
 
-  // ══ Llamar jugadores de otra categoría (player_call_ups, migración 182) ══════════════════
+  // ══ Llamar jugadores de otra categoría (player_call_ups, migración 185) ══════════════════
   // El pedido del cuerpo técnico: "que el jugador esté en el segundo equipo, pero que desde el
   // primero podamos añadirlo cuando queramos, solo el día que nos interesa, no un añadido
   // continuo". Por eso esto NO toca player_teams: la membresía es permanente y lo dejaría en
   // la lista para siempre. Se registran los días, y nada más que los días.
   let _avCallUpPool = null;      // fichas candidatas (lazy: se piden al abrir el panel)
   let _avCallUpPick = new Set(); // seleccionados en el panel
+  let _avPending    = [];        // pedidos de otras categorías por MIS jugadores (a decidir)
 
   // Fechas a las que aplica la llamada. 'selection' = las celdas marcadas en la grilla (sirve
   // para "el martes y el jueves"); 'range' = los días del rango visible que TIENEN actividad
@@ -2462,29 +2490,24 @@
     return MC_DATES.filter(dayCountable);
   }
 
+  // Candidatos: TODAS las categorías del club, no solo las que veo. Las que no veo no se
+  // pueden llamar directo — se piden, y decide el entrenador que tiene al jugador. Por eso no
+  // sirve la tabla players (su RLS, con razón, no deja ver jugadores de otras categorías: ahí
+  // cuelgan ficha, lesiones y evaluaciones): call_up_candidates() devuelve lo mínimo para
+  // elegir a alguien de una lista — nombre, dorsal, puesto y categoría — y el flag can_call.
   async function avLoadCallUpPool() {
     if (_avCallUpPool) return _avCallUpPool;
-    const others = (_avMyTeams || []).filter(t => t.id !== _avTeamId).map(t => t.id);
-    if (!others.length) { _avCallUpPool = []; return _avCallUpPool; }
+    if (!_avTeamId) { _avCallUpPool = []; return _avCallUpPool; }
     try {
-      const { data, error } = await window.sb.from('players')
-        .select('id, first_name, last_name, position, number, team_id, player_teams!inner(team_id)')
-        .eq('club_id', CLUB_ID).neq('status', 'inactive').is('archived_at', null)
-        .in('player_teams.team_id', others).order('last_name');
+      const { data, error } = await window.sb.rpc('call_up_candidates', { p_team: _avTeamId });
       if (error) throw error;
       // Quienes YA son de este plantel (membresía propia) no se llaman: ya están. Los llamados
       // sí siguen en el pool — es la vía para sumarles otro día sin soltar los que ya tienen.
       const squadIds = new Set(players.filter(p => !_avCalledUp.has(p.id)).map(p => p.id));
-      const seen = new Set();
-      _avCallUpPool = (data || []).filter(p => {
-        if (seen.has(p.id) || squadIds.has(p.id)) return false;
-        seen.add(p.id);
-        // Equipo a mostrar: su primario si lo veo; si no, la primera membresía que sí veo.
-        const membership = (p.player_teams || []).map(r => r.team_id);
-        p._srcTeam = (p.team_id && others.includes(p.team_id)) ? p.team_id : membership.find(t => others.includes(t)) || p.team_id;
-        delete p.player_teams;
-        return true;
-      });
+      _avCallUpPool = (data || [])
+        .filter(p => !squadIds.has(p.id))
+        .map(p => ({ ...p, _srcTeam: p.team_id, _srcName: p.team_name, _needsOk: !p.can_call }))
+        .sort((a, b) => String(a.last_name || '').localeCompare(String(b.last_name || '')));
     } catch (e) {
       console.warn('[Availability] call-up pool:', e && e.message);
       _avCallUpPool = [];
@@ -2497,9 +2520,9 @@
     if (!box) return;
     const pool = _avCallUpPool || [];
     if (!pool.length) {
-      box.innerHTML = `<div class="empty">${esc((_avMyTeams || []).length > 1
-        ? tt('availability.callUpNoPlayers', 'No players available in your other squads.')
-        : tt('availability.callUpNoTeams', 'You only have access to this squad, so there is nobody to call up. Ask an admin to give you access to the other category.'))}</div>`;
+      // Ya no depende de a qué categorías tengas acceso: la lista sale de call_up_candidates()
+      // y cubre todo el club. Vacía significa que no hay nadie más, no que te falten permisos.
+      box.innerHTML = `<div class="empty">${esc(tt('availability.callUpNoPlayers','No players available in other squads.'))}</div>`;
       avUpdateCallUpFooter();
       return;
     }
@@ -2514,7 +2537,12 @@
     if (!byTeam.size) { box.innerHTML = `<div class="empty">${esc(tt('availability.callUpNoMatch','No player matches that search.'))}</div>`; avUpdateCallUpFooter(); return; }
     let html = '';
     [...byTeam.entries()].forEach(([tid, list]) => {
-      html += `<div class="grp">${esc(_avTeamsById.get(tid)?.name || tt('availability.callUpOtherSquad','Other squad'))}</div>`;
+      // Categoría que no manejo → los jugadores se piden, no se llaman. Se avisa en el título
+      // del grupo, antes de elegir a nadie: enterarse después de apretar el botón es peor.
+      const needsOk = list.length && list.every(p => p._needsOk);
+      const okTag = needsOk
+        ? `<span class="ask">${esc(tt('availability.callUpNeedsOk','needs approval'))}</span>` : '';
+      html += `<div class="grp">${esc(list[0]?._srcName || _avTeamsById.get(tid)?.name || tt('availability.callUpOtherSquad','Other squad'))}${okTag}</div>`;
       list.forEach(p => {
         const nm = [(p.last_name || '').toUpperCase(), p.first_name || ''].filter(Boolean).join(' ');
         const already = _avCalledUp.has(p.id)
@@ -2532,18 +2560,39 @@
     avUpdateCallUpFooter();
   };
 
+  // ¿Cuántos de los elegidos hay que pedir (no son de una categoría mía)?
+  function avCallUpPendingPicked() {
+    const pool = _avCallUpPool || [];
+    return pool.filter(p => _avCallUpPick.has(p.id) && p._needsOk).length;
+  }
+
   function avUpdateCallUpFooter() {
     const n = _avCallUpPick.size;
+    const nAsk = avCallUpPendingPicked();
     const selDates = avCallUpDates('selection');
     const allDates = avCallUpDates('range');
     const bSel = document.getElementById('avCallUpSel');
     const bAll = document.getElementById('avCallUpAll');
     const when = document.getElementById('avCallUpWhen');
     if (!bSel || !bAll || !when) return;
-    bSel.textContent = tt('availability.callUpForSelection', `Selected days (${selDates.length})`, { count: selDates.length });
-    bAll.textContent = tt('availability.callUpForRange', `Whole range (${allDates.length})`, { count: allDates.length });
+    // Con alguno que hay que pedir, el botón lo dice: "pedir" y "llamar" no son lo mismo y el
+    // resultado tampoco (uno entra al entrenamiento, el otro espera un sí).
+    const verbo = nAsk === n && n > 0 ? 'Ask' : (nAsk ? 'Mixed' : '');
+    bSel.textContent = verbo === 'Ask'
+      ? tt('availability.callUpAskForSelection', `Request · selected days (${selDates.length})`, { count: selDates.length })
+      : tt('availability.callUpForSelection', `Selected days (${selDates.length})`, { count: selDates.length });
+    bAll.textContent = verbo === 'Ask'
+      ? tt('availability.callUpAskForRange', `Request · whole range (${allDates.length})`, { count: allDates.length })
+      : tt('availability.callUpForRange', `Whole range (${allDates.length})`, { count: allDates.length });
     bSel.disabled = !n || !selDates.length;
     bAll.disabled = !n || !allDates.length;
+    // Aviso explícito cuando la selección mezcla: se llama a unos y se pide por otros.
+    if (n && nAsk) {
+      when.textContent = nAsk === n
+        ? tt('availability.callUpWhenAsk', `${nAsk} player(s) need their coach to approve`, { count: nAsk })
+        : tt('availability.callUpWhenMixed', `${n - nAsk} called up now · ${nAsk} need approval`, { direct: n - nAsk, ask: nAsk });
+      return;
+    }
     when.textContent = !n
       ? tt('availability.callUpPickSomeone', 'Pick at least one player.')
       : (selDates.length
@@ -2582,16 +2631,115 @@
     const dates = avCallUpDates(mode);
     const pids  = [..._avCallUpPick];
     if (!pids.length || !dates.length) return;
+    const pool = _avCallUpPool || [];
+    // Los de una categoría que NO manejo se PIDEN: quedan a la espera y no entran a ningún
+    // roster. La base impone lo mismo (RLS), esto es solo para mandar el estado correcto y
+    // poder avisar a quien tiene que decidir.
+    const ask = new Set(pool.filter(p => _avCallUpPick.has(p.id) && p._needsOk).map(p => p.id));
     const btn = document.getElementById(mode === 'selection' ? 'avCallUpSel' : 'avCallUpAll');
     if (btn) { btn.disabled = true; btn.textContent = tt('common.saving','Saving…'); }
-    const res = await window.cmCallUpAdd(CLUB_ID, _avTeamId, pids, dates);
+    const res = await window.cmCallUpAdd(CLUB_ID, _avTeamId, pids, dates, ask);
     avCloseCallUp();
     if (!res.ok) { alert(tt('availability.callUpFailed','Could not call the players up: {err}', { err: res.error || '' })); return; }
+
+    // Aviso a quien decide. Va después de guardar: si el pedido se grabó y el aviso falla, el
+    // pedido sigue estando — al revés sería un aviso de algo que no pasó.
+    if (ask.size) {
+      try {
+        const teams = [...new Set(pool.filter(p => ask.has(p.id)).map(p => p._srcTeam))];
+        const who   = await window.cmCallUpDeciders(CLUB_ID, teams);
+        const mine  = _avTeamsById.get(_avTeamId)?.name || '';
+        const names = pool.filter(p => ask.has(p.id))
+          .map(p => `${p.first_name || ''} ${p.last_name || ''}`.trim()).join(', ');
+        await window.cmNotifyCallUp(CLUB_ID, who,
+          tt('availability.callUpNotifyTitle', `${mine} is asking for ${ask.size} player(s)`, { team: mine, count: ask.size }),
+          tt('availability.callUpNotifyBody', `${names} · ${dates[0]}${dates.length > 1 ? ` → ${dates[dates.length-1]}` : ''}`,
+             { names: names, from: dates[0], to: dates[dates.length - 1] }));
+      } catch (e) { console.warn('[Availability] call-up notify:', e && e.message); }
+      alert(res.called
+        ? tt('availability.callUpMixedDone', `${res.called} called up · ${res.requested} request(s) sent, waiting for their coach`, { direct: res.called, ask: res.requested })
+        : tt('availability.callUpAskDone', `${res.requested} request(s) sent. They won't show up here until their coach approves.`, { count: res.requested }));
+    }
     // La llamada quedó, pero marcar su disponibilidad requiere ver también SU categoría. Si eso
     // falló, el jugador aparece igual en la lista: lo que no pasa es que su equipo lo vea como
     // "con otro equipo" ese día. Hay que decirlo — si no, los dos cuerpos técnicos lo cuentan.
     if (res.availError) alert(tt('availability.callUpPartial','Called up, but their own squad was not updated ({err}). Ask an admin to check your access to that category.', { err: res.availError }));
     _avCallUpPool = null;
+    if (typeof init === 'function') init();
+  };
+
+  // ══ Bandeja: me piden un jugador MÍO ═══════════════════════════════════════════════════
+  // Solo aparece si hay algo que decidir Y si este usuario puede decidirlo (DT de la categoría
+  // o dirección — espejo de can_decide_call_up() en la base, migración 187). Para el resto del
+  // staff el pedido es invisible: verlo sin poder resolverlo solo genera preguntas.
+  async function avLoadPending(from, to) {
+    _avPending = [];
+    if (!_avCanDecide || !_avTeamId) return;
+    try {
+      const rows = await window.cmCallUpsPending(CLUB_ID, from, to);
+      // Me toca si el jugador es de la categoría que estoy viendo y lo pide OTRA.
+      _avPending = (rows || []).filter(r => {
+        if (r.team_id === _avTeamId) return false;
+        const teams = _avPlayerTeams.get(String(r.player_id)) || [];
+        return teams.indexOf(_avTeamId) >= 0;
+      });
+    } catch (e) { console.warn('[Availability] pending:', e && e.message); }
+  }
+
+  function avRenderPending() {
+    const box = document.getElementById('avCallUpInbox');
+    if (!box) return;
+    if (!_avPending.length) { box.style.display = 'none'; box.innerHTML = ''; return; }
+    // Un pedido de cinco días son cinco filas en la base pero UNA decisión para el entrenador:
+    // se agrupa por jugador + quién lo pide, y se acepta o niega todo junto.
+    const grupos = new Map();
+    _avPending.forEach(r => {
+      const k = r.player_id + '|' + r.team_id;
+      if (!grupos.has(k)) grupos.set(k, { player_id: r.player_id, team_id: r.team_id, rows: [] });
+      grupos.get(k).rows.push(r);
+    });
+    const fmt = d => { try { return new Date(d + 'T00:00:00').toLocaleDateString(undefined, { day:'numeric', month:'short' }); } catch (_) { return d; } };
+    let html = `<div class="hd"><i class="ti ti-hand-stop" style="font-size:14px"></i>${esc(tt('availability.inboxTitle','Requests for your players'))}</div>`;
+    [...grupos.values()].forEach(g => {
+      const p  = players.find(x => x.id === g.player_id);
+      const nm = p ? [(p.last_name || '').toUpperCase(), p.first_name || ''].filter(Boolean).join(' ') : tt('availability.inboxSomePlayer','A player');
+      const tn = _avTeamsById.get(g.team_id)?.name || tt('availability.callUpOtherSquad','Other squad');
+      const ds = g.rows.map(r => String(r.date).slice(0, 10)).sort();
+      const cuando = ds.length === 1 ? fmt(ds[0]) : `${fmt(ds[0])} → ${fmt(ds[ds.length-1])} (${ds.length})`;
+      html += `<div class="av-callup-req" data-req="${esc(g.player_id)}|${esc(g.team_id)}">
+        <span class="who">${esc(nm)}</span>
+        <span class="meta">${esc(tt('availability.inboxAsks', `${tn} asks · ${cuando}`, { team: tn, when: cuando }))}</span>
+        <span class="sp"></span>
+        <button type="button" onclick="avDecideCallUp('${esc(g.player_id)}','${esc(g.team_id)}',false)">${esc(tt('availability.inboxNo','Decline'))}</button>
+        <button type="button" class="yes" onclick="avDecideCallUp('${esc(g.player_id)}','${esc(g.team_id)}',true)">${esc(tt('availability.inboxYes','Approve'))}</button>
+      </div>`;
+    });
+    box.innerHTML = html;
+    box.style.display = '';
+  }
+
+  window.avDecideCallUp = async function (playerId, askingTeam, yes) {
+    const rows = _avPending.filter(r => String(r.player_id) === String(playerId) && String(r.team_id) === String(askingTeam));
+    if (!rows.length) return;
+    const card = document.querySelector(`.av-callup-req[data-req="${playerId}|${askingTeam}"]`);
+    card && card.querySelectorAll('button').forEach(b => { b.disabled = true; });
+    const res = await window.cmCallUpDecide(CLUB_ID, rows, yes ? 'approved' : 'rejected');
+    if (!res.ok) {
+      card && card.querySelectorAll('button').forEach(b => { b.disabled = false; });
+      alert(tt('availability.inboxFailed','Could not save the decision: {err}', { err: res.error || '' }));
+      return;
+    }
+    // Avisar al que pidió: se quedó esperando para armar su semana.
+    try {
+      const p  = players.find(x => x.id === playerId);
+      const nm = p ? `${p.first_name || ''} ${p.last_name || ''}`.trim() : '';
+      const asker = [...new Set(rows.map(r => r.created_by).filter(Boolean))];
+      const mine  = _avTeamsById.get(_avTeamId)?.name || '';
+      await window.cmNotifyCallUp(CLUB_ID, asker,
+        yes ? tt('availability.inboxNotifyYes', `${mine} approved ${nm}`, { team: mine, name: nm })
+            : tt('availability.inboxNotifyNo',  `${mine} declined ${nm}`, { team: mine, name: nm }),
+        null);
+    } catch (e) { console.warn('[Availability] decide notify:', e && e.message); }
     if (typeof init === 'function') init();
   };
 

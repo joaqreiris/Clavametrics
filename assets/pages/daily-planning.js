@@ -18,7 +18,7 @@
        cargarse.
    ──────────────────────────────────────────────────────────────────────── */
 // _dpRoster = el plantel del equipo (membresías en player_teams). _dpPlayers = ese plantel MÁS
-// los llamados de ESE día (player_call_ups, migración 182): jugadores de otra categoría que suben
+// los llamados de ESE día (player_call_ups, migración 185): jugadores de otra categoría que suben
 // solo hoy y que, por eso mismo, no tienen membresía. Se recompone en cada loadDay porque la
 // llamada es por día — mañana el plantel vuelve a ser el de siempre.
 let _dpRoster = [], _dpCalledUp = new Set();
@@ -892,7 +892,7 @@ async function loadDay(dateStr) {
     window.sb.from('availability').select('player_id,status,notes,team_id').eq('club_id', _dpClubId).eq('date', dateStr),
     window.sb.from('treatments').select('id,player_id,team_id,date,adaptation_date,type,treatment_type,modalities,notes,adaptation_notes,adaptation_sent_at,adaptation_applied_at,adaptation_applied_by,notify_coaches,players(first_name,last_name,number,position)').eq('club_id', _dpClubId).or(`adaptation_date.eq.${dateStr},and(adaptation_date.is.null,date.eq.${dateStr})`),
     window.sb.from('training_sessions').select('id,title,session_time,end_time,duration,session_type,notes,published,estimated_rpe,orientation,focus,match_day_offset,microcycle_id,gps_targets,gym_content,updated_at,coach_id,club_id,session_date').eq('club_id', _dpClubId).eq('team_id', _dpTeamId).eq('session_date', dateStr).eq('is_historical', false).order('session_time', { ascending: true, nullsFirst: true }).order('created_at', { ascending: true }),
-    // Llamados de OTRA categoría para ESTE día (migración 182). Sin membresía: entran al día y
+    // Llamados de OTRA categoría para ESTE día (migración 185). Sin membresía: entran al día y
     // se van con él.
     window.cmCallUps(_dpClubId, _dpTeamId, dateStr, dateStr)
   ]);

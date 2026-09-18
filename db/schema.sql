@@ -2213,13 +2213,21 @@ create table if not exists public.player_call_ups (
   date date not null,
   created_by uuid,
   created_at timestamp with time zone default now() not null,
+  status text default 'approved'::text not null,
+  decided_by uuid,
+  decided_at timestamp with time zone,
+  decision_note text,
   constraint player_call_ups_pkey primary key (id),
-  constraint player_call_ups_player_id_team_id_date_key UNIQUE (player_id, team_id, date)
+  constraint player_call_ups_player_id_team_id_date_key UNIQUE (player_id, team_id, date),
+  constraint player_call_ups_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'approved'::text, 'rejected'::text])))
 );
 CREATE INDEX player_call_ups_team_date_idx ON public.player_call_ups USING btree (club_id, team_id, date);
 CREATE INDEX player_call_ups_player_date_idx ON public.player_call_ups USING btree (player_id, date);
+CREATE INDEX player_call_ups_pending_idx ON public.player_call_ups USING btree (club_id, date) WHERE (status = 'pending'::text);
+-- status (migración 187): approved = el jugador está llamado (llamada directa o pedido aceptado);
+-- pending = pedido esperando al equipo de origen, NO entra a ningún roster; rejected = negado.
 -- Llamada PUNTUAL de un jugador a un equipo que no es el suyo, válida SOLO para ese día
--- (migración 182). No crea membresía: player_teams no se toca, el jugador sigue siendo del filial
+-- (migración 185). No crea membresía: player_teams no se toca, el jugador sigue siendo del filial
 -- a todos los efectos y solo se suma al roster del equipo que llama, ese día.
 -- team_id = el equipo que LLAMA (el destino), no el del jugador.
 -- No vive en availability porque esa tabla tiene PK (player_id, date) y los estados globales
@@ -3290,6 +3298,7 @@ alter table public.player_call_ups add constraint player_call_ups_club_id_fkey F
 alter table public.player_call_ups add constraint player_call_ups_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE;
 alter table public.player_call_ups add constraint player_call_ups_team_id_fkey FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE;
 alter table public.player_call_ups add constraint player_call_ups_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE SET NULL;
+alter table public.player_call_ups add constraint player_call_ups_decided_by_fkey FOREIGN KEY (decided_by) REFERENCES profiles(id) ON DELETE SET NULL;
 alter table public.players add constraint players_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
 alter table public.players add constraint players_team_id_fkey FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE SET NULL;
 alter table public.preventive_routines add constraint preventive_routines_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
@@ -5084,6 +5093,56 @@ CREATE OR REPLACE FUNCTION public.my_role()
 AS $function$ select role from public.profiles where id = auth.uid() limit 1; $function$
 ;
 
+-- ¿Puede este usuario aceptar o negar un pedido sobre ESTE jugador? (migración 187)
+-- Dirección/admin siempre; si no, hay que ser el DT (role/club_role = 'coach', criterio estricto
+-- como player_teams_headcoach_write) de alguna de las categorías del jugador.
+CREATE OR REPLACE FUNCTION public.can_decide_call_up(p_player uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  select public.has_full_planning_access()
+      or (
+        p_player in (select public.my_player_ids())
+        and exists (
+          select 1 from public.profiles pr
+          where pr.id = auth.uid()
+            and (lower(coalesce(pr.role,'')) = 'coach' or lower(coalesce(pr.club_role,'')) = 'coach')
+        )
+      );
+$function$
+;
+
+-- Candidatos para el picker de llamadas (migración 187). Para PEDIR un jugador hay que poder
+-- nombrarlo, y la RLS de players no deja ver los de otras categorías — con razón: ahí cuelgan
+-- ficha, lesiones y evaluaciones. Devuelve lo mínimo para elegir de una lista (nombre, dorsal,
+-- puesto, categoría) más can_call, que dice si se llama directo o hay que pedirlo.
+-- SECURITY DEFINER acotado: exige ser del club y tener el equipo que llama entre los propios.
+CREATE OR REPLACE FUNCTION public.call_up_candidates(p_team uuid)
+ RETURNS TABLE(id uuid, first_name text, last_name text, number integer, "position" text, team_id uuid, team_name text, can_call boolean)
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  select distinct on (p.id)
+         p.id, p.first_name, p.last_name, p.number, p.position,
+         t.id as team_id, t.name as team_name,
+         (p.id in (select public.my_player_ids())) as can_call
+  from public.players p
+  join public.player_teams pt on pt.player_id = p.id
+  join public.teams t on t.id = pt.team_id
+  where p.club_id = public.get_user_club_id()
+    and p.archived_at is null
+    and coalesce(p.status,'') <> 'inactive'
+    and pt.team_id <> p_team
+    and not exists (select 1 from public.player_teams x where x.player_id = p.id and x.team_id = p_team)
+    and (public.has_full_planning_access() or p_team in (select public.my_team_ids()))
+    and exists (select 1 from public.teams t2 where t2.id = p_team and t2.club_id = public.get_user_club_id())
+  order by p.id, pt.is_primary desc, t.name;
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.my_team_ids()
  RETURNS SETOF uuid
  LANGUAGE sql
@@ -5652,7 +5711,7 @@ begin
                  or p.team_id = v_team
                  or exists (select 1 from public.player_teams pt
                             where pt.player_id = p.id and pt.team_id = v_team)
-                 -- Llamado de otra categoría PARA ESE DÍA (migración 182): entrena acá hoy, así
+                 -- Llamado de otra categoría PARA ESE DÍA (migración 185): entrena acá hoy, así
                  -- que su RPE es de esta sesión. No tiene membresía y no debe tenerla.
                  or exists (select 1 from public.player_call_ups cu
                             where cu.player_id = p.id and cu.team_id = v_team and cu.date = v_date))
@@ -8258,15 +8317,26 @@ create policy "player_call_ups_select" on public.player_call_ups as permissive f
 -- El club se verifica en las dos ramas Y el equipo tiene que ser de ese club (el EXISTS): sin él,
 -- un admin podía escribir una fila con su club_id y el team_id de otro club. El EXISTS va solo en
 -- las ramas de escritura — en el SELECT, que es la consulta caliente, correría por fila.
+-- Nacer 'approved' (saltarse la aprobación) solo se puede sobre un jugador que YA ves; sobre
+-- cualquier otro la fila nace 'pending' y espera al entrenador que lo tiene (migración 187).
 create policy "player_call_ups_insert" on public.player_call_ups as permissive for insert to authenticated
-  with check (((club_id = get_user_club_id()) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))
-    AND (EXISTS ( SELECT 1 FROM teams t WHERE ((t.id = player_call_ups.team_id) AND (t.club_id = get_user_club_id()))))));
+  with check (((club_id = ( SELECT get_user_club_id() AS get_user_club_id)) AND (( SELECT has_full_planning_access() AS has_full_planning_access) OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))
+    AND (EXISTS ( SELECT 1 FROM teams t WHERE ((t.id = player_call_ups.team_id) AND (t.club_id = ( SELECT get_user_club_id() AS get_user_club_id)))))
+    AND (status = ANY (ARRAY['pending'::text, 'approved'::text]))
+    AND ((status = 'pending'::text) OR ( SELECT has_full_planning_access() AS has_full_planning_access) OR (player_id IN ( SELECT my_player_ids() AS my_player_ids)))));
+-- Un UPDATE acá es aceptar o negar un pedido: solo quien decide sobre ese jugador, y el
+-- resultado solo puede ser aprobado o negado (no se vuelve a 'pending' para borrar el rastro).
+-- can_decide_call_up(player_id) sí se evalúa por fila —depende del jugador, no se puede envolver
+-- en (select …)—, y está bien acá: un UPDATE toca los días de un pedido, no la tabla entera.
 create policy "player_call_ups_update" on public.player_call_ups as permissive for update to authenticated
-  using (((club_id = get_user_club_id()) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))))
-  with check (((club_id = get_user_club_id()) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))
-    AND (EXISTS ( SELECT 1 FROM teams t WHERE ((t.id = player_call_ups.team_id) AND (t.club_id = get_user_club_id()))))));
+  using (((club_id = ( SELECT get_user_club_id() AS get_user_club_id)) AND can_decide_call_up(player_id)))
+  with check (((club_id = ( SELECT get_user_club_id() AS get_user_club_id)) AND can_decide_call_up(player_id)
+    AND (status = ANY (ARRAY['approved'::text, 'rejected'::text]))));
+-- Borra el equipo que llamó (suelta al jugador o cancela su pedido) y también quien decide:
+-- si el que lo tiene se arrepiente, no tiene que ir a pedirle el favor al otro cuerpo técnico.
 create policy "player_call_ups_delete" on public.player_call_ups as permissive for delete to authenticated
-  using (((club_id = get_user_club_id()) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))));
+  using (((club_id = ( SELECT get_user_club_id() AS get_user_club_id)) AND (( SELECT has_full_planning_access() AS has_full_planning_access)
+    OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)) OR can_decide_call_up(player_id))));
 
 alter table public.players enable row level security;
 create policy "players_scoped_delete" on public.players as permissive for delete to public

@@ -1298,7 +1298,7 @@
     _currentMatch = match;
     if (match) {
       updateBanner(match);
-      // Llamados para el DÍA del partido (player_call_ups, migración 182): el jugador del filial
+      // Llamados para el DÍA del partido (player_call_ups, migración 185): el jugador del filial
       // que sube solo para este partido tiene que poder entrar al once y al banco. No está en
       // player_teams a propósito — la membresía sería permanente y lo dejaría acá para siempre.
       // Se piden después del partido porque la llamada es por fecha y la fecha sale de él.

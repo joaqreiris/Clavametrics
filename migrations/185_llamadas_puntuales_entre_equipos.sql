@@ -1,4 +1,4 @@
--- Migration 182: player_call_ups — llamar a un jugador de otra categoría SIN pasarlo de plantel.
+-- Migration 185: player_call_ups — llamar a un jugador de otra categoría SIN pasarlo de plantel.
 --
 -- El problema: hoy la única forma de que un jugador del filial aparezca en el primer equipo es
 -- darle una membresía en player_teams. Esa membresía es PERMANENTE: a partir de ahí el chico

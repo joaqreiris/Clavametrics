@@ -1,10 +1,10 @@
--- Migration 183: el jugador LLAMADO de otra categoría también tiene que responder el RPE.
+-- Migration 186: el jugador LLAMADO de otra categoría también tiene que responder el RPE.
 --
 -- session_rpe_status() decide a quién se le pide el RPE de una sesión. Con convocatoria armada
 -- (session_participants) toma a los anotados, sean del equipo que sean — ahí el llamado ya entra.
 -- El problema es el caso habitual: SIN convocatoria armada ("entrenan todos los disponibles"),
 -- la función cae al roster por player_teams, y el llamado no tiene membresía a propósito
--- (migración 182). Resultado: el chico entrena con el primer equipo, aparece en Daily Planning,
+-- (migración 185). Resultado: el chico entrena con el primer equipo, aparece en Daily Planning,
 -- y su sesión no le pide RPE — la carga de ese entrenamiento se pierde justo para el jugador
 -- que más control necesita, porque está haciendo una carga que no es la de su categoría.
 --
@@ -96,7 +96,7 @@ begin
                  or p.team_id = v_team
                  or exists (select 1 from public.player_teams pt
                             where pt.player_id = p.id and pt.team_id = v_team)
-                 -- Llamado de otra categoría PARA ESE DÍA (migración 182): entrena acá hoy, así
+                 -- Llamado de otra categoría PARA ESE DÍA (migración 185): entrena acá hoy, así
                  -- que su RPE es de esta sesión. No tiene membresía y no debe tenerla.
                  or exists (select 1 from public.player_call_ups cu
                             where cu.player_id = p.id and cu.team_id = v_team and cu.date = v_date))

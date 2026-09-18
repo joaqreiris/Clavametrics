@@ -1,6 +1,6 @@
 // @ts-check
 // El llamado de otra categoría tiene que entrar al día que fue llamado — y solo a ese.
-// La llamada es por fecha (player_call_ups, migración 182): el roster se recompone en cada
+// La llamada es por fecha (player_call_ups, migración 185): el roster se recompone en cada
 // cambio de día, así que cambiar de día es parte de lo que hay que probar.
 import { test, expect } from '@playwright/test';
 import { SB, PLAYER, MICROCYCLE, injectSession, mockBase } from './_shared.js';
