@@ -2942,11 +2942,14 @@ create table if not exists public.treatments (
   adaptation_applied_by uuid,
   team_id uuid,
   adaptation_date date,
+  -- NULL = la adaptación vale solo el día de adaptation_date (ver migración 189).
+  adaptation_until date,
   constraint treatments_pkey primary key (id),
   constraint treatments_treatment_type_check CHECK ((treatment_type = ANY (ARRAY['rehab'::text, 'preventive'::text]))),
   constraint treatments_pain_pre_check CHECK (((pain_pre >= 0) AND (pain_pre <= 10))),
   constraint treatments_pain_post_check CHECK (((pain_post >= 0) AND (pain_post <= 10))),
-  constraint treatments_player_status_check CHECK ((player_status = ANY (ARRAY['improving'::text, 'stable'::text, 'worsening'::text])))
+  constraint treatments_player_status_check CHECK ((player_status = ANY (ARRAY['improving'::text, 'stable'::text, 'worsening'::text]))),
+  constraint treatments_adaptation_range_check CHECK ((adaptation_until IS NULL) OR (adaptation_date IS NULL) OR (adaptation_until >= adaptation_date))
 );
 
 create table if not exists public.video_matches (
@@ -3366,6 +3369,7 @@ alter table public.treatments add constraint treatments_player_id_fkey FOREIGN K
 alter table public.treatments add constraint treatments_team_id_fkey FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE SET NULL;
 CREATE INDEX idx_treatments_team ON public.treatments USING btree (team_id);
 CREATE INDEX idx_treatments_adapt_date ON public.treatments USING btree (adaptation_date);
+CREATE INDEX idx_treatments_adapt_until ON public.treatments USING btree (adaptation_until);
 alter table public.video_matches add constraint video_matches_event_id_fkey FOREIGN KEY (event_id) REFERENCES calendar_events(id) ON DELETE CASCADE;
 alter table public.video_matches add constraint video_matches_video_id_fkey FOREIGN KEY (video_id) REFERENCES videos(id) ON DELETE CASCADE;
 alter table public.video_players add constraint video_players_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE;

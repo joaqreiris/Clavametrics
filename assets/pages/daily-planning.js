@@ -36,6 +36,17 @@ let _dpAvMap = {}, _dpActTotalMin = 0, _dpGkTotalMin = 0, _dpFieldExercises = []
 const _dpPngCache = {};   // planner_exercise_id -> preview <img src> (signed URL or base64), or null when known-absent
 const _dpDescCache = {};  // planner_exercise_id -> { objective, description } from the Drill Designer exercise (null when absent)
 
+// ¿La adaptación de este tratamiento toca el día D? Es el espejo en cliente del filtro que hace
+// la query (migración 189): [adaptation_date, adaptation_until], con `until` vacío = un solo día
+// y las filas viejas sin adaptation_date colgando de la fecha del tratamiento.
+function dpTreatmentCoversDay(row, day) {
+  if (!row || !day) return false;
+  const from = row.adaptation_date || row.date;
+  if (!from) return false;
+  const to = row.adaptation_until || from;
+  return String(from).slice(0,10) <= day && day <= String(to).slice(0,10);
+}
+
 // i18n helpers
 function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.t(key,vars):null; return (v&&v!==key)?v:(fallbackEN!=null?fallbackEN:key); }
 function ttLocale(){ return (window.CM_I18N && window.CM_I18N.current) || 'en-GB'; }
@@ -915,7 +926,10 @@ async function loadDay(dateStr) {
 
   const [avResult, adaptResult, sessResult, callUps] = await Promise.all([
     window.sb.from('availability').select('player_id,status,notes,team_id').eq('club_id', _dpClubId).eq('date', dateStr),
-    window.sb.from('treatments').select('id,player_id,team_id,date,adaptation_date,type,treatment_type,modalities,notes,adaptation_notes,adaptation_sent_at,adaptation_applied_at,adaptation_applied_by,notify_coaches,players(first_name,last_name,number,position)').eq('club_id', _dpClubId).or(`adaptation_date.eq.${dateStr},and(adaptation_date.is.null,date.eq.${dateStr})`),
+    // Una adaptación puede cubrir varios días (migración 189): entra si el día abierto cae dentro
+    // de [adaptation_date, adaptation_until]. Sin `until` vale un solo día, y las filas viejas sin
+    // `adaptation_date` siguen colgando de la fecha del tratamiento.
+    window.sb.from('treatments').select('id,player_id,team_id,date,adaptation_date,adaptation_until,type,treatment_type,modalities,notes,adaptation_notes,adaptation_sent_at,adaptation_applied_at,adaptation_applied_by,notify_coaches,players(first_name,last_name,number,position)').eq('club_id', _dpClubId).or(`and(adaptation_date.lte.${dateStr},adaptation_until.gte.${dateStr}),and(adaptation_date.eq.${dateStr},adaptation_until.is.null),and(adaptation_date.is.null,date.eq.${dateStr})`),
     window.sb.from('training_sessions').select('id,title,session_time,end_time,duration,session_type,notes,published,estimated_rpe,orientation,focus,match_day_offset,microcycle_id,gps_targets,gym_content,updated_at,coach_id,club_id,session_date').eq('club_id', _dpClubId).eq('team_id', _dpTeamId).eq('session_date', dateStr).eq('is_historical', false).order('session_time', { ascending: true, nullsFirst: true }).order('created_at', { ascending: true }),
     // Llamados de OTRA categoría para ESTE día (migración 185). Sin membresía: entran al día y
     // se van con él.
@@ -4077,7 +4091,7 @@ let _dpRoByRole = false, _dpLock = null;
         // Alguien llamó (o soltó) a un jugador de otra categoría para el día abierto: el grupo
         // de hoy cambió aunque nadie haya tocado la sesión.
         if (p.table === 'player_call_ups') return String(row.date).slice(0,10) === _dpCurrentDate && row.team_id === _dpTeamId;
-        if (p.table === 'treatments')   return (row.adaptation_date || row.date) === _dpCurrentDate;
+        if (p.table === 'treatments')   return dpTreatmentCoversDay(row, _dpCurrentDate);
         return true;
       },
       busy: () => !!_dpSaveTimer || !!_dpProjSaveTimer || !!_dpDragSeid

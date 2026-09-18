@@ -648,8 +648,17 @@
             <div class="ph-f" id="adaptWrap">
               <label data-i18n="physio.adaptation_for_next_session">Adaptation for next session</label>
               <textarea id="phAdaptInput" data-i18n-ph="physio.field_avoid_max_velocity_runs" placeholder="Field: avoid max-velocity runs. Gym: reduce squat load 20%." rows="2"></textarea>
-              <label style="margin-top:8px" data-i18n="physio.adaptation_date">Applies to session date</label>
-              <input type="date" id="phAdaptDateInput">
+              <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px">
+                <div style="flex:1 1 150px;min-width:0">
+                  <label style="display:block;margin-bottom:4px" data-i18n="physio.adaptation_date">Applies from</label>
+                  <input type="date" id="phAdaptDateInput">
+                </div>
+                <div style="flex:1 1 150px;min-width:0">
+                  <label style="display:block;margin-bottom:4px" data-i18n="physio.adaptation_until">Until (optional)</label>
+                  <input type="date" id="phAdaptUntilInput">
+                </div>
+              </div>
+              <div style="margin-top:6px;font-size:11px;color:var(--cm-fg-muted)" data-i18n="physio.adaptation_range_hint">Defaults to the day after the treatment. Leave "Until" empty for a single session.</div>
             </div>
           </div>
 
@@ -922,6 +931,17 @@ function tt(key, fallbackEN, vars) {
   return (v && v !== key) ? v : (fallbackEN != null ? fallbackEN : key);
 }
 
+// Suma días a un YYYY-MM-DD sin pasar por UTC: `new Date('2026-09-18')` se parsea como UTC y
+// en zonas al oeste devuelve el día anterior. Con el constructor de tres argumentos la fecha es
+// local y el rollover de mes/año lo hace Date.
+function phShiftDay(ymd, n) {
+  if (!ymd) return ymd;
+  const [y, m, d] = ymd.split('-').map(Number);
+  if (!y || !m || !d) return ymd;
+  return cmYMD(new Date(y, m - 1, d + n));
+}
+const phNextDay = ymd => phShiftDay(ymd, 1);
+
 let _clubId = null, _profile = null;
 let _allPlayers = [], _allStaff = [], _allTreatments = [], _allTemplates = [];
 let _currentTreatType = 'rehab';
@@ -938,15 +958,16 @@ let _editingTreatmentId = null;
 
   const today = cmToday();
   document.getElementById('phDateInput').value = today;
-  document.getElementById('phAdaptDateInput').value = today;
-  // Keep the adaptation's target date tracking the treatment date until the physio
-  // overrides it — so an adaptation defaults to the day it was recorded.
+  document.getElementById('phAdaptDateInput').value = phNextDay(today);
+  // La adaptación es para la PRÓXIMA sesión: el tratamiento se carga después de entrenar, así
+  // que apuntar al mismo día dejaba la recomendación en una sesión ya hecha. El campo sigue a la
+  // fecha del tratamiento (+1 día) mientras el fisio no lo toque a mano.
   document.getElementById('phDateInput').addEventListener('change', function () {
     const ad = document.getElementById('phAdaptDateInput');
-    if (!ad.value || ad.value === ad.dataset.autofrom) ad.value = this.value;
-    ad.dataset.autofrom = this.value;
+    if (!ad.value || ad.value === ad.dataset.autofrom) ad.value = phNextDay(this.value);
+    ad.dataset.autofrom = phNextDay(this.value);
   });
-  document.getElementById('phAdaptDateInput').dataset.autofrom = today;
+  document.getElementById('phAdaptDateInput').dataset.autofrom = phNextDay(today);
 
   // Load players ordered by last_name; filter inactive client-side to avoid null != issues
   console.log('club_id en Treatments:', _clubId);
@@ -1012,6 +1033,7 @@ let _editingTreatmentId = null;
     .select(`id, player_id, team_id, injury_id, date, session_time, type, treatment_type, modalities,
              reason, physio_id, pain_pre, pain_post, player_status, notes, adaptation,
              adaptation_notes, adaptation_sent_at, notify_coaches, duration_min, zones,
+             adaptation_date, adaptation_until,
              players(first_name, last_name, number, position),
              injuries(injury_type, body_area)`)
     .eq('club_id', _clubId)
@@ -1199,7 +1221,9 @@ function resetForm() {
   document.getElementById('phDurationInput').value = '';
   document.getElementById('phNotesInput').value = '';
   document.getElementById('phAdaptInput').value = '';
-  document.getElementById('phAdaptDateInput').value = cmToday();
+  document.getElementById('phAdaptDateInput').value = phNextDay(cmToday());
+  document.getElementById('phAdaptDateInput').dataset.autofrom = phNextDay(cmToday());
+  document.getElementById('phAdaptUntilInput').value = '';
   document.getElementById('notifyChk').checked = false;
   document.getElementById('phInjurySelect').innerHTML = `<option value="">${tt('physio.select_player_first','— select player first —')}</option>`;
   document.getElementById('noInjuriesMsg').style.display = 'none';
@@ -1249,7 +1273,12 @@ function openEditTreatment(t, isDuplicate = false) {
   document.getElementById('phNotesInput').value = t.notes || '';
   document.getElementById('notifyChk').checked = t.notify_coaches || false;
   document.getElementById('phAdaptInput').value = t.adaptation_notes || t.adaptation || '';
-  document.getElementById('phAdaptDateInput').value = isDuplicate ? cmToday() : (t.adaptation_date || t.date || '');
+  const _loadAdaptFrom = isDuplicate
+    ? phNextDay(cmToday())
+    : (t.adaptation_date || phNextDay(t.date || cmToday()));
+  document.getElementById('phAdaptDateInput').value = _loadAdaptFrom;
+  document.getElementById('phAdaptDateInput').dataset.autofrom = _loadAdaptFrom;
+  document.getElementById('phAdaptUntilInput').value = isDuplicate ? '' : (t.adaptation_until || '');
 
   if (_currentTreatType === 'rehab' && t.injury_id) {
     setTimeout(() => {
@@ -1355,7 +1384,8 @@ window.addEventListener('scroll', _phClosePortal, { passive: true });
 async function saveTreatment(andNew) {
   const pid       = document.getElementById('phPlayerSelect').value;
   const date      = document.getElementById('phDateInput').value;
-  const adaptDate = document.getElementById('phAdaptDateInput').value || date;
+  const adaptDate = document.getElementById('phAdaptDateInput').value || phNextDay(date);
+  const adaptUntil = document.getElementById('phAdaptUntilInput').value || null;
   const time      = document.getElementById('phTimeInput').value || null;
   const duration  = parseInt(document.getElementById('phDurationInput').value) || null;
   const notes     = document.getElementById('phNotesInput').value.trim() || null;
@@ -1371,6 +1401,10 @@ async function saveTreatment(andNew) {
 
   if (!pid)  { alert(tt('physio.select_a_player_first','Select a player first.')); return; }
   if (!date) { alert(tt('physio.select_a_date','Select a date.')); return; }
+  if (adaptUntil && adaptUntil < adaptDate) {
+    alert(tt('physio.err_adaptation_range','The "until" date cannot be before the date the adaptation starts.'));
+    return;
+  }
 
   let injuryId = null, reason = null, indicatedBy = null;
   if (_currentTreatType === 'rehab') {
@@ -1390,6 +1424,7 @@ async function saveTreatment(andNew) {
     team_id:          _phTeamId || null,
     date,
     adaptation_date:  adaptDate,
+    adaptation_until: adaptUntil,
     session_time:     time,
     duration_min:     duration,
     treatment_type:   _currentTreatType,
@@ -1437,7 +1472,7 @@ async function saveTreatment(andNew) {
   }
 
   if (notify && adaptTxt && saved?.id) {
-    try { await sendCoachNotifications(saved.id, pid, adaptTxt); } catch(e) { console.warn('[Physio] coach notif error:', e); }
+    try { await sendCoachNotifications(saved.id, pid, adaptTxt, adaptDate, adaptUntil); } catch(e) { console.warn('[Physio] coach notif error:', e); }
   }
   if (status === 'worsening') {
     try { await sendWorseningNotification(pid); } catch(e) { console.warn('[Physio] worsening notif error:', e); }
@@ -1452,7 +1487,16 @@ async function saveTreatment(andNew) {
   }, 1000);
 }
 
-async function sendCoachNotifications(treatmentId, playerId, adaptText) {
+// Formatea un YYYY-MM-DD en el idioma activo sin pasar por UTC (ver phShiftDay).
+function phFmtDay(ymd) {
+  if (!ymd) return '';
+  const [y, m, d] = String(ymd).slice(0,10).split('-').map(Number);
+  if (!y || !m || !d) return String(ymd);
+  return new Date(y, m - 1, d).toLocaleDateString(window.CM_I18N?.current || 'en-GB',
+    { day: 'numeric', month: 'short' });
+}
+
+async function sendCoachNotifications(treatmentId, playerId, adaptText, adaptFrom, adaptUntil) {
   const player = _allPlayers.find(p => p.id === playerId);
   const playerName = player ? `${player.first_name} ${player.last_name}` : tt('common.player','Player');
   const physioName = _profile?.full_name || tt('physio.physio_word','Physio');
@@ -1462,6 +1506,11 @@ async function sendCoachNotifications(treatmentId, playerId, adaptText) {
     excludeId: (window.__cm_profile && window.__cm_profile.id) || null,
   });
   const todayFmt   = new Date().toLocaleDateString(window.CM_I18N?.current || 'en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  // El coach tiene que saber QUÉ sesión adaptar: la adaptación ya no es "la de hoy".
+  const rangeLabel = !adaptFrom ? ''
+    : (adaptUntil && adaptUntil !== adaptFrom)
+      ? tt('physio.applies_range','Applies: {from} → {to}', { from: phFmtDay(adaptFrom), to: phFmtDay(adaptUntil) })
+      : tt('physio.applies_on','Applies: {date}', { date: phFmtDay(adaptFrom) });
 
   const ops = [
     (async () => {
@@ -1476,8 +1525,8 @@ async function sendCoachNotifications(treatmentId, playerId, adaptText) {
       club_id: _clubId,
       type:    'physio_adaptation',
       title:   tt('physio.notif_adaptation_required','Adaptation required — {name}',{name:playerName}),
-      body:    adaptText,
-      link:    '/Daily Planning.html',
+      body:    rangeLabel ? `${rangeLabel}\n${adaptText}` : adaptText,
+      link:    adaptFrom ? `/Daily Planning.html?date=${adaptFrom}` : '/Daily Planning.html',
     }));
     ops.push((async () => {
       const { error } = await window.sb.from('notifications').insert(notifications);
@@ -1490,7 +1539,7 @@ async function sendCoachNotifications(treatmentId, playerId, adaptText) {
     const { error } = await window.sb.from('messages').insert({
       club_id:   _clubId,
       sender_id: _profile?.id,
-      content:   `${tt('physio.msg_adaptation_for','Adaptation for {name} next session:',{name:playerName})}\n${adaptText}\n— ${physioName} · ${todayFmt}`,
+      content:   `${tt('physio.msg_adaptation_for','Adaptation for {name} next session:',{name:playerName})}${rangeLabel ? ` (${rangeLabel})` : ''}\n${adaptText}\n— ${physioName} · ${todayFmt}`,
     });
     if (error) console.warn(error);
   })());
@@ -1633,6 +1682,12 @@ function renderList(list) {
       const zones = Array.isArray(t.zones) ? t.zones : (t.zones ? t.zones.split(',').map(z=>z.trim()) : []);
       const adaptText = t.adaptation_notes || t.adaptation || '';
       const hasAdapt  = !!adaptText;
+      // A qué sesión apunta: sin esto el fisio no puede comprobar que la adaptación cayó en el
+      // día siguiente y no en el entrenamiento que acaba de terminar.
+      const adaptWhen = !t.adaptation_date ? ''
+        : (t.adaptation_until && t.adaptation_until !== t.adaptation_date)
+          ? `${phFmtDay(t.adaptation_date)} → ${phFmtDay(t.adaptation_until)}`
+          : phFmtDay(t.adaptation_date);
       const statusS   = t.player_status || '';
       const physioName = _allStaff.find(s => s.id === t.physio_id)?.full_name || '';
       const pPre  = t.pain_pre  ?? null;
@@ -1651,7 +1706,7 @@ function renderList(list) {
           ${zones.length ? `<div class="zone-tags">${zones.slice(0,6).map(z=>`<span class="zt">${esc(z)}</span>`).join('')}${zones.length>6?`<span class="zt">+${zones.length-6}</span>`:''}</div>` : ''}
           ${(pPre !== null || pPost !== null) ? `<div class="pain-row">${tt('physio.pain_label','Pain:')} <span class="pv ${painClass(pPre)}">${pPre ?? '—'}</span> → <span class="pv ${painClass(pPost)}">${pPost ?? '—'}</span>${physioName ? ' · ' + esc(physioName) : ''}</div>` : (physioName ? `<div class="info-line">${esc(physioName)}</div>` : '')}
           ${t.notes ? `<div class="notes">${t.notes.length > 100 ? esc(t.notes.slice(0,100)) + '…' : esc(t.notes)}</div>` : ''}
-          ${hasAdapt ? `<div class="adapt-box"><i class="ti ti-flag-2"></i><span><strong>${tt('physio.adaptation_word','Adaptation')}</strong> · ${esc(adaptText)}</span></div>` : ''}
+          ${hasAdapt ? `<div class="adapt-box"><i class="ti ti-flag-2"></i><span><strong>${tt('physio.adaptation_word','Adaptation')}</strong>${adaptWhen ? ` · ${esc(adaptWhen)}` : ''} · ${esc(adaptText)}</span></div>` : ''}
         </div>
         <div class="card-actions">
           <button class="ph-tc-menu-btn" title="${tt('physio.options','Options')}"><i class="ti ti-dots-vertical"></i></button>
