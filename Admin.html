@@ -2591,6 +2591,14 @@ const _esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&a
           <input id="catNewName" type="text" data-i18n-ph="admin.team_name_ph" placeholder="First team, Reserves, U-19…" style="flex:1;height:34px;padding:0 10px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:7px;font:var(--cm-body-sm);color:var(--cm-fg);outline:none;box-sizing:border-box">
           <button class="cm-btn is-outline is-sm" onclick="addClubCategory()"><i class="ti ti-plus" style="font-size:14px"></i><span data-i18n="common.add">Add</span></button>
         </div>
+        <!-- El precio es por categoría, así que el plan se elige acá y no después: crear una
+             categoría es contratar. Se llena desde `plans` al abrir el modal; si no se puede
+             leer, queda oculto y el alta sigue funcionando en Free. -->
+        <div id="catNewPlanWrap" style="display:none;align-items:center;gap:8px;margin-top:8px">
+          <span style="font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted)" data-i18n="admin.new_cat_plan">Plan</span>
+          <select id="catNewPlan" style="flex:1;height:32px;padding:0 8px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:7px;font:500 12px/1.3 var(--cm-font-sans);color:var(--cm-fg);outline:none"></select>
+        </div>
+        <div id="catNewPlanNote" style="font:500 11.5px/1.4 var(--cm-font-sans);color:var(--cm-fg-faint);margin-top:6px"></div>
       </div>
     </div>
     <div style="display:flex;justify-content:flex-end;gap:8px;padding:12px 18px;border-top:1px solid var(--cm-border)">
@@ -2795,28 +2803,64 @@ const _esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&a
   // ── ADD CLUB / CATEGORY MODAL ──
   let _catClubId = null;
   /* Cada categoría es una unidad de cobro: el precio del producto es por categoría, no
-     por club. Mientras dura la prueba se puede abrir las que haga falta — de eso va la
-     prueba. Cuando se acaba y el club no contrató, abrir una categoría nueva es
-     exactamente lo que hay que pagar, así que el botón lleva al checkout en vez de
-     crear una estructura que después no se va a poder usar.
+     por club. Por eso el plan se elige en el alta — crear una categoría es contratar.
 
-     Un club que YA paga no se bloquea: la categoría se crea y arranca en el plan
-     gratuito, y se le dice con todas las letras en qué plan quedó. Y si el estado no
-     se pudo averiguar, se deja pasar: ante la duda no se le cierra la puerta a nadie. */
-  async function _gateCategoriaDePago() {
-    if (!window.CM_SUBSCRIBE || !window.CM_SUBSCRIBE.estado) return true;
-    let st;
-    try { st = await window.CM_SUBSCRIBE.estado(); } catch (_e) { return true; }
-    if (st !== 'vencido') return true;
-    if (confirm(tt('admin.category_needs_plan',
-        'Your trial has ended. Each category needs its own plan — subscribe to add a new one.'))) {
-      window.CM_SUBSCRIBE.open();
+     Antes acá había un gate que sólo frenaba al club VENCIDO, y no pedía plan para la
+     categoría nueva: el club que ya pagaba una podía crear las que quisiera sin que nadie
+     le ofreciera contratar. No era una fuga abierta —`team_plan_slug()` deja en Free, con
+     tope de 15 jugadores, a la categoría sin suscripción— pero sí una venta que no se hacía.
+
+     Durante la prueba no se ofrece: el trial cubre el club entero y `team_plan_slug()` ya le
+     da 'full' mientras dure. Cobrarle ahí sería ponerle una barrera a quien todavía evalúa. */
+  let _catPlanes = [];
+
+  async function _cargarPlanesDeCategoria() {
+    const wrap = document.getElementById('catNewPlanWrap');
+    const sel  = document.getElementById('catNewPlan');
+    const note = document.getElementById('catNewPlanNote');
+    if (!wrap || !sel) return;
+    wrap.style.display = 'none';
+    if (note) note.textContent = '';
+    _catPlanes = [];
+    if (!window.CM_SUBSCRIBE || !window.CM_SUBSCRIBE.planes) return;
+
+    let estado = 'desconocido';
+    try { estado = await window.CM_SUBSCRIBE.estado(); } catch (_e) { /* sigue sin selector */ }
+    if (estado === 'prueba') {
+      if (note) note.textContent = tt('admin.new_cat_trial',
+        'While your trial is running, new categories are included. When it ends you pick a plan for each one.');
+      return;
     }
-    return false;
+
+    try { _catPlanes = await window.CM_SUBSCRIBE.planes(); } catch (_e) { return; }
+    if (!_catPlanes.length) return;
+
+    sel.innerHTML = _catPlanes.map(p => {
+      const precio = p.price_monthly > 0
+        ? '$' + Math.round(p.price_monthly) + tt('admin.per_month', '/mo')
+        : tt('subscribe.free', 'free');
+      const cupo = p.max_players
+        ? ' · ' + tt('admin.up_to_players', 'up to {n} players', { n: p.max_players })
+        : '';
+      return `<option value="${_esc(p.slug)}">${_esc(p.name + ' — ' + precio + cupo)}</option>`;
+    }).join('');
+    wrap.style.display = 'flex';
+    _pintarNotaDePlan();
+    sel.onchange = _pintarNotaDePlan;
+  }
+
+  function _pintarNotaDePlan() {
+    const sel  = document.getElementById('catNewPlan');
+    const note = document.getElementById('catNewPlanNote');
+    if (!sel || !note) return;
+    const p = _catPlanes.find(x => x.slug === sel.value);
+    note.textContent = (p && p.price_monthly > 0)
+      ? tt('admin.new_cat_paid', 'Creating it opens the payment. If your club already has a subscription, only the prorated difference is charged.')
+      : tt('admin.new_cat_free', 'No charge. The category is capped at {n} players — you can change its plan later from Billing.',
+           { n: (p && p.max_players) || 15 });
   }
 
   async function openAddCategoryModal() {
-    if (!await _gateCategoriaDePago()) return;
     const nameEl    = document.getElementById('catClubName');
     const countryEl = document.getElementById('catClubCountry');
     const shortEl   = document.getElementById('catClubShort');
@@ -2845,6 +2889,7 @@ const _esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&a
     })();
     document.getElementById('addCategoryBackdrop').style.display = 'flex';
     renderClubCategories();
+    _cargarPlanesDeCategoria();
   }
   function closeAddCategoryModal() {
     document.getElementById('addCategoryBackdrop').style.display = 'none';
@@ -2882,15 +2927,32 @@ const _esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&a
     const inp = document.getElementById('catNewName');
     const name = inp.value.trim();
     if (!name) { inp.focus(); return; }
-    // Mismo corte que el modal: acá se entra por otro camino (la lista de categorías),
-    // y un gate que solo cubre una puerta no es un gate.
-    if (!await _gateCategoriaDePago()) return;
+    const sel  = document.getElementById('catNewPlan');
+    const slug = (sel && sel.value) || null;
+    const plan = _catPlanes.find(x => x.slug === slug) || null;
+    const esDePago = !!(plan && plan.price_monthly > 0);
+
     const cid = await window.getClubId();
-    const { error } = await window.sb.from('teams').insert({ club_id: cid, name });
+    // La categoría se crea primero porque el cobro la necesita: tanto el checkout como el
+    // webhook reparten por `team_id`. Si el pago no se completa se queda en Free con tope
+    // de 15 jugadores, que es un estado válido y el mismo en el que nacía antes.
+    const { data: creada, error } = await window.sb.from('teams')
+      .insert({ club_id: cid, name }).select('id').single();
     if (error) { alert(/duplicate|unique/i.test(error.message) ? tt('admin.category_exists','That category already exists.') : error.message); return; }
     inp.value = '';
-    window.sb.rpc('log_audit', { p_table: 'teams', p_op: 'INSERT', p_changes: { name }, p_club_id: cid });
+    window.sb.rpc('log_audit', { p_table: 'teams', p_op: 'INSERT', p_changes: { name, plan: slug }, p_club_id: cid });
     renderClubCategories();
+
+    if (!esDePago || !creada || !window.CM_SUBSCRIBE || !window.CM_SUBSCRIBE.contratarCategoria) return;
+    const r = await window.CM_SUBSCRIBE.contratarCategoria(creada.id, slug, 'monthly');
+    if (r === 'error') {
+      alert(tt('admin.new_cat_charge_failed',
+        "The category was created on the Free plan, but the payment couldn't be started. You can set its plan from Billing."));
+    } else if (r === 'ok') {
+      renderClubCategories();
+    }
+    // 'checkout' → la ventana de Paddle quedó abierta; la confirma el webhook.
+    // 'cancelado' → se queda en Free, que es un estado válido.
   }
 
   /* El "nivel" agrupa categorías en Club overview (Primera / Formativa / Femenino…). Va

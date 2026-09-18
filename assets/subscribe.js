@@ -323,5 +323,89 @@
     } catch (_e) { return 'desconocido'; }
   }
 
-  window.CM_SUBSCRIBE = { open, trialInfo, estado };
+  /* Planes vigentes, para que otra pantalla pueda ofrecerlos sin volver a pedirlos.
+     Devuelve copias: el que los reciba no puede pisar la caché del módulo. */
+  async function planes() {
+    await cargarDatos();
+    return _plans.map(p => ({
+      slug: p.slug, name: p.name, max_players: p.max_players,
+      price_monthly: Number(p.price_monthly) || 0,
+      price_yearly:  Number(p.price_yearly)  || 0,
+    }));
+  }
+
+  /* Contratar un plan de pago para UNA categoría recién creada.
+   *
+   * Una categoría nace en Free — `team_plan_slug()` cae en 'initiation' cuando no tiene
+   * suscripción — así que esto es siempre un alta DESDE Free, nunca un downgrade. Por eso
+   * es más corto que el del Plan Picker, que tiene que contemplar las dos direcciones.
+   *
+   * El camino lo decide el server, no el cliente: si el club ya tiene una suscripción de
+   * Paddle viva hay que sumarle un ítem (una tarjeta, una factura, la diferencia prorrateada);
+   * abrir un checkout nuevo ahí cobraría el plan entero otra vez. Sólo cuando el server
+   * responde `needs_checkout` —no tiene ninguna— se abre el checkout.
+   *
+   * Devuelve 'ok' | 'checkout' | 'cancelado' | 'error'. 'checkout' significa que la ventana
+   * de Paddle quedó abierta: quien llama no debe dar el alta por cerrada, la confirma el webhook.
+   */
+  async function contratarCategoria(teamId, slug, ciclo) {
+    await cargarDatos();
+    const plan = planPorSlug(slug);
+    if (!plan || !(Number(plan.price_monthly) > 0)) return 'ok';   // Free: no hay nada que cobrar
+    const cycle = ciclo === 'annual' ? 'annual' : 'monthly';
+
+    let prev;
+    try {
+      const { data, error } = await window.sb.functions.invoke('paddle-change-plan',
+        { body: { team_id: teamId, plan_slug: slug, cycle, preview: true } });
+      if (error) return 'error';
+      prev = data || {};
+    } catch (_e) { return 'error'; }
+
+    // Todas las categorías del club comparten el ciclo de su suscripción: no se puede
+    // mezclar mensual y anual en la misma factura. Se hereda en vez de hacerlo elegir.
+    if (prev.error === 'cycle_mismatch' && prev.sub_cycle && prev.sub_cycle !== cycle) {
+      return contratarCategoria(teamId, slug, prev.sub_cycle);
+    }
+
+    if (!prev.needs_checkout) {
+      // Hay sub de Paddle viva. Si el preview falló, NO caer al checkout: cobraría todo de nuevo.
+      if (prev.error) return 'error';
+      const r = prev.update_summary && prev.update_summary.result;
+      const monto = (r && r.amount != null)
+        ? (r.currency_code || 'USD') + ' ' + Math.abs(Number(r.amount) / 100).toFixed(2)
+        : null;
+      const ok = confirm(monto
+        ? t('subscribe.add_charge', 'Adding {plan} to this category charges {amount} today — the prorated difference. Continue?', { plan: plan.name, amount: monto })
+        : t('subscribe.add_confirm', 'Adding {plan} to this category charges the prorated difference today. Continue?', { plan: plan.name }));
+      if (!ok) return 'cancelado';
+      const { data: appl, error: aErr } = await window.sb.functions.invoke('paddle-change-plan',
+        { body: { team_id: teamId, plan_slug: slug, cycle } });
+      if (aErr || (appl && appl.error)) return 'error';
+      return 'ok';
+    }
+
+    // Sin suscripción de Paddle en el club → compra nueva.
+    const pid = (_priceIds[slug] || {})[cycle === 'annual' ? 'yearly' : 'monthly'];
+    if (!window.Paddle || !pid) return 'error';
+    const clubId = await window.getClubId();
+    const { data: { user } } = await window.sb.auth.getUser();
+    try {
+      window.Paddle.Checkout.open({
+        items: [{ priceId: pid, quantity: 1 }],
+        customer: user && user.email ? { email: user.email } : undefined,
+        // `teams` es el reparto que lee el webhook para saber qué categoría lleva qué plan.
+        customData: { team_id: teamId, club_id: clubId, plan_slug: slug, cycle,
+                      teams: [{ team_id: teamId, plan_slug: slug }] },
+        settings: {
+          displayMode: 'overlay',
+          theme: (document.documentElement.getAttribute('data-theme') === 'dark') ? 'dark' : 'light',
+          successUrl: window.location.origin + '/Admin.html?welcome=' + encodeURIComponent(slug),
+        },
+      });
+      return 'checkout';
+    } catch (_e) { return 'error'; }
+  }
+
+  window.CM_SUBSCRIBE = { open, trialInfo, estado, planes, contratarCategoria };
 })();
