@@ -101,11 +101,16 @@ test.describe('GPS · alcance de una card', () => {
     await page.locator('#gpbOpenBtn').first().click();
     await expect(page.locator('#gpbPanel.is-open').first()).toBeVisible();
 
-    await page.locator('#gpbPanel [data-type="bars"]').click();      // acá sí decide algo
+    // El selector de tipo es un desplegable: se abre, se elige, y se cierra solo al elegir.
+    const elegir = async (t) => {
+      if (await page.locator('#gpbTypePop').isHidden()) await page.locator('#gpbTypeSel').click();
+      await page.locator(`#gpbDDSeg [data-type="${t}"]`).click();
+    };
+    await elegir('bars');                                            // acá sí decide algo
     await expect(page.locator('#gpbDDScope')).toHaveCount(1);
 
     for (const t of ['table', 'ranking', 'box', 'heatmap']) {
-      await page.locator(`#gpbPanel [data-type="${t}"]`).click();
+      await elegir(t);
       await expect(page.locator('#gpbDDScope'), `${t} no debería preguntar el alcance`).toHaveCount(0);
       await expect(page.locator('.bdd-cfg-fixed')).toHaveCount(1);
       expect(await page.evaluate(() => window.GpBuilder?.currentConfig?.()?.scope?.level), t).toBe('squad');

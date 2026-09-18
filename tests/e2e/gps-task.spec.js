@@ -279,8 +279,10 @@ test.describe('GPS · card en borrador del chart builder', () => {
     await page.locator('.gp-sec[data-custom]').click();
     await page.locator('#gpbOpenBtn').first().click();
     await expect(page.locator('#gpbPanel')).toBeVisible();
-    await page.locator('[data-type="scatter"]').first().click();
-    await expect(page.locator('[data-type="scatter"]').first()).toHaveClass(/is-on/);
+    // El selector de tipo es un desplegable: hay que abrirlo antes de poder elegir.
+    await page.locator('#gpbTypeSel').click();
+    await page.locator('#gpbDDSeg [data-type="scatter"]').click();
+    await expect(page.locator('#gpbDDSeg [data-type="scatter"]')).toHaveClass(/is-on/);
     // Elegir el tipo rehace el borrador: la señal es que vuelva a tener tamaño, que es lo que mide
     // el test. Eran 800 + 1000 ms a ojo.
     await expect.poll(async () => page.evaluate(() => {

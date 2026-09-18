@@ -133,8 +133,10 @@ test.describe('GPS · caja y bigotes', () => {
     await open(page, card({ dimensions: [{ id: 'position' }] }));
     await page.locator('#gpbOpenBtn').first().click();
     await expect(page.locator('#gpbPanel.is-open').first()).toBeVisible();
+    // El selector de tipo es un desplegable: hay que abrirlo antes de poder elegir.
     await expect(page.locator('#gpbPanel [data-type="box"]')).toHaveCount(1);
-    await page.locator('#gpbPanel [data-type="box"]').click();
+    await page.locator('#gpbTypeSel').click();
+    await page.locator('#gpbDDSeg [data-type="box"]').click();
     // Una caja ES la dispersión del plantel: con el scope de jugador que traen las cards nuevas
     // se quedaba sin datos, que es como llegó al dashboard la primera vez.
     await expect.poll(async () => page.evaluate(() => window.GpBuilder?.currentConfig?.()?.scope?.level),

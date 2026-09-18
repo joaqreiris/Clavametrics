@@ -36,15 +36,24 @@ async function open(page) {
   // #gpbPanel nace con [hidden]; la señal real es que se vea y ya tenga los botones de tipo
   // dibujados, que es lo que clickean los helpers de abajo. Eran 600 ms a ojo.
   await expect(page.locator('#gpbPanel')).toBeVisible();
-  await expect(page.locator('#gpbPanel [data-type]').first()).toBeVisible();
+  // El selector de tipo es un DESPLEGABLE: los tipos ya no están a la vista, viven adentro. La
+  // señal de que el panel está listo pasa a ser el disparador del desplegable.
+  await expect(page.locator('#gpbTypeSel')).toBeVisible();
+}
+
+/** Elige un tipo abriendo el desplegable, que es el camino real desde que dejó de ser una grilla. */
+async function elegirTipo(page, tipo) {
+  const pop = page.locator('#gpbTypePop');
+  if (await pop.isHidden()) await page.locator('#gpbTypeSel').click();
+  await page.locator(`#gpbDDSeg [data-type="${tipo}"]`).click();
+  await expect(pop).toBeHidden();
 }
 
 /** Interruptores del panel de estilo visibles para el tipo elegido. */
 async function togglesDe(page, tipo) {
   // El tipo queda marcado con .is-on y el pane de estilo se activa con la misma clase: dos
   // condiciones reales en lugar de 250 ms + 250 ms de fe.
-  await page.locator(`[data-type="${tipo}"]`).first().click();
-  await expect(page.locator(`[data-type="${tipo}"]`).first()).toHaveClass(/is-on/);
+  await elegirTipo(page, tipo);
   await page.locator('[data-tab="style"]').first().click();
   await expect(page.locator('.pane[data-pane="style"]')).toHaveClass(/is-on/);
   return page.evaluate(() => [...document.querySelectorAll('[data-toggle]')]
@@ -95,8 +104,7 @@ test.describe('GPS · el panel de estilo no ofrece botones muertos', () => {
 const gruposDe = async (page, tipo) => {
   // El tipo queda marcado con .is-on y el pane de estilo se activa con la misma clase: dos
   // condiciones reales en lugar de 250 ms + 250 ms de fe.
-  await page.locator(`[data-type="${tipo}"]`).first().click();
-  await expect(page.locator(`[data-type="${tipo}"]`).first()).toHaveClass(/is-on/);
+  await elegirTipo(page, tipo);
   await page.locator('[data-tab="style"]').first().click();
   await expect(page.locator('.pane[data-pane="style"]')).toHaveClass(/is-on/);
   return page.evaluate(() => [...document.querySelectorAll('.pane[data-pane="style"] .es-sec')]
@@ -143,8 +151,7 @@ test.describe('GPS · el panel de estilo va por grupos', () => {
 test.describe('GPS · líneas de referencia', () => {
   test('un gráfico de línea también las ofrece', async ({ page }) => {
     await open(page);
-    await page.locator('[data-type="line"]').first().click();
-    await expect(page.locator('[data-type="line"]').first()).toHaveClass(/is-on/);
+    await elegirTipo(page, 'line');
     await page.locator('[data-tab="style"]').first().click();
     await expect(page.locator('.pane[data-pane="style"]')).toHaveClass(/is-on/);
     const visible = await page.evaluate(() => {
@@ -157,8 +164,7 @@ test.describe('GPS · líneas de referencia', () => {
 
   test('un radar no: no tiene eje de valores donde apoyarlas', async ({ page }) => {
     await open(page);
-    await page.locator('[data-type="radar"]').first().click();
-    await expect(page.locator('[data-type="radar"]').first()).toHaveClass(/is-on/);
+    await elegirTipo(page, 'radar');
     await page.locator('[data-tab="style"]').first().click();
     await expect(page.locator('.pane[data-pane="style"]')).toHaveClass(/is-on/);
     const visible = await page.evaluate(() => {
@@ -188,3 +194,34 @@ test.describe('GPS · el selector ofrece todos los tipos', () => {
   });
 });
 
+
+// El selector de tipo es un desplegable y no una grilla: con veintiún tipos la grilla se comía el
+// panel. Cerrado tiene que ocupar poco y decir cuál está puesto; abierto, mostrarlos todos.
+test('el selector de tipo se despliega, filtra y se cierra al elegir', async ({ page }) => {
+  await open(page);
+  const sel = page.locator('#gpbTypeSel');
+  await expect(sel).toBeVisible({ timeout: 20_000 });
+
+  // Cerrado ocupa una línea: si volviera a crecer, es que alguien lo desplegó de nuevo.
+  const alto = (await page.locator('.bdd-bar').boundingBox()).height;
+  expect(alto, `el selector cerrado ocupa ${Math.round(alto)}px`).toBeLessThan(90);
+  await expect(page.locator('#gpbTypePop')).toBeHidden();
+
+  await sel.click();
+  await expect(page.locator('#gpbTypePop')).toBeVisible();
+  const todos = await page.locator('#gpbDDSeg .bdd-tit:visible').count();
+  expect(todos).toBeGreaterThan(8);
+
+  // El buscador filtra por nombre Y por lo que contesta cada tipo.
+  await page.locator('#gpbTypeBuscar').fill('rank');
+  await expect.poll(() => page.locator('#gpbDDSeg .bdd-tit:visible').count(), { timeout: 5_000 })
+    .toBeLessThan(todos);
+  await expect(page.locator('#gpbDDSeg .bdd-tit[data-type="ranking"]')).toBeVisible();
+  // Y los títulos de familia que se quedan sin filas no se muestran huérfanos.
+  const famsVisibles = await page.locator('#gpbDDSeg .bdd-tfam:visible').count();
+  expect(famsVisibles).toBeLessThanOrEqual(2);
+
+  await page.locator('#gpbTypeBuscar').fill('');
+  await page.locator('#gpbDDSeg .bdd-tit[data-type="table"]').click();
+  await expect(page.locator('#gpbTypePop')).toBeHidden();
+});

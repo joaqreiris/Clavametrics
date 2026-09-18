@@ -10501,7 +10501,7 @@
 
   // Toolbar: segmented de tipo (refleja S.type; cosmético por ahora).
   function ddToolbarHTML() {
-    const cur = S && S.type;
+    const cur = (S && S.type) || 'bars';
     const libres = Object.keys(DD_TYPES).filter(k => _typeAllowed(k, S?.source));
     const enFamilia = new Set(DD_FAMILIAS.flatMap(f => f.tipos));
     // Red por si alguien agrega un tipo y se olvida de ponerlo en una familia: en vez de
@@ -10511,11 +10511,79 @@
       .map(f => ({ id: f.id, tipos: f.tipos.filter(k => libres.includes(k)) }))
       .filter(f => f.tipos.length)
       .concat(sueltos.length ? [{ id: 'otros', tipos: sueltos }] : []);
-    const boton = (k) => `<button data-type="${k}" class="${k === cur ? 'is-on' : ''}" title="${esc(_typeName(k))}">`
-      + `<i class="ti ${DD_TYPES[k].icon}"></i><span>${esc(_typeName(k))}</span></button>`;
-    return `<div class="bdd-bar" id="gpbDDSeg">${grupos.map(f => `<div class="bdd-fam">`
-      + `<span class="bdd-fam-t">${esc(_tt('gps_analysis.builder_fam_' + f.id, DD_FAM_NOMBRE[f.id] || f.id))}</span>`
-      + `<div class="bdd-seg">${f.tipos.map(boton).join('')}</div></div>`).join('')}</div>`;
+
+    const queDe = (k) => _tt('gps_analysis.builder_que_' + k, '');
+    const fila = (k) => `<button class="bdd-tit${k === cur ? ' is-on' : ''}" data-type="${k}" role="option"`
+      + ` aria-selected="${k === cur}" data-busca="${esc((_typeName(k) + ' ' + queDe(k)).toLowerCase())}">`
+      + `<i class="ti ${DD_TYPES[k].icon}"></i><span class="nm">${esc(_typeName(k))}</span>`
+      + `<span class="que">${esc(queDe(k))}</span></button>`;
+
+    const actual = DD_TYPES[cur] || DD_TYPES.bars;
+    // Desplegable y no grilla: con veintiún tipos la grilla se comía el panel entero. Cerrado
+    // ocupa una línea y dice cuál está puesto; abierto se lee toda la lista, agrupada y con buscador.
+    return `<div class="bdd-bar">
+      <button type="button" class="bdd-tsel" id="gpbTypeSel" aria-haspopup="listbox" aria-expanded="false">
+        <i class="ti ${actual.icon}"></i>
+        <span class="nm">${esc(_typeName(cur))}</span>
+        <span class="que">${esc(queDe(cur))}</span>
+        <i class="ti ti-chevron-down cv"></i>
+      </button>
+      <div class="bdd-tpop" id="gpbTypePop" hidden>
+        <div class="bdd-tsearch"><i class="ti ti-search"></i>
+          <input type="text" id="gpbTypeBuscar" autocomplete="off"
+                 placeholder="${esc(_tt('gps_analysis.builder_buscar_tipo', 'Search type…'))}"></div>
+        <div class="bdd-tlist" id="gpbDDSeg" role="listbox">${grupos.map(f =>
+          `<div class="bdd-tfam" data-fam="${f.id}">${esc(_tt('gps_analysis.builder_fam_' + f.id, DD_FAM_NOMBRE[f.id] || f.id))}</div>`
+          + f.tipos.map(fila).join('')).join('')}</div>
+      </div>
+    </div>`;
+  }
+
+  /** Abre/cierra el desplegable de tipos y filtra la lista. Se engancha una sola vez, sobre el
+   *  documento, porque el panel se vuelve a dibujar entero en cada cambio de estado. */
+  function _gpbCerrarTipos() {
+    const pop = document.getElementById('gpbTypePop');
+    const sel = document.getElementById('gpbTypeSel');
+    if (pop) pop.hidden = true;
+    if (sel) sel.setAttribute('aria-expanded', 'false');
+  }
+  function _gpbFiltrarTipos(q) {
+    const lista = document.getElementById('gpbDDSeg');
+    if (!lista) return;
+    const t = String(q || '').trim().toLowerCase();
+    lista.querySelectorAll('.bdd-tit').forEach(b => {
+      b.hidden = !!t && !(b.dataset.busca || '').includes(t);
+    });
+    // Un título de familia sin ninguna fila visible debajo sobra.
+    lista.querySelectorAll('.bdd-tfam').forEach(h => {
+      let n = h.nextElementSibling, vis = false;
+      while (n && n.classList.contains('bdd-tit')) { if (!n.hidden) { vis = true; break; } n = n.nextElementSibling; }
+      h.hidden = !vis;
+    });
+  }
+  if (!window.__gpbTiposEnganchado) {
+    window.__gpbTiposEnganchado = true;
+    document.addEventListener('click', (e) => {
+      const disp = e.target.closest('#gpbTypeSel');
+      if (disp) {
+        const pop = document.getElementById('gpbTypePop');
+        if (!pop) return;
+        const abrir = pop.hidden;
+        pop.hidden = !abrir;
+        disp.setAttribute('aria-expanded', String(abrir));
+        if (abrir) {
+          const inp = document.getElementById('gpbTypeBuscar');
+          if (inp) { inp.value = ''; _gpbFiltrarTipos(''); inp.focus(); }
+        }
+        return;
+      }
+      if (e.target.closest('#gpbDDSeg .bdd-tit')) { _gpbCerrarTipos(); return; }   // eligió: se cierra
+      if (!e.target.closest('.bdd-tpop')) _gpbCerrarTipos();                        // click afuera
+    });
+    document.addEventListener('input', (e) => {
+      if (e.target && e.target.id === 'gpbTypeBuscar') _gpbFiltrarTipos(e.target.value);
+    });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') _gpbCerrarTipos(); });
   }
 
   // Render del pane D&D — panel angosto (~380px) tipo Data Studio, apilado para que no tape

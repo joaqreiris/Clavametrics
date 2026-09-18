@@ -152,7 +152,9 @@ test.describe('GPS · % de la demanda de partido', () => {
   test('se puede elegir en el builder y el preview dibuja', async ({ page }) => {
     await open(page, card([{ id: 'total_distance', agg: 'avg' }]));
     await page.locator('#gpbOpenBtn').first().click();
-    const btn = page.locator('[data-type="demand"]').first();
+    // El selector de tipo es un desplegable: hay que abrirlo antes de poder elegir.
+    await page.locator('#gpbTypeSel').click();
+    const btn = page.locator('#gpbDDSeg [data-type="demand"]');
     await expect(btn).toBeVisible();
     await btn.click();
     // Queda elegido…
