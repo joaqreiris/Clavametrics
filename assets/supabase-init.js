@@ -1448,12 +1448,7 @@
       const want = new Set(buckets);
       const { data: profs } = await window.sb.from('profiles')
         .select('id, role, club_role, preferred_lang, notification_settings').eq('club_id', clubId);
-      let list = (profs || []).filter(p => (p.role || '').toLowerCase() !== 'player');
-      try {
-        const { data: padmins } = await window.sb.from('platform_admins').select('user_id');
-        const superIds = new Set((padmins || []).map(r => r.user_id));
-        list = list.filter(p => !superIds.has(p.id));
-      } catch (_) { /* si no se puede leer platform_admins, seguir */ }
+      const list = (profs || []).filter(p => (p.role || '').toLowerCase() !== 'player');
       // Dual-role: a member qualifies if EITHER their primary or secondary role is in `buckets`.
       return list.filter(p => want.has(window.cmRoleBucket(p.role)) || (p.club_role && want.has(window.cmRoleBucket(p.club_role))));
     } catch (_) { return []; }
