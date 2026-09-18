@@ -1042,7 +1042,7 @@ function renderPinnedMessages() {
   }
   container.innerHTML = pinnedMessages.map(p => {
     const msg = messages.find(m => m.id === p.message_id);
-    const author = msg ? (members.find(x => x.id === msg.sender_id) || null) : null;
+    const author = msg ? profileOf(msg.sender_id) : null;
     const who = author ? window.cmDisplayName(author) : (msg?.sender_name || '');
     let snippet = pinnedSnippet(msg);
     if (snippet.length > 90) snippet = snippet.slice(0, 90) + '…';
@@ -1347,11 +1347,19 @@ function renderMessages() {
   paintAttachments(wrap);
 }
 
+// Resolve a user id to their live profile. `members` is team-filtered, so in the club channel
+// anyone outside the active team only lives in `allStaff`: without that second lookup they lose
+// their photo and fall back to the name stored on the message row (or to '?' in the read-by list).
+function profileOf(uid) {
+  if (!uid) return null;
+  return members.find(x => x.id === uid) || allStaff.find(x => x.id === uid) || null;
+}
+
 function renderMsgHTML(msg) {
   const isMe   = msg.sender_id === currentUser.id;
   // Prefer the live member profile (name + photo); fall back to the stored sender_name for
   // legacy messages whose author is no longer in the member list.
-  const author = members.find(x => x.id === msg.sender_id) || null;
+  const author = profileOf(msg.sender_id);
   const authorName = author ? window.cmDisplayName(author) : (msg.sender_name || '?');
   const avHTML = window.cmAvatarHtml(author || { full_name: msg.sender_name }, 30);
   const time   = formatTime(msg.created_at);
@@ -1405,7 +1413,7 @@ function renderMsgHTML(msg) {
 function renderQuoteHTML(refId) {
   const src = messages.find(m => String(m.id) === String(refId));
   if (!src) return `<div class="msg-quote is-gone">${esc(tt('chat_tasks.original_unavailable', 'Original message'))}</div>`;
-  const a = members.find(x => x.id === src.sender_id) || null;
+  const a = profileOf(src.sender_id);
   const who = a ? window.cmDisplayName(a) : (src.sender_name || '?');
   let snippet = src.deleted_at ? tt('chat_tasks.msg_deleted', 'This message was deleted') : (src.content || '').trim();
   if (!snippet && (src.attachment_url || src.attachment_name)) {
@@ -1714,7 +1722,7 @@ function renderReplyDraft() {
   const el = document.getElementById('replyDraft');
   if (!el) return;
   if (!replyingTo) { el.style.display = 'none'; el.innerHTML = ''; return; }
-  const a = members.find(x => x.id === replyingTo.sender_id) || null;
+  const a = profileOf(replyingTo.sender_id);
   const who = a ? window.cmDisplayName(a) : (replyingTo.sender_name || '?');
   let snippet = (replyingTo.content || '').trim();
   if (!snippet && (replyingTo.attachment_url || replyingTo.attachment_name)) {
@@ -1755,8 +1763,8 @@ function showReadBy(msgId, ev) {
   if (ev) ev.stopPropagation();
   const msg = messages.find(m => String(m.id) === String(msgId));
   if (!msg) return;
-  const nameOf = uid => { const m = members.find(x => x.id === uid); return m ? (window.cmDisplayName(m) || m.full_name || '?') : '?'; };
-  const avOf   = uid => window.cmAvatarHtml(members.find(x => x.id === uid) || { full_name: nameOf(uid) }, 22);
+  const nameOf = uid => { const m = profileOf(uid); return m ? (window.cmDisplayName(m) || m.full_name || '?') : '?'; };
+  const avOf   = uid => window.cmAvatarHtml(profileOf(uid) || { full_name: nameOf(uid) }, 22);
   const read = [], pending = [];
   expectedReaders(msg).forEach(uid => (hasRead(uid, msg) ? read : pending).push(uid));
   const row = (uid, withTime) => `<div class="rb-row">${avOf(uid)}<span class="rb-name">${esc(nameOf(uid))}</span>${withTime && readState[uid] ? `<span class="rb-time">${esc(formatTime(readState[uid]))}</span>` : ''}</div>`;
