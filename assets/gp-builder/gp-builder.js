@@ -61,6 +61,12 @@
         { role:'color', kind:'dim',    min:0, max:1 },
       ] },
     radar:   { name: 'Radar',   icon: 'ti-chart-radar',  min: 3, max: 8,  dimMax: 1 },
+    // Carta de control: la serie en el tiempo con la media del propio sujeto y una banda de
+    // ±2 desviaciones calculada sobre esos mismos puntos. Responde «¿esta sesión se salió de lo
+    // normal PARA ÉL?», que es lo que el z-score contesta en una matriz pero sin pedirle al
+    // lector que sepa qué es una desviación típica: se ve el punto fuera de la banda.
+    // Una métrica: la banda es de esa métrica, y dos en un mismo eje no comparten banda.
+    control: { name: 'Control chart', icon: 'ti-chart-dots-3', min: 1, max: 1, dimMax: 1 },
     // squadOnly: el gráfico compara jugadores ENTRE SÍ (una fila, un punto o una caja por
     // jugador). Con alcance de un jugador queda una sola marca — nunca es lo que se quiere, y
     // era una de las formas de terminar con una card muda. En estos, el alcance no se pregunta.
@@ -300,7 +306,6 @@
   // How the reference set is aggregated.
   const CMP_METHODS = [
     { id:'avg',    name:'Average',      d:'Mean of the reference set' },
-    { id:'wavg',   name:'Weighted avg', d:'Recency-weighted mean' },
     { id:'zscore', name:'Z-score',      d:'Std deviations from the mean' },
   ];
   // Reference WINDOW for position/self (independent of the card range → a fixed baseline).
@@ -359,11 +364,8 @@
     const metodo = (S.compareMethod === 'zscore' && !_zAplica(S)) ? 'avg' : (S.compareMethod || 'avg');
     const c = { baseline, method: metodo };
     const opts = {};
-    if (baseline === 'match') opts.topN       = _clampInt(S.compareOpts?.topN, 5, 1, 20);
     if (baseline === 'md')    opts.mdLookback = _clampInt(S.compareOpts?.mdLookback, 4, 1, 20);
     if (Object.keys(opts).length) c.opts = opts;
-    // Reference window is FIXED and independent of the card range (position/self).
-    if (baseline === 'position' || baseline === 'self') c.refWindow = S.refWindow || { type: 'season' };
     // Medida de tendencia central del grupo de puesto (lo consume fetchRoleBaseline).
     if (baseline === 'position') c.stat = S.compareStat === 'avg' ? 'avg' : 'median';
     return c;
@@ -376,9 +378,7 @@
     if (S.compare === 'mc') return ` · vs ${mcLabel(S.refMcId)}`;
     const ref = _cmpName(S.compare);
     const parts = [ref];
-    if (S.compare === 'match') parts.push(`top ${S.compareOpts?.topN ?? 5}`);
-    if (S.compare === 'md')    parts.push(`last ${S.compareOpts?.mdLookback ?? 4}`);
-    if (S.compare === 'position' || S.compare === 'self') parts.push(_winLabel(S.refWindow));
+    if (S.compare === 'md') parts.push(`last ${S.compareOpts?.mdLookback ?? 4}`);
     parts.push(S.compareMethod === 'wavg' ? 'wavg'
       : (S.compareMethod === 'zscore' && _zAplica(S)) ? 'z-score' : 'avg');
     return ` · ${parts.join(' · ')}`;
@@ -3365,6 +3365,7 @@
       case 'radar':   mountRadarChart(container, config, series, opts.baselineMap || null, opts.mixedTypes || 0); break;
       case 'bars':    mountBarsChart(container, config, series, opts.mcNames || null); break;
       case 'line':    mountLineChart(container, config, opts.lineSeries || series); break;
+      case 'control': mountControlChart(container, config, series); break;
       case 'scatter': mountScatterChart(container, config, series, { scatterSparks: opts.scatterSparks || null }); break;
       case 'kpi':     mountKpiCard(container, config, series, { baselineMap: opts.baselineMap || null, mcRefName: opts.mcRefName || null, sparkSeries: opts.sparkSeries || null, example: opts.example }); break;
       case 'gauge':   mountGaugeCard(container, config, series, { baselineMap: opts.baselineMap || null, mcRefName: opts.mcRefName || null, acwrMap: opts.acwrMap || null, example: opts.example }); break;
@@ -3429,6 +3430,14 @@
   function _demandQueryConfig(config) {
     const metrics = (config.metrics || []).map(m => ({ ...m, agg: m.agg === 'total' ? 'avg' : (m.agg || 'avg') }));
     return { ...config, viz: 'bars', metrics, dimensions: [{ id: 'player_name' }] };
+  }
+
+  /** Config de CONSULTA de una carta de control: por debajo es una línea en el tiempo.
+   *  Si el usuario no puso dimensión, el eje es la fecha de sesión — una carta sin eje temporal
+   *  no es una carta de control, es un número suelto. */
+  function _controlQueryConfig(config) {
+    const dims = (config.dimensions || []).slice(0, 1);
+    return { ...config, viz: 'line', dimensions: dims.length ? dims : [{ id: 'session_date' }] };
   }
 
   function _boxQueryConfig(config) {
@@ -3548,7 +3557,7 @@
         return;
       }
 
-      const { applyAgg, aggregateSeries, getSessionIds, getMcSessionIds, fetchReports, fetchEavMetrics, fetchExtraMetrics, fetchRoleBaseline, fetchMdBaseline, fetchSquadStats, enrichMcDiff, CORE_COLS, neededKeys, canUsePlayerAgg, resolvePlayerAggSeries, canUsePlayerMcAgg, resolvePlayerMcAggSeries } = await _importResolver();
+      const { applyAgg, aggregateSeries, getSessionIds, getMcSessionIds, fetchReports, fetchEavMetrics, fetchExtraMetrics, fetchRoleBaseline, fetchMdBaseline, fetchSquadStats, fetchSelfBaseline, enrichMcDiff, CORE_COLS, neededKeys, canUsePlayerAgg, resolvePlayerAggSeries, canUsePlayerMcAgg, resolvePlayerMcAggSeries } = await _importResolver();
       if (stale()) return;
       if (!applyAgg) {
         // Antes: `return` pelado → spinner eterno, sin pista de qué pasó.
@@ -3587,6 +3596,7 @@
         if (cmp === 'md' && fetchMdBaseline)            rb = await fetchMdBaseline(sessionIds, config, ctx, catalogMap, sb);
         else if (cmp === 'role' && fetchRoleBaseline)   rb = await fetchRoleBaseline(sessionIds, config, ctx, catalogMap, sb);
         else if (cmp === 'squad' && fetchSquadStats)    rb = await fetchSquadStats(sessionIds, config, ctx, catalogMap, sb);
+        else if (cmp === 'self' && fetchSelfBaseline)   rb = await fetchSelfBaseline(sessionIds, config, ctx, catalogMap, sb);
         else if (cmp === 'match' && config.scope.level === 'player' && ctx.playerId && window.getMatchBaseline) {
           const _refs = await _refsDePartido(config, ctx);
           _refs.forEach((r, k) => {
@@ -3759,6 +3769,7 @@
         // por jugador. Por debajo los dos son barras, así que se le pide como tales — el dibujo
         // después hace lo suyo con esas mismas series.
         const _cfgQ = config.viz === 'box' ? _boxQueryConfig(config)
+                    : config.viz === 'control' ? _controlQueryConfig(config)
                     : config.viz === 'demand' ? _demandQueryConfig(config)
                     : (config.viz === 'dumbbell' || config.viz === 'diverging')
                       ? { ...config, viz: 'bars' }
@@ -4076,7 +4087,7 @@
         // mc's ref name (for the "vs MC ref" caption) comes from Step 5a.
         const cmp = _cmpBase(config);
         drawOpts.mcRefName = mcNamesForDraw?.ref || null;
-        if ((cmp === 'role' || cmp === 'match' || cmp === 'md' || cmp === 'squad') && config.metrics?.length) {
+        if ((cmp === 'role' || cmp === 'match' || cmp === 'md' || cmp === 'squad' || cmp === 'self') && config.metrics?.length) {
           let bmap = new Map();
           try { bmap = await _bmapDeComparacion(cmp); }
           catch (e) { console.warn('gpb kpi baseline:', e); }
@@ -4099,7 +4110,7 @@
         // value mode → per-metric baseline (role / match / md) for the 0–150% "vs baseline" gauge;
         // same source as the KPI. Always built so the gauge can draw the ring if a comparison is set.
         const cmp = _cmpBase(config);
-        if ((cmp === 'role' || cmp === 'match' || cmp === 'md' || cmp === 'squad') && config.metrics?.length) {
+        if ((cmp === 'role' || cmp === 'match' || cmp === 'md' || cmp === 'squad' || cmp === 'self') && config.metrics?.length) {
           let bmap = new Map();
           try { bmap = await _bmapDeComparacion(cmp); }
           catch (e) { console.warn('gpb gauge baseline:', e); }
@@ -4133,7 +4144,7 @@
         // enriched the points (.diff) in Step 5a; role/match need a per-metric
         // baseline map — same source as the KPI — handed to the renderer via opts.
         const cmp = _cmpBase(config);
-        if ((cmp === 'role' || cmp === 'match' || cmp === 'md' || cmp === 'squad') && config.metrics?.length) {
+        if ((cmp === 'role' || cmp === 'match' || cmp === 'md' || cmp === 'squad' || cmp === 'self') && config.metrics?.length) {
           let bmap = new Map();
           try { bmap = await _bmapDeComparacion(cmp); }
           catch (e) { console.warn('gpb heatmap baseline:', e); }
@@ -6435,6 +6446,149 @@
   }
 
   /** Mounts (or re-mounts) a Chart.js line chart into `body`. Same renderer for preview + saved card. */
+  // ── Carta de control ──────────────────────────────────────────────────────
+  // Con menos de esto, la media y la banda son un dibujo: cualquier punto nuevo las mueve tanto
+  // que "estar fuera" no significa nada. Por debajo se dibuja la serie SIN banda y se dice.
+  const CONTROL_MIN_PTS = 5;
+  const CONTROL_K = 2;                       // ancho de la banda, en desviaciones
+
+  /** Pura: (config, series) → { cats, valores, media, sd, lsc, lic, fuera[], suficiente }. */
+  function controlChartData(config, series) {
+    const s = (series || []).find(x => x.points && x.points.length) || null;
+    if (!s) return { cats: [], valores: [], suficiente: false };
+    const pts = lineSortCats(s.points.map(p => p.x)).map(c => s.points.find(p => p.x === c)).filter(Boolean);
+    const cats = pts.map(p => p.x);
+    const valores = pts.map(p => (p.y == null || !isFinite(p.y)) ? null : Number(p.y));
+    const limpios = valores.filter(v => v != null);
+    if (!limpios.length) return { cats, valores, suficiente: false, unit: s.unit, name: s.name };
+
+    const media = limpios.reduce((a, b) => a + b, 0) / limpios.length;
+    // Desviación MUESTRAL (n−1), igual que el z-score: ver sdOf en el resolver.
+    const sd = limpios.length >= CONTROL_MIN_PTS
+      ? Math.sqrt(limpios.reduce((a, b) => a + (b - media) * (b - media), 0) / (limpios.length - 1))
+      : null;
+    const suficiente = sd != null && sd > 0;
+    const lsc = suficiente ? media + CONTROL_K * sd : null;
+    const lic = suficiente ? media - CONTROL_K * sd : null;
+    const fuera = valores.map(v => suficiente && v != null && (v > lsc || v < lic));
+    return { cats, valores, media, sd, lsc, lic, fuera, suficiente,
+             unit: s.unit || '', name: s.name || '', n: limpios.length };
+  }
+
+  function mountControlChart(body, config, series) {
+    const d = controlChartData(config, series);
+    if (!d.cats.length) {
+      destroyBodyChart(body); body.innerHTML = '';
+      showEmptyBody(body, _tt('gps_analysis.builder_no_rows_match', 'No rows match the current scope, range and filters.'));
+      return;
+    }
+    if (typeof Chart === 'undefined') { destroyBodyChart(body); body.innerHTML = renderTypeFromDataset(config, series); return; }
+
+    const color = config.style?.color || '#2563EB';
+    const token = (body.__ctrlToken = (body.__ctrlToken || 0) + 1);
+    const mount = () => {
+      if (!body.isConnected || body.__ctrlToken !== token) return;
+      if (!body.clientWidth) { requestAnimationFrame(mount); return; }
+      destroyBodyChart(body);
+      body.innerHTML = '';
+      const wrap = document.createElement('div');
+      if (body.closest && body.closest('.gp-grid.is-canvas')) {
+        body.style.position = 'relative';
+        wrap.style.cssText = 'position:absolute;inset:0';
+      } else {
+        wrap.style.cssText = 'position:relative;width:100%;height:' + (_LINE_SIZE_H[config.style?.size || 'md'] || 220) + 'px';
+      }
+      const canvas = document.createElement('canvas');
+      wrap.appendChild(canvas);
+      body.appendChild(wrap);
+      Chart.getChart(canvas)?.destroy();
+
+      const n = d.cats.length;
+      const linea = (y) => Array(n).fill(y);
+      const datasets = [];
+      if (d.suficiente) {
+        // La banda va PRIMERO para quedar por debajo de la serie. Se pinta con dos líneas
+        // invisibles y el relleno entre ellas: es la "zona normal" del jugador.
+        datasets.push({
+          label: '__lsc', data: linea(d.lsc), borderColor: 'rgba(34,197,94,0.35)', borderWidth: 1,
+          borderDash: [3, 3], pointRadius: 0, pointHoverRadius: 0, fill: '+1',
+          backgroundColor: 'rgba(34,197,94,0.10)', tension: 0, _skipLeg: true,
+        });
+        datasets.push({
+          label: '__lic', data: linea(d.lic), borderColor: 'rgba(34,197,94,0.35)', borderWidth: 1,
+          borderDash: [3, 3], pointRadius: 0, pointHoverRadius: 0, fill: false, tension: 0, _skipLeg: true,
+        });
+        datasets.push({
+          label: '__media', data: linea(d.media), borderColor: GPB_GRIS_Y, borderWidth: 1.4,
+          borderDash: [5, 4], pointRadius: 0, pointHoverRadius: 0, fill: false, tension: 0, _skipLeg: true,
+        });
+      }
+      datasets.push({
+        label: d.name || (config.metrics || [])[0]?.id || '',
+        data: d.valores,
+        borderColor: color,
+        backgroundColor: color,
+        ...GPB_LINEA,
+        pointRadius: d.valores.map((_, i) => (d.fuera && d.fuera[i]) ? 5 : 3),
+        pointHoverRadius: 6,
+        // El punto fuera de banda es LA lectura de la card: se marca en rojo y más grande, para
+        // que se vea sin leer un solo número.
+        pointBackgroundColor: d.valores.map((_, i) => (d.fuera && d.fuera[i]) ? '#EF4444' : color),
+        pointBorderColor: d.valores.map((_, i) => (d.fuera && d.fuera[i]) ? '#EF4444' : color),
+        spanGaps: true,
+      });
+
+      body.__chart = _newChart(body, canvas, {
+        type: 'line',
+        data: { labels: d.cats, datasets },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          animation: { duration: 320 },
+          layout: { padding: { top: 10, right: 10 } },
+          interaction: { mode: 'nearest', intersect: false },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              filter: (it) => !String(it.dataset.label || '').startsWith('__'),
+              callbacks: {
+                label: (it) => {
+                  const v = it.parsed.y;
+                  const u = d.unit ? ' ' + d.unit : '';
+                  const txt = fmtVal(v, decOfMetric((config.metrics || [])[0]?.id));
+                  if (!d.suficiente) return txt + u;
+                  const z = d.sd ? (v - d.media) / d.sd : 0;
+                  const fueraTxt = d.fuera[it.dataIndex]
+                    ? ' · ' + _tt('gps_analysis.ctrl_fuera', 'outside the band')
+                    : '';
+                  return txt + u + ' · ' + (z >= 0 ? '+' : '') + z.toFixed(1) + 'σ' + fueraTxt;
+                },
+              },
+            },
+          },
+          scales: _ejesGpb({}, {}),
+        },
+      });
+    };
+    mount();
+
+    // Pie de card: qué es la banda, o por qué todavía no hay banda.
+    const nota = document.createElement('div');
+    nota.className = 'gp-ctrl-note';
+    nota.style.cssText = 'text-align:center;margin-top:2px;font:500 10.5px/1.3 var(--cm-font-sans);color:var(--cm-fg-muted)';
+    if (d.suficiente) {
+      const cuantos = (d.fuera || []).filter(Boolean).length;
+      nota.textContent = cuantos
+        ? _tt('gps_analysis.ctrl_n_fuera', '{n} of {total} sessions outside the usual band',
+              { n: cuantos, total: d.n })
+        : _tt('gps_analysis.ctrl_todo_dentro', 'All {total} sessions within the usual band', { total: d.n });
+    } else {
+      nota.textContent = _tt('gps_analysis.ctrl_pocos_datos',
+        'Needs at least {min} sessions to draw the band', { min: CONTROL_MIN_PTS });
+    }
+    body.appendChild(nota);
+    _noteRoom(body, nota);
+  }
+
   function mountLineChart(body, config, series) {
     const d = lineChartData(config, series);
     if (!d.cats.length || !d.datasets.length) { destroyBodyChart(body); body.innerHTML = ''; showEmptyBody(body, _tt('gps_analysis.builder_no_rows_match', 'No rows match the current scope, range and filters.')); return; }
@@ -9957,21 +10111,15 @@
           <span class="tx"><span class="t">${esc(_methodName(m.id))}</span><span class="d">${esc(desc)}</span></span>
           <i class="ti ti-check ck"></i></button>`;
         }).join('');
+        // Acá sólo se ofrece lo que el motor LEE de verdad. Salieron «mejores N partidos» (el
+        // baseline de partido usa el ajuste del club, nunca este número) y «ventana de
+        // referencia» (se guardaba y no la leía nadie): dos controles que no movían el gráfico.
         let opts = '';
-        if (S.compare === 'match') {
-          opts = `<div class="rb-pop-h" style="margin-top:6px"><div class="t">${_tt('gps_analysis.builder_best_matches_topn', 'Best matches (top N)')}</div></div>
-            <div class="rb-pop-b" style="padding:8px 13px"><input type="number" min="1" max="20" value="${S.compareOpts?.topN ?? 5}" data-opt="topN" style="${numStyle}"></div>`;
-        } else if (S.compare === 'md') {
+        if (S.compare === 'md') {
           opts = `<div class="rb-pop-h" style="margin-top:6px"><div class="t">${_tt('gps_analysis.builder_lookback_md', 'Lookback (last N same MD)')}</div></div>
             <div class="rb-pop-b" style="padding:8px 13px"><input type="number" min="1" max="20" value="${S.compareOpts?.mdLookback ?? 4}" data-opt="mdLookback" style="${numStyle}"></div>`;
-        } else if (S.compare === 'position' || S.compare === 'self') {
-          const winId = _winId(S.refWindow);
-          const winRows = CMP_WINDOWS.map(w => `<button class="rb-opt ${winId===w.id?'is-on':''}" data-win="${esc(w.id)}">
-            <span class="ic"><i class="ti ti-calendar"></i></span>
-            <span class="tx"><span class="t">${esc(_winName(w.id))}</span><span class="d">${esc(_winDesc(w.id))}</span></span>
-            <i class="ti ti-check ck"></i></button>`).join('');
-          opts = `<div class="rb-pop-h" style="margin-top:6px"><div class="t">${_tt('gps_analysis.builder_reference_window_fixed', 'Reference window (fixed)')}</div></div><div class="rb-pop-b">${winRows}</div>`;
-          if (S.compare === 'position') {
+        } else if (S.compare === 'position') {
+          {
             // Medida de tendencia central del grupo de referencia. Mediana por defecto: no cambia
             // nada en un grupo simétrico y evita que un solo jugador que se despega arrastre el
             // 100% (en datos reales, 389 de media contra 320 de mediana en un mismo puesto).
@@ -9983,7 +10131,7 @@
               <span class="ic"><i class="ti ti-chart-dots"></i></span>
               <span class="tx"><span class="t">${esc(o.name)}</span><span class="d">${esc(o.d)}</span></span>
               <i class="ti ti-check ck"></i></button>`).join('');
-            opts += `<div class="rb-pop-h" style="margin-top:6px"><div class="t">${_tt('gps_analysis.builder_reference_stat', 'Reference measure')}</div></div><div class="rb-pop-b">${statRows}</div>`;
+            opts = `<div class="rb-pop-h" style="margin-top:6px"><div class="t">${_tt('gps_analysis.builder_reference_stat', 'Reference measure')}</div></div><div class="rb-pop-b">${statRows}</div>`;
           }
         }
         sub = `<div class="rb-pop-h" style="margin-top:6px"><div class="t">${_tt('gps_analysis.builder_method', 'Method')}</div></div><div class="rb-pop-b">${methodRows}</div>${opts}`;
@@ -10353,6 +10501,7 @@
     acwr:    { name:'ACWR', icon:'ti-activity-heartbeat', dimAx:'(el eje es el tiempo)', metAx:'métrica base (1)' },
     tsb:     { name:'Form', icon:'ti-chart-area-line', dimAx:'(el eje es el tiempo)', metAx:'métrica base (1)' },
     monotonia: { name:'Monotony', icon:'ti-wave-sine', dimAx:'(una barra por semana)', metAx:'métrica base (1)' },
+    control: { name:'Control chart', icon:'ti-chart-dots-3', dimAx:'eje X · tiempo', metAx:'métrica (1)' },
   };
   // Los tipos se ofrecen AGRUPADOS por la pregunta que contestan, no en una grilla suelta.
   // Cuando alguien va a armar una card no piensa «quiero un heatmap»: piensa «quiero ver quién se
@@ -10362,7 +10511,7 @@
   const DD_FAMILIAS = [
     { id: 'comparar',   tipos: ['bars', 'ranking', 'table', 'diverging'] },
     { id: 'reparto',    tipos: ['box', 'heatmap', 'scatter'] },
-    { id: 'evolucion',  tipos: ['line', 'dumbbell'] },
+    { id: 'evolucion',  tipos: ['line', 'control', 'dumbbell'] },
     { id: 'referencia', tipos: ['kpi', 'gauge', 'demand', 'radar'] },
     { id: 'carga',      tipos: ['acwr', 'tsb', 'monotonia'] },
   ];
