@@ -854,38 +854,72 @@
   }
 
   // ── ACWR chart — player scope ────────────────────────────────
+  // ── Serie diaria de carga del jugador, compartida ─────────────────────────
+  // Las cards de ACWR y de Forma pedían cada una su propio par training_sessions + gps_reports
+  // del mismo jugador: cuatro consultas para dos gráficos que leen lo mismo. En el dashboard de
+  // Joaquín se veían como «player-load-series: 2 llamadas, 0 filas, 1.238 ms» — segundo y pico
+  // esperando dos veces por la misma respuesta.
+  //
+  // Se pide SIEMPRE la ventana más ancha que alguien necesita (la de Forma, 84 días) y cada
+  // card recorta la suya. Como en el motor de carga, se cachea la PROMESA: las dos cards
+  // arrancan juntas, así que guardar el resultado no serviría de nada.
+  const PW_DIAS_MAX = 84;
+  const PW_TTL_MS = 30_000;
+  const _pwCacheSerie = new Map();     // clave → { p, t }
+
+  function _pwDesde(dias) {
+    const c = new Date();
+    c.setDate(c.getDate() - dias);
+    return c.toISOString().slice(0, 10);
+  }
+
+  async function _pwSerieCarga(clubId, playerId, dias) {
+    const clave = clubId + '|' + playerId;
+    const ahora = Date.now();
+    let e = _pwCacheSerie.get(clave);
+    if (e && ahora - e.t > PW_TTL_MS) { _pwCacheSerie.delete(clave); e = null; }
+    if (!e) {
+      const p = (async () => {
+        const desde = _pwDesde(PW_DIAS_MAX);
+        const { data: sessions } = await window.sb
+          .from('training_sessions')
+          .select('id,session_date')
+          .eq('club_id', clubId)
+          .gte('session_date', desde)
+          .order('session_date', { ascending: true });
+        if (!sessions?.length) return [];
+        const fechaDe = Object.fromEntries(sessions.map(x => [x.id, x.session_date]));
+        const rpts = await window.cmFetchAll(() => window.sb
+          .from('gps_reports')
+          .select('session_id,player_load')
+          .eq('is_invalid', false)
+          .eq('club_id', clubId)
+          .eq('player_id', playerId)
+          .in('session_id', sessions.map(x => x.id)), { label: 'player-load-series' }).catch(() => []);
+        return (rpts || [])
+          .map(r => ({ date: fechaDe[r.session_id], load: r.player_load || 0 }))
+          .filter(x => x.date)
+          .sort((a, b) => a.date.localeCompare(b.date));
+      })();
+      e = { p, t: ahora };
+      _pwCacheSerie.set(clave, e);
+      p.catch(() => { if (_pwCacheSerie.get(clave) === e) _pwCacheSerie.delete(clave); });
+    }
+    const todo = await e.p;
+    const corte = _pwDesde(dias);
+    // Copia recortada: el array se comparte entre las dos cards, y una que lo ordenara o
+    // recortara le rompería el suyo a la otra.
+    return todo.filter(x => x.date >= corte);
+  }
+
   async function _pwUpdateAcwr(playerId) {
     const canvas = document.getElementById('canvasACWR');
     if (!canvas || !window.gpScience || !window.sb) return;
     const clubId = await window.getClubId?.();
     if (!clubId || !playerId) return;
 
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - 56);
-    const cutoffStr = cutoff.toISOString().slice(0, 10);
-
-    const { data: sessions } = await window.sb
-      .from('training_sessions')
-      .select('id,session_date')
-      .eq('club_id', clubId)
-      .gte('session_date', cutoffStr)
-      .order('session_date', { ascending: true });
-
-    if (!sessions?.length) return;
-    const sessDateMap = Object.fromEntries(sessions.map(s => [s.id, s.session_date]));
-
-    const rpts = await window.cmFetchAll(() => window.sb
-      .from('gps_reports')
-      .select('session_id,player_load')
-      .eq('is_invalid', false)
-      .eq('club_id', clubId)
-      .eq('player_id', playerId)
-      .in('session_id', sessions.map(s => s.id)), { label: 'player-load-series' }).catch(() => []);
-
-    const daily = (rpts || [])
-      .map(r => ({ date: sessDateMap[r.session_id], load: r.player_load || 0 }))
-      .filter(d => d.date)
-      .sort((a, b) => a.date.localeCompare(b.date));
+    const daily = await _pwSerieCarga(clubId, playerId, 56);
+    if (!daily.length) return;
 
     const sub = document.querySelector('#card-acwr .sub');
     if (sub) sub.textContent = '8-week · player load';
@@ -952,32 +986,8 @@
     const clubId = await window.getClubId?.();
     if (!clubId || !playerId) return;
 
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - 84);
-    const cutoffStr = cutoff.toISOString().slice(0, 10);
-
-    const { data: sessions } = await window.sb
-      .from('training_sessions')
-      .select('id,session_date')
-      .eq('club_id', clubId)
-      .gte('session_date', cutoffStr)
-      .order('session_date', { ascending: true });
-
-    if (!sessions?.length) return;
-    const sessDateMap = Object.fromEntries(sessions.map(s => [s.id, s.session_date]));
-
-    const rpts = await window.cmFetchAll(() => window.sb
-      .from('gps_reports')
-      .select('session_id,player_load')
-      .eq('is_invalid', false)
-      .eq('club_id', clubId)
-      .eq('player_id', playerId)
-      .in('session_id', sessions.map(s => s.id)), { label: 'player-load-series' }).catch(() => []);
-
-    const daily = (rpts || [])
-      .map(r => ({ date: sessDateMap[r.session_id], load: r.player_load || 0 }))
-      .filter(d => d.date)
-      .sort((a, b) => a.date.localeCompare(b.date));
+    const daily = await _pwSerieCarga(clubId, playerId, 84);
+    if (!daily.length) return;
 
     const sub = document.querySelector('#card-tsb .sub');
 

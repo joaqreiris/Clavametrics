@@ -200,3 +200,19 @@ test('al cambiar a una pestaña que SÍ tiene cards clásicas, los datos se pide
   await expect(page.locator('#card-outliers')).toHaveCount(1, { timeout: 15_000 });
   await expect.poll(() => viajesBase(page), { timeout: 30_000 }).toBeGreaterThan(0);
 });
+
+// Las cards CLÁSICAS de ACWR y Forma leen lo mismo —la carga diaria del jugador— pero cada una
+// pedía su propio par training_sessions + gps_reports: cuatro consultas para dos gráficos. En el
+// dashboard real se veía como «player-load-series: 2 llamadas, 0 filas, 1.238 ms», segundo y
+// pico esperando dos veces la misma respuesta. Ahora comparten una sola, con la ventana más
+// ancha que alguna necesita (84 días) y cada una recortando la suya.
+test('las cards clásicas de ACWR y Forma comparten una sola consulta de carga', async ({ page }) => {
+  const { pedidos } = await montar(page);
+  const esCarga = (u) => u.includes('gps_reports') && /select=session_id(%2C|,)player_load/.test(u);
+
+  // Esperar a que la vista haya pedido la carga al menos una vez…
+  await expect.poll(() => pedidos.filter(esCarga).length, { timeout: 30_000 }).toBeGreaterThan(0);
+  // …y dar margen a que apareciera la segunda, si se siguiera pidiendo dos veces.
+  await page.waitForTimeout(2_000);
+  expect(pedidos.filter(esCarga).length).toBe(1);
+});
