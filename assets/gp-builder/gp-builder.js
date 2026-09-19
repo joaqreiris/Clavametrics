@@ -73,6 +73,10 @@
     ranking: { name: 'Ranking', icon: 'ti-list-numbers', min: 1, max: 1,  dimMax: 1, squadOnly: true },
     table:   { name: 'Table',   icon: 'ti-table',        min: 1, max: 12, dimMax: 4, squadOnly: true },
     heatmap: { name: 'Heatmap', icon: 'ti-layout-grid',  min: 1, max: 12, dimMax: 1, squadOnly: true },
+    // Outliers: el mismo z-score que la matriz, pero mostrando sólo lo que se sale del umbral
+    // sobre la distribución del plantel. squadOnly: sin varios jugadores no hay distribución
+    // contra la que destacar — con uno solo, la franja tendría un punto y ninguna referencia.
+    outliers:{ name: 'Outliers', icon: 'ti-alert-triangle', min: 1, max: 8, dimMax: 1, squadOnly: true },
     // Caja y bigotes: la ÚNICA card que muestra dispersión. Una métrica, una dimensión para
     // agrupar (posición, MD code…); la caja se calcula sobre los valores de cada jugador dentro
     // del grupo, así que la consulta agrupa además por jugador (ver _boxQueryConfig).
@@ -1045,7 +1049,7 @@
       dimensions: (S.dimensions || []).map(d => ({ id:d.id, ...(d.label ? { label:d.label } : {}), ...(d.align ? { align:d.align } : {}), ...(d.role ? { role:d.role } : {}) })),
       range:      { type: S.range },
       comparison: cmpConfig(S),
-      style: { size:S.size, color:S.color, ...(S.icon ? { icon:S.icon } : {}), palette:S.palette, ...(_compactColors(S) ? { colors: _compactColors(S) } : {}), ...(S.relBands ? { relBands: S.relBands } : {}), axes:S.axes, legend:S.legend, dataLabels:S.labels, area:S.area, points:S.points, comboLine: S.comboLine !== false, ..._yAxisStyle(S), ..._decStyle(S), ..._barLimitStyle(S), quadrants: S.quadrants || 'mean', boxOut: S.boxOut || 'named', boxOutHi: S.boxOutHi !== false,
+      style: { size:S.size, color:S.color, ...(S.icon ? { icon:S.icon } : {}), palette:S.palette, ...(_compactColors(S) ? { colors: _compactColors(S) } : {}), ...(S.relBands ? { relBands: S.relBands } : {}), axes:S.axes, legend:S.legend, dataLabels:S.labels, area:S.area, points:S.points, comboLine: S.comboLine !== false, ..._yAxisStyle(S), ..._decStyle(S), ..._barLimitStyle(S), ..._zUmbralStyle(S), quadrants: S.quadrants || 'mean', boxOut: S.boxOut || 'named', boxOutHi: S.boxOutHi !== false,
                orientation: S.horizontal ? 'horizontal' : 'vertical', stacked: !!S.stacked, scatterLabel: S.scatterLabel || 'name', scatterAvatars: !!S.scatterAvatars, richTooltip: S.richTooltip !== false, gaugeMode: S.gaugeMode || 'value', showSub: S.showSub !== false,
                // Title/subtitle format (Paso 3a). Compacted to only non-default props; absent when
                // unset → cards without formatting stay byte-identical to today.
@@ -1334,6 +1338,12 @@
                 <span class="tx"><span class="t" data-i18n="gps_analysis.builder_data_labels">Data labels</span><span class="s" data-i18n="gps_analysis.builder_data_labels_sub">Show values on chart</span></span>
                 <button class="es-sw-t" data-toggle="labels"></button>
               </div>
+              <!-- Umbral de la franja de outliers. 2σ es la convención; un plantel ruidoso puede
+                   querer 2,5 para que la card no termine señalando a media plantilla. -->
+              <div class="es-toggle is-stack" data-only="outliers">
+                <span class="tx"><span class="t" data-i18n="gps_analysis.builder_ol_umbral">Rareness threshold</span><span class="s" data-i18n="gps_analysis.builder_ol_umbral_sub">In standard deviations. Empty = 2</span></span>
+                <input type="number" min="1" max="4" step="0.5" id="gpbZUmbral" data-i18n-attr="placeholder:gps_analysis.builder_ol_umbral_ph" placeholder="2" style="width:74px;padding:6px 8px;border:1px solid var(--cm-border);border-radius:6px;background:var(--cm-surface-2);color:var(--cm-fg);font:600 12px/1 var(--cm-font-mono);box-sizing:border-box">
+              </div>
               <div class="es-toggle" data-only="kpi,gauge">
                 <span class="tx"><span class="t" data-i18n="gps_analysis.builder_subtitle">Subtitle</span><span class="s" data-i18n="gps_analysis.builder_subtitle_sub">Show the agg · scope line</span></span>
                 <button class="es-sw-t is-on" data-toggle="showSub"></button>
@@ -1542,7 +1552,7 @@
     return { type:'bars', source:'session', metrics:[], dimensions:[], scope: _fbPidsNew.length === 1 ? 'player' : 'squad', scopeTouched:false, squadAgg:'pooled',
              compare:'none', compareMethod:'avg', compareStat:'median', compareOpts:{ topN:5, mdLookback:4 }, refWindow:{ type:'season' }, refMcId:null, range,
              size:'md', color:'#15803D', icon:null, palette:'pitch', colors:{}, title:'', titleCustom:false, axes:true, legend:true, labels:false, gaugeMode:'value', showSub:true,
-             points:true, area:false, comboLine:true, yzero:true, ymin:null, ymax:null, decimals:null, barLimit:null, quadrants:'mean', boxOut:'named', boxOutHi:true, horizontal:false, stacked:false, sort:null, scatterLabel:'name', scatterAvatars:false, richTooltip:true, referenceLines:[],
+             points:true, area:false, comboLine:true, yzero:true, ymin:null, ymax:null, decimals:null, barLimit:null, zUmbral:null, quadrants:'mean', boxOut:'named', boxOutHi:true, horizontal:false, stacked:false, sort:null, scatterLabel:'name', scatterAvatars:false, richTooltip:true, referenceLines:[],
              titleFormat:{}, subtitleFormat:{} };
   }
 
@@ -2035,9 +2045,11 @@
       const _ya = cfg.style?.yAxis || {};   // escala del eje a medida
       const _yaDec = cfg.style?.decimals ?? null;
       const _yaLim = cfg.style?.barLimit ?? null;
+      const _yaZU  = cfg.style?.zUmbral ?? null;
       S.ymin = _ya.min ?? null; S.ymax = _ya.max ?? null; S.yzero = _ya.zero !== false;
       S.decimals = _yaDec;
       S.barLimit = _yaLim;
+      S.zUmbral = _yaZU;
       S.referenceLines = Array.isArray(cfg.referenceLines) ? cfg.referenceLines.map(r => ({ ...r })) : [];
       S.title   = cfg.titleCustom ? (cfg.title || '') : '';   // no-custom → vacío: el auto se deriva fresco (no se congela)
       S.titleCustom = !!cfg.titleCustom;      // ausente en cards viejas → false → título auto
@@ -2084,9 +2096,11 @@
       const _ya = rawConfig.style?.yAxis || {};   // escala del eje a medida
       const _yaDec = rawConfig.style?.decimals ?? null;
       const _yaLim = rawConfig.style?.barLimit ?? null;
+      const _yaZU  = rawConfig.style?.zUmbral ?? null;
       S.ymin = _ya.min ?? null; S.ymax = _ya.max ?? null; S.yzero = _ya.zero !== false;
       S.decimals = _yaDec;
       S.barLimit = _yaLim;
+      S.zUmbral = _yaZU;
       S.referenceLines = Array.isArray(rawConfig.referenceLines) ? rawConfig.referenceLines.map(r => ({ ...r })) : [];
       S.title   = rawConfig.titleCustom ? (rawConfig.title || '') : '';   // ver nota en el otro load: evita congelar el auto
       S.titleCustom = !!rawConfig.titleCustom;   // ausente en cards viejas → false → título auto
@@ -2382,7 +2396,7 @@
 
     // Escala del eje: se aplica al soltar el foco o con Enter, no en cada tecla — redibujar la
     // card mientras se escribe «1200» la haría saltar cuatro veces.
-    [['gpbYMin', 'ymin'], ['gpbYMax', 'ymax'], ['gpbDecimals', 'decimals'], ['gpbBarLimit', 'barLimit']].forEach(([id, key]) => {
+    [['gpbYMin', 'ymin'], ['gpbYMax', 'ymax'], ['gpbDecimals', 'decimals'], ['gpbBarLimit', 'barLimit'], ['gpbZUmbral', 'zUmbral']].forEach(([id, key]) => {
       const inp = document.getElementById(id);
       if (!inp) return;
       const aplicar = () => {
@@ -2832,7 +2846,7 @@
       b.classList.toggle('is-on', !!S[b.dataset.toggle])
     );
     const _yi = (id, v) => { const e = document.getElementById(id); if (e) e.value = (v == null ? '' : v); };
-    _yi('gpbYMin', S.ymin); _yi('gpbYMax', S.ymax); _yi('gpbDecimals', S.decimals); _yi('gpbBarLimit', S.barLimit);
+    _yi('gpbYMin', S.ymin); _yi('gpbYMax', S.ymax); _yi('gpbDecimals', S.decimals); _yi('gpbBarLimit', S.barLimit); _yi('gpbZUmbral', S.zUmbral);
     document.getElementById('gpbScatterLabel')?.querySelectorAll('button').forEach(b =>
       b.classList.toggle('is-on', b.dataset.slabel === (S.scatterLabel || 'name'))
     );
@@ -3432,6 +3446,16 @@
     return { ...config, viz: 'bars', metrics, dimensions: [{ id: 'player_name' }] };
   }
 
+  /** Config de CONSULTA de la franja de outliers: necesita el valor de CADA jugador, no un
+   *  promedio, porque la distribución ES la card. Sin dimensión, el reparto es por jugador. */
+  function _outliersQueryConfig(config) {
+    const dims = (config.dimensions || []).slice(0, 1);
+    // Se pide como BARRAS: el agregador del resolver agrupa según el tipo y no conoce éste, así
+    // que con 'outliers' devolvía un único grupo «all» — una franja con un punto. Por debajo es
+    // lo mismo que unas barras por jugador; el dibujo después hace lo suyo.
+    return { ...config, viz: 'bars', dimensions: dims.length ? dims : [{ id: 'player_name' }] };
+  }
+
   /** Config de CONSULTA de una carta de control: por debajo es una línea en el tiempo.
    *  Si el usuario no puso dimensión, el eje es la fecha de sesión — una carta sin eje temporal
    *  no es una carta de control, es un número suelto. */
@@ -3770,6 +3794,7 @@
         // después hace lo suyo con esas mismas series.
         const _cfgQ = config.viz === 'box' ? _boxQueryConfig(config)
                     : config.viz === 'control' ? _controlQueryConfig(config)
+                    : config.viz === 'outliers' ? _outliersQueryConfig(config)
                     : config.viz === 'demand' ? _demandQueryConfig(config)
                     : (config.viz === 'dumbbell' || config.viz === 'diverging')
                       ? { ...config, viz: 'bars' }
@@ -4888,6 +4913,13 @@
    */
   /** El trozo de `style` con la escala pedida en el panel. Sólo viaja si hay algo que decir. */
   /** Tope de barras pedido en el panel. Vacío = todas. */
+  /** Umbral de rareza de la franja de outliers, en desviaciones. Sólo viaja si NO es el 2 de
+   *  siempre: una card con el umbral por defecto queda byte a byte como estaba. */
+  function _zUmbralStyle(S) {
+    const n = Number(S.zUmbral);
+    return (isFinite(n) && n >= 1 && n <= 4 && n !== 2) ? { zUmbral: n } : {};
+  }
+
   function _barLimitStyle(S) {
     const n = Number(S.barLimit);
     return (S.barLimit === '' || S.barLimit == null || !Number.isFinite(n) || n <= 0)
@@ -6320,7 +6352,7 @@
       viz: 'bars',
       dimensions: S.dimensions,
       comparison: cmpConfig(S),
-      style: { size: S.size, color: S.color, palette: S.palette, ...(_compactColors(S) ? { colors: _compactColors(S) } : {}), axes: S.axes, legend: S.legend, dataLabels: S.labels, ..._yAxisStyle(S), ..._decStyle(S), ..._barLimitStyle(S),
+      style: { size: S.size, color: S.color, palette: S.palette, ...(_compactColors(S) ? { colors: _compactColors(S) } : {}), axes: S.axes, legend: S.legend, dataLabels: S.labels, ..._yAxisStyle(S), ..._decStyle(S), ..._barLimitStyle(S), ..._zUmbralStyle(S),
                orientation: S.horizontal ? 'horizontal' : 'vertical', stacked: !!S.stacked },
       ...(S.referenceLines?.length ? { referenceLines: S.referenceLines } : {}),
     };
@@ -6446,6 +6478,35 @@
   }
 
   /** Mounts (or re-mounts) a Chart.js line chart into `body`. Same renderer for preview + saved card. */
+  /** Desviación MUESTRAL (n−1). Null con menos de 3 valores o sin dispersión: con dos datos la σ
+   *  es ruido, y con σ=0 el z sería infinito. Mismo criterio que sdOf en el resolver — son el
+   *  mismo número y no pueden discrepar. */
+  function _sdMuestral(vals) {
+    const c = (vals || []).filter(v => v != null && !isNaN(v));
+    if (c.length < 3) return null;
+    const mu = c.reduce((a, b) => a + b, 0) / c.length;
+    const sd = Math.sqrt(c.reduce((a, b) => a + (b - mu) * (b - mu), 0) / (c.length - 1));
+    return sd > 0 ? sd : null;
+  }
+
+  /** Umbral de rareza de la card, en desviaciones. 2σ es la convención; un plantel ruidoso puede
+   *  querer 2,5 para que la card no señale a media plantilla. */
+  const OL_UMBRAL_DEF = 2;
+  function _umbralZ(config) {
+    const v = Number(config?.style?.zUmbral);
+    return (isFinite(v) && v >= 1 && v <= 4) ? v : OL_UMBRAL_DEF;
+  }
+
+  /** '2' en vez de '2.0', pero '2.5' cuando hace falta. */
+  function _numCorto(n) { return Number(n).toFixed(1).replace(/\.0$/, ''); }
+
+  /** El nombre entero no entra al lado del punto: se queda con el apellido. */
+  function _nombreCorto(x) {
+    const t = String(x == null ? '' : x).trim();
+    const coma = t.indexOf(',');
+    return coma > 0 ? t.slice(0, coma) : t.split(/\s+/)[0];
+  }
+
   // ── Carta de control ──────────────────────────────────────────────────────
   // Con menos de esto, la media y la banda son un dibujo: cualquier punto nuevo las mueve tanto
   // que "estar fuera" no significa nada. Por debajo se dibuja la serie SIN banda y se dice.
@@ -9858,6 +9919,67 @@
         </tr>`).join('')}</tbody></table></div>`;
       }
 
+      // ── Outliers: una franja por métrica ───────────────────────────────────
+      // Mismo cálculo que el z-score de la matriz, otra lectura: en vez de dar TODOS los
+      // números, dibuja la distribución del plantel y señala sólo a quien se pasa del umbral.
+      // El punto gris es cada jugador, así que la banda deja de ser una idea abstracta: se ve
+      // si el grupo venía apretado (y entonces salirse significa algo) o disperso.
+      case 'outliers': {
+        const k = _umbralZ(config);
+        const filas = (series || []).map((s) => {
+          const pts = (s.points || []).filter(p => p && p.y != null && isFinite(p.y));
+          const vals = pts.map(p => Number(p.y));
+          const mu = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+          const sd = _sdMuestral(vals);
+          const casos = (sd ? pts.map(p => ({ x: p.x, y: Number(p.y), z: (Number(p.y) - mu) / sd })) : [])
+            .sort((a, b) => Math.abs(b.z) - Math.abs(a.z));
+          return { s, mu, sd, casos, n: vals.length };
+        });
+        // Escala común a todas las franjas: si cada una tuviera la suya, dos puntos igual de
+        // separados del centro significarían cosas distintas según la fila.
+        const maxAbs = Math.max(k + 0.5, ...filas.flatMap(f => f.casos.map(c => Math.abs(c.z))).filter(isFinite));
+        const escala = Math.min(8, Math.ceil(maxAbs * 2) / 2);
+        const pos = (z) => (((Math.max(-escala, Math.min(escala, z)) + escala) / (2 * escala)) * 100).toFixed(2) + '%';
+        const fueraTotal = filas.reduce((n, f) => n + f.casos.filter(c => Math.abs(c.z) >= k).length, 0);
+        const bandaPct = ((escala - k) / (2 * escala) * 100).toFixed(2) + '%';
+
+        const cuerpo = filas.map((f) => {
+          if (!f.sd) {
+            return `<div class="gp-ol-row"><div class="gp-ol-lbl"><b>${esc(f.s.name)}</b>
+              <span>${esc(_tt('gps_analysis.ol_sin_dispersion', 'sin dispersión'))}</span></div>
+              <div class="gp-ol-strip is-flat"></div></div>`;
+          }
+          const marcas = f.casos.map((c) => {
+            const dentro = Math.abs(c.z) < k;
+            if (dentro) return `<span class="gp-ol-dot" style="left:${pos(c.z)}" title="${esc(c.x)}: ${esc(fmtY(c.y, f.s))}"></span>`;
+            const col = Math.abs(c.z) >= k * 1.5 ? '#B91C1C' : '#B45309';
+            const signo = c.z > 0 ? '+' : '−';
+            return `<span class="gp-ol-out" style="left:${pos(c.z)};background:${col}" title="${esc(c.x)}: ${esc(fmtY(c.y, f.s))} · ${signo}${Math.abs(c.z).toFixed(2)} σ"></span>`
+                 + `<span class="gp-ol-tag" style="left:${pos(c.z)};color:${col}">${esc(_nombreCorto(c.x))} ${signo}${Math.abs(c.z).toFixed(1)}</span>`;
+          }).join('');
+          return `<div class="gp-ol-row">
+            <div class="gp-ol-lbl"><b>${esc(f.s.name)}</b><span>${esc(_tt('gps_analysis.ol_media', 'media'))} ${esc(fmtY(f.mu, f.s))}${f.s.unit ? ' ' + esc(f.s.unit) : ''}</span></div>
+            <div class="gp-ol-strip">
+              <div class="gp-ol-band" style="left:${bandaPct};right:${bandaPct}"></div>
+              <div class="gp-ol-mid"></div>
+              ${marcas}
+            </div></div>`;
+        }).join('');
+
+        const resumen = fueraTotal
+          ? _tt('gps_analysis.ol_resumen', '{n} outside ±{k}σ', { n: fueraTotal, k: _numCorto(k) })
+          : _tt('gps_analysis.ol_nadie', 'Nobody outside ±{k}σ', { k: _numCorto(k) });
+
+        return `<div class="gp-ol">
+          <div class="gp-ol-top">${esc(resumen)}</div>
+          ${cuerpo}
+          <div class="gp-ol-axis">
+            <span>−${_numCorto(escala)}σ</span><span>−${_numCorto(k)}σ</span>
+            <span class="mid">${esc(_tt('gps_analysis.ol_media', 'media'))}</span>
+            <span>+${_numCorto(k)}σ</span><span>+${_numCorto(escala)}σ</span>
+          </div></div>`;
+      }
+
       case 'heatmap': {
         const allX = [...new Set(series.flatMap(s => s.points.map(p => p.x)))];
         // Same criterion as bars/KPI: colour by VALUE when there's no comparison, by
@@ -10511,6 +10633,7 @@
     tsb:     { name:'Form', icon:'ti-chart-area-line', dimAx:'(el eje es el tiempo)', metAx:'métrica base (1)' },
     monotonia: { name:'Monotony', icon:'ti-wave-sine', dimAx:'(una barra por semana)', metAx:'métrica base (1)' },
     control: { name:'Control chart', icon:'ti-chart-dots-3', dimAx:'eje X · tiempo', metAx:'métrica (1)' },
+    outliers: { name:'Outliers', icon:'ti-alert-triangle', dimAx:'quién (dim)', metAx:'métricas a vigilar' },
   };
   // Los tipos se ofrecen AGRUPADOS por la pregunta que contestan, no en una grilla suelta.
   // Cuando alguien va a armar una card no piensa «quiero un heatmap»: piensa «quiero ver quién se
@@ -10519,7 +10642,7 @@
   // Un tipo que no figure acá NO desaparece: cae en «Otros» al final (ver ddToolbarHTML).
   const DD_FAMILIAS = [
     { id: 'comparar',   tipos: ['bars', 'ranking', 'table', 'diverging'] },
-    { id: 'reparto',    tipos: ['box', 'heatmap', 'scatter'] },
+    { id: 'reparto',    tipos: ['box', 'heatmap', 'outliers', 'scatter'] },
     { id: 'evolucion',  tipos: ['line', 'control', 'dumbbell'] },
     { id: 'referencia', tipos: ['kpi', 'gauge', 'demand', 'radar'] },
     { id: 'carga',      tipos: ['acwr', 'tsb', 'monotonia'] },
@@ -11514,9 +11637,11 @@
     const _ya = config.style?.yAxis || {};   // escala del eje a medida
     const _yaDec = config.style?.decimals ?? null;
     const _yaLim = config.style?.barLimit ?? null;
+    const _yaZU  = config.style?.zUmbral ?? null;
     S.ymin = _ya.min ?? null; S.ymax = _ya.max ?? null; S.yzero = _ya.zero !== false;
       S.decimals = _yaDec;
       S.barLimit = _yaLim;
+      S.zUmbral = _yaZU;
     S.referenceLines = Array.isArray(config.referenceLines) ? config.referenceLines.map(r => ({ ...r })) : [];
     S.titleFormat    = config.style?.titleFormat    ? { ...config.style.titleFormat }    : {};
     S.subtitleFormat = config.style?.subtitleFormat ? { ...config.style.subtitleFormat } : {};

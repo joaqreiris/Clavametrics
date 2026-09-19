@@ -949,3 +949,28 @@ body.gpb-ddmode.gpb-open .gp-page { padding-right: min(380px, 96vw); }
   transition: transform .15s ease; }
 .rb-adv[open] > summary::before { transform: rotate(90deg); }
 .rb-adv > summary:hover { color: var(--cm-fg); }
+
+/* ── Outliers: una franja por métrica ──────────────────────────────────────
+   Cada punto gris es un jugador; la banda verde es «lo normal» del grupo. La franja se lee de
+   izquierda (por debajo) a derecha (por encima), con la media en el centro. */
+.gp-ol { display:flex; flex-direction:column; gap:2px; padding:4px 10px 2px; }
+.gp-ol-top { font:600 11px/1 var(--cm-font-sans); color:var(--cm-fg-muted); padding:2px 0 6px 126px; }
+.gp-ol-row { display:flex; align-items:center; gap:12px; }
+.gp-ol-lbl { width:114px; flex:0 0 auto; text-align:right; }
+.gp-ol-lbl b { display:block; font:500 11.5px/1.2 var(--cm-font-sans); color:var(--cm-fg); }
+.gp-ol-lbl span { display:block; font:400 9.5px/1.2 var(--cm-font-mono); color:var(--cm-fg-muted); margin-top:2px; }
+.gp-ol-strip { position:relative; flex:1 1 auto; height:42px; min-width:0; }
+.gp-ol-strip.is-flat { opacity:.45; }
+.gp-ol-band { position:absolute; top:12px; bottom:10px; background:rgba(34,197,94,.10);
+  border-left:1px solid rgba(34,197,94,.30); border-right:1px solid rgba(34,197,94,.30); border-radius:3px; }
+.gp-ol-mid { position:absolute; left:50%; top:9px; bottom:7px; width:1px; background:rgba(34,197,94,.45); }
+.gp-ol-dot { position:absolute; top:50%; width:7px; height:7px; margin:-3.5px 0 0 -3.5px;
+  border-radius:50%; background:var(--cm-border); }
+.gp-ol-out { position:absolute; top:50%; width:12px; height:12px; margin:-6px 0 0 -6px;
+  border-radius:50%; box-shadow:0 0 0 2.5px var(--cm-surface); }
+.gp-ol-tag { position:absolute; top:0; transform:translateX(-50%); white-space:nowrap;
+  font:600 9.5px/1 var(--cm-font-mono); }
+.gp-ol-axis { display:flex; justify-content:space-between; padding:4px 0 2px 126px;
+  border-top:1px solid var(--cm-border-soft); margin-top:4px;
+  font:400 9.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); }
+.gp-ol-axis .mid { color:var(--cm-success,#15803D); }
