@@ -257,3 +257,32 @@ test('un campo soltado sobre el gráfico va solo a donde corresponde', async ({ 
     return (c.metrics || []).length + (c.dimensions || []).length;
   }), { timeout: 10_000 }).toBeGreaterThan(antes.m + antes.d);
 });
+
+// La ruta REAL para armar la matriz de z-score, tal como se le explica a un usuario. Si alguno
+// de estos pasos cambia de sitio, la explicación que tiene Joaquín deja de servir y este test
+// avisa. De paso fija que los controles que se quitaron por no hacer nada no volvieron.
+test('la ruta para armar el z-score existe tal como se explica', async ({ page }) => {
+  await open(page);
+  await elegirTipo(page, 'heatmap');
+
+  // 1) Configuración → Comparación
+  await page.locator('[data-ddpop="compare"]').first().click();
+  // 2) «vs Plantel» está entre las referencias…
+  await expect(page.locator('[data-pick="squad"]')).toBeVisible();
+  // …y «vs Sí mismo» sigue ahí, ahora que de verdad compara.
+  await expect(page.locator('[data-pick="self"]')).toHaveCount(1);
+  await page.locator('[data-pick="squad"]').click();
+
+  // 3) El panel NO se cierra al elegir referencia: el Método aparece en el mismo sitio.
+  await expect(page.locator('[data-method="zscore"]')).toBeVisible();
+  // El promedio ponderado se fue: el motor no lo leía.
+  await expect(page.locator('[data-method="wavg"]')).toHaveCount(0);
+  // La ventana de referencia tampoco vuelve.
+  await expect(page.locator('[data-win]')).toHaveCount(0);
+  await page.locator('[data-method="zscore"]').click();
+
+  // El subtítulo de la card lo confirma sin abrir nada.
+  await expect.poll(() => page.evaluate(() =>
+    document.querySelector('.gp-c.is-draft .sub, .gp-c.is-editing .sub')?.textContent || ''
+  ), { timeout: 10_000 }).toContain('z-score');
+});
