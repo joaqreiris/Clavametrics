@@ -28,6 +28,15 @@ const SESSION = {
   recurrence_group_id: null, match_day_offset: null,
 };
 
+// El partido del MC vive en calendar_events (la celda «Target match» lo lee de ahí). Se saca a
+// una constante porque los tests del día libre necesitan pasar SU propio juego de eventos.
+const EV_MATCH = {
+  id: 'ev-match-1', club_id: 'club-1', team_id: null, type: 'match',
+  date: MC.match_date, opponent: MC.rival, home_away: MC.home_away,
+  title: `vs ${MC.rival}`, competition: 'liga', rival_crest_url: null,
+  start_time: null, location: null,
+};
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 /** Injects a fake Supabase session into localStorage before page scripts run. */
@@ -51,7 +60,7 @@ async function injectSession(page) {
  * @param {{ sessions?: object[], mcs?: object[], sessionsError?: boolean }} opts
  */
 async function mockSupabase(page, opts = {}) {
-  const { sessions = [SESSION], mcs = [MC], sessionsError = false } = opts;
+  const { sessions = [SESSION], mcs = [MC], sessionsError = false, events = [EV_MATCH] } = opts;
 
   await page.route(`${SB}/auth/v1/**`, route =>
     route.fulfill({ json: { access_token: 'test-token', user: { id: 'user-1', email: 'test@test.com' } } })
@@ -79,13 +88,11 @@ async function mockSupabase(page, opts = {}) {
 
     // El rival del microciclo ya NO se lee de mc.rival: sale del partido en calendar_events, el
     // último dentro del rango del MC. Sin este evento la celda «Target match» queda en «—».
-    if (url.includes('/calendar_events'))
-      return route.fulfill({ json: [{
-        id: 'ev-match-1', club_id: 'club-1', team_id: null, type: 'match',
-        date: MC.match_date, opponent: MC.rival, home_away: MC.home_away,
-        title: `vs ${MC.rival}`, competition: 'liga', rival_crest_url: null,
-        start_time: null, location: null,
-      }] });
+    if (url.includes('/calendar_events')) {
+      if (method === 'GET')    return route.fulfill({ json: events });
+      if (method === 'DELETE') return route.fulfill({ json: [{ id: 'ev-deleted' }] });
+      return route.fulfill({ status: 201, json: [events[0]] });
+    }
 
     if (url.includes('/players'))
       return route.fulfill({ json: [], headers: { 'content-range': '*/5' } });
@@ -729,5 +736,45 @@ test.describe('Copia múltiple', () => {
     await conDosSesiones(page);
     await menuDelDia(page, '2026-05-17');
     await expect(page.locator('.cal-ctx-opt', { hasText: 'Paste here' })).toBeDisabled();
+  });
+});
+
+// ── 12. DÍA LIBRE DE EQUIPO ───────────────────────────────────────────────────
+// El day off de equipo entero tapa el día: no se dibujan las otras cards ni el «+ Add». Antes
+// tampoco se dibujaba EL PROPIO day off, así que marcarlo por error dejaba al usuario sin
+// salida salvo el menú del click derecho — que en tablet no existe. La tarjeta OFF es la
+// vuelta atrás: abre el popover de siempre, con «Borrar» y «Editar evento».
+
+test.describe('Día libre de equipo', () => {
+  const DIA_OFF = '2026-05-16';
+  const EV_OFF = {
+    id: 'ev-off-1', club_id: 'club-1', team_id: null, type: 'day_off',
+    date: DIA_OFF, title: 'Día libre', player_ids: null,
+    start_time: null, location: null, visible_to: ['players', 'medical'],
+  };
+  const tarjetaOff = page => page.locator(`.mc-day[data-date="${DIA_OFF}"] .mc-evt.is-dayoff-card`);
+
+  test('el día marcado OFF dibuja su tarjeta', async ({ page }) => {
+    await gotoCalendar(page, { events: [EV_MATCH, EV_OFF] });
+    await expect(page.locator(`.mc-day[data-date="${DIA_OFF}"]`)).toHaveClass(/is-dayoff/);
+    await expect(tarjetaOff(page)).toHaveCount(1);
+    await expect(tarjetaOff(page)).toContainText('Día libre');
+  });
+
+  test('la tarjeta OFF abre el popover con Borrar y Editar', async ({ page }) => {
+    await gotoCalendar(page, { events: [EV_MATCH, EV_OFF] });
+    await tarjetaOff(page).click();
+    await expect(page.locator('#epDelBtn')).toBeVisible();
+    await expect(page.locator('#epEditBtn')).toBeVisible();
+  });
+
+  test('«Editar evento» abre el modal con el tipo Day off, listo para cambiarlo', async ({ page }) => {
+    await gotoCalendar(page, { events: [EV_MATCH, EV_OFF] });
+    await tarjetaOff(page).click();
+    await page.locator('#epEditBtn').click();
+    await expect(page.locator('#calEvtBackdrop')).toHaveClass(/is-open/);
+    await expect(page.locator('#calEvtF_type')).toHaveValue('day_off');
+    await expect(page.locator('#calEvtF_date')).toHaveValue(DIA_OFF);
+    await expect(page.locator('#calEvtDelete')).toBeVisible();
   });
 });

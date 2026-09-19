@@ -477,7 +477,22 @@ function renderGrid() {
       ? tt('calendar.md_tie_hint','Same distance to the match before and the match after — set it in the day plan')
       : tt('calendar.md_readonly_hint','Day type — set it in the day plan (Daily Planning / Gym Planner)');
 
-    const eventsHtml = hasDayOff ? '' : isOff
+    // El día libre de equipo se dibuja como TARJETA clickeable, no como un hueco. Antes el día
+    // quedaba vacío y sin «+ Añadir»: marcarlo por error era un callejón sin salida salvo que
+    // supieras del click derecho, que en tablet no existe. Ahora abre el popover de siempre,
+    // con «Editar evento» (para cambiarle el tipo) y «Borrar».
+    // En vista de jugador se busca en daySessions (ya filtradas por visible_to): si el day off
+    // no es visible para el plantel, el día sigue saliendo vacío, como antes.
+    const offEvt = hasDayOff ? daySessions.find(_isFullDayOff) : null;
+    const dayOffHtml = !offEvt ? '' : (() => {
+      const lbl = _esc(offEvt.title || evtTypeLabel('day_off') || 'Day off');
+      if (isPlayerView) return `<div class="mc-evt day-off"><i class="ti ti-beach"></i><span class="name">${lbl}</span></div>`;
+      return `<div class="mc-evt day-off is-dayoff-card${_selIds.has(offEvt.id) ? ' is-selected' : ''}" data-id="${offEvt.id}" data-date="${dateStr}" data-has-time="0" title="${_esc(tt('calendar.day_off_card_hint','Day off — open it to change it or remove it'))}">
+        <i class="ti ti-beach"></i><span class="name">${lbl}</span>
+      </div>`;
+    })();
+
+    const eventsHtml = hasDayOff ? dayOffHtml : isOff
       ? `<div class="mc-evt day-off">${tt('calendar.rest_day','Rest day')}</div>`
       : daySessions.filter(s => (_filterType === 'all' || focusToClass(s.session_type) === _filterType) && !_isFullDayOff(s)).map(s => {
           const cat = focusToClass(s.session_type);
@@ -1020,7 +1035,9 @@ async function setDayOffOnDate(dateStr) {
     if (!_sessions.some(s => s.session_date === dateStr && _isFullDayOff(s))) {
       const clubId = _clubId || await window.getClubId();
       const { error: ierr } = await window.sb.from('calendar_events').insert({
-        title: 'Day off', type: 'day_off', date: dateStr,
+        // Título en el idioma de quien lo marca: la tarjeta OFF del día lo muestra tal cual,
+        // y un «Day off» en inglés en medio de un calendario en español se lee como un bug.
+        title: tt('calendar.type_day_off','Day off'), type: 'day_off', date: dateStr,
         club_id: clubId, team_id: _activeTeamId, visible_to: ['players','medical']
       });
       if (ierr) { showCalToast(tt('calendar.error_prefix','Error: {msg}',{msg:ierr.message})); return; }
@@ -1626,7 +1643,7 @@ document.getElementById('calDayOffPartial')?.addEventListener('click', () => cal
 
 function openEvtModal(session, defaultDate, focusTasks) {
   if (!session && _sessions.some(s => s.session_date === defaultDate && _isFullDayOff(s))) {
-    showCalToast(tt('calendar.day_marked_off','This day is marked OFF. Remove the day off to add events.'));
+    showCalToast(tt('calendar.day_marked_off','This day is marked OFF. Open the OFF card to change it or remove it.'));
     return;
   }
   _editEvtId     = session?.id     || null;
