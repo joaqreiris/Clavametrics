@@ -10134,9 +10134,18 @@
             opts = `<div class="rb-pop-h" style="margin-top:6px"><div class="t">${_tt('gps_analysis.builder_reference_stat', 'Reference measure')}</div></div><div class="rb-pop-b">${statRows}</div>`;
           }
         }
-        sub = `<div class="rb-pop-h" style="margin-top:6px"><div class="t">${_tt('gps_analysis.builder_method', 'Method')}</div></div><div class="rb-pop-b">${methodRows}</div>${opts}`;
+        // El Método sólo si el tipo sabe dibujar más de una cosa: en los demás quedaba un menú
+        // con una sola opción, que no es una elección — es un paso de más.
+        const bloqueMetodo = _zAplica(S)
+          ? `<div class="rb-pop-h" style="margin-top:6px"><div class="t">${_tt('gps_analysis.builder_como_se_ve', 'How to show it')}</div></div><div class="rb-pop-b">${methodRows}</div>`
+          : '';
+        // Y lo fino va plegado: quien lo necesita lo abre, al resto no le ocupa la pantalla.
+        const bloqueOpts = opts
+          ? `<details class="rb-adv"><summary>${_tt('gps_analysis.builder_ajustes_finos', 'Fine-tuning')}</summary>${opts}</details>`
+          : '';
+        sub = bloqueMetodo + bloqueOpts;
       }
-      return `<div class="rb-pop-h"><div class="t">${kind==='range' ? _tt('gps_analysis.builder_time_range', 'Time range') : _tt('gps_analysis.builder_comparison_baseline', 'Comparison / baseline')}</div></div><div class="rb-pop-b">${rows}</div>${sub}`;
+      return `<div class="rb-pop-h"><div class="t">${kind==='range' ? _tt('gps_analysis.builder_time_range', 'Time range') : _tt('gps_analysis.builder_comparado_con_que', 'Compared to what?')}</div></div><div class="rb-pop-b">${rows}</div>${sub}`;
     }
     if (kind === 'squad') {
       const rows = SQUAD_AGGS.map(a => `<button class="rb-opt ${(S.squadAgg||'pooled')===a.id?'is-on':''}" data-squad="${esc(a.id)}">
